@@ -69,6 +69,7 @@ int DeviceOrderedTsBlockReader::has_next(bool& has_next) {
         current_reader_ = new SingleDeviceTsBlockReader(
             task, block_size_, metadata_querier_, tsfile_io_reader_,
             time_filter_, field_filter_);
+        current_reader_->set_reusable_block(&reusable_block_);
         if (current_reader_ == nullptr) {
             return common::E_OOM;
         }

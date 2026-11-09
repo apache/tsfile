@@ -34,7 +34,11 @@
 #include "utils/util_define.h"
 
 #ifdef ENABLE_SIMD
+#include "common/simd_dispatch.h"
 #include "simde/x86/avx2.h"
+#ifdef TSFILE_X86_AVX2_DISPATCH
+#include <immintrin.h>
+#endif
 #endif
 
 namespace storage {
@@ -53,9 +57,10 @@ namespace storage {
 // @base:      the previous reconstructed value (for prefix-sum)
 // @out:       output array (4 values written)
 // Returns:    the last reconstructed value (new base for next group)
-static inline int32_t simd_decode_4_i32(const uint8_t* in, int32_t bit_width,
-                                        int32_t delta_min, int32_t index,
-                                        int32_t base, int32_t out[4]) {
+static inline int32_t simd_decode_4_i32_simde(const uint8_t* in,
+                                              int32_t bit_width,
+                                              int32_t delta_min, int32_t index,
+                                              int32_t base, int32_t out[4]) {
     static const simde__m128i SHUF_REV4 = simde_mm_setr_epi8(
         3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12);
 
@@ -114,10 +119,77 @@ static inline int32_t simd_decode_4_i32(const uint8_t* in, int32_t bit_width,
     return out[3];
 }
 
+#ifdef TSFILE_X86_AVX2_DISPATCH
+// Native-AVX2 twin of simd_decode_4_i32_simde (see simd_decode_4_i64_avx2).
+TSFILE_TARGET_AVX2
+static inline int32_t simd_decode_4_i32_avx2(const uint8_t* in,
+                                             int32_t bit_width,
+                                             int32_t delta_min, int32_t index,
+                                             int32_t base, int32_t out[4]) {
+    const __m128i SHUF_REV4 =
+        _mm_setr_epi8(3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12);
+    const __m128i VMIN4 = _mm_set1_epi32(delta_min);
+    int32_t pos0 = index * bit_width;
+    int32_t pos[4] = {pos0, pos0 + bit_width, pos0 + 2 * bit_width,
+                      pos0 + 3 * bit_width};
+    int32_t bidx[4] = {pos[0] >> 3, pos[1] >> 3, pos[2] >> 3, pos[3] >> 3};
+    int32_t off[4] = {pos[0] & 7, pos[1] & 7, pos[2] & 7, pos[3] & 7};
+    __m128i IDX = _mm_setr_epi32(bidx[0], bidx[1], bidx[2], bidx[3]);
+    __m128i OFF = _mm_setr_epi32(off[0], off[1], off[2], off[3]);
+    __m128i V4;
+    if (bit_width <= 16) {
+        int rshift = 32 - bit_width;
+        __m128i w32_le = _mm_i32gather_epi32((const int*)in, IDX, 1);
+        __m128i w32_be = _mm_shuffle_epi8(w32_le, SHUF_REV4);
+        __m128i U32 = _mm_sllv_epi32(w32_be, OFF);
+        __m128i RS32 = _mm_set1_epi32(rshift);
+        V4 = _mm_srlv_epi32(U32, RS32);
+    } else {
+        const __m256i SHUF_REV8 = _mm256_setr_epi8(
+            7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3,
+            2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8);
+        int rshift = 64 - bit_width;
+        __m256i w64_le = _mm256_i32gather_epi64((const long long*)in, IDX, 1);
+        __m256i w64_be = _mm256_shuffle_epi8(w64_le, SHUF_REV8);
+        __m256i OFF64 = _mm256_cvtepu32_epi64(OFF);
+        __m256i U64 = _mm256_sllv_epi64(w64_be, OFF64);
+        __m256i V64 = _mm256_srl_epi64(U64, _mm_cvtsi32_si128(rshift));
+        __m256i perm = _mm256_setr_epi32(0, 2, 4, 6, 0, 0, 0, 0);
+        __m256i comp = _mm256_permutevar8x32_epi32(V64, perm);
+        V4 = _mm256_castsi256_si128(comp);
+    }
+    // Add delta_min
+    V4 = _mm_add_epi32(V4, VMIN4);
+    // Prefix sum to reconstruct absolute values
+    __m128i t = _mm_slli_si128(V4, 4);
+    V4 = _mm_add_epi32(V4, t);
+    t = _mm_slli_si128(V4, 8);
+    V4 = _mm_add_epi32(V4, t);
+    // Add base
+    __m128i C4 = _mm_set1_epi32(base);
+    V4 = _mm_add_epi32(V4, C4);
+    _mm_storeu_si128((__m128i*)out, V4);
+    return out[3];
+}
+#endif  // TSFILE_X86_AVX2_DISPATCH
+
+static inline int32_t simd_decode_4_i32(const uint8_t* in, int32_t bit_width,
+                                        int32_t delta_min, int32_t index,
+                                        int32_t base, int32_t out[4]) {
+#ifdef TSFILE_X86_AVX2_DISPATCH
+    if (common::cpu_has_avx2()) {
+        return simd_decode_4_i32_avx2(in, bit_width, delta_min, index, base,
+                                      out);
+    }
+#endif
+    return simd_decode_4_i32_simde(in, bit_width, delta_min, index, base, out);
+}
+
 // Decode 4 INT64 values from bit-packed data using SIMD.
-static inline int64_t simd_decode_4_i64(const uint8_t* in, int32_t bit_width,
-                                        int64_t delta_min, int32_t index,
-                                        int64_t base, int64_t out[4]) {
+static inline int64_t simd_decode_4_i64_simde(const uint8_t* in,
+                                              int32_t bit_width,
+                                              int64_t delta_min, int32_t index,
+                                              int64_t base, int64_t out[4]) {
     static const simde__m256i SHUF_REV8 = simde_mm256_setr_epi8(
         7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2,
         1, 0, 15, 14, 13, 12, 11, 10, 9, 8);
@@ -164,6 +236,63 @@ static inline int64_t simd_decode_4_i64(const uint8_t* in, int32_t bit_width,
 
     simde_mm256_storeu_si256((simde__m256i*)out, V64);
     return out[3];
+}
+
+#ifdef TSFILE_X86_AVX2_DISPATCH
+// Native-AVX2 twin of simd_decode_4_i64_simde. simde only emits native AVX2
+// when the whole translation unit is compiled with -mavx2; the library targets
+// the portable baseline, so a target-attributed copy is needed for the gather
+// and shuffle to run as real AVX2 instructions.
+TSFILE_TARGET_AVX2
+static inline int64_t simd_decode_4_i64_avx2(const uint8_t* in,
+                                             int32_t bit_width,
+                                             int64_t delta_min, int32_t index,
+                                             int64_t base, int64_t out[4]) {
+    const __m256i SHUF_REV8 =
+        _mm256_setr_epi8(7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8,
+                         7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8);
+    const __m256i VMIN4 = _mm256_set1_epi64x(delta_min);
+    int32_t pos0 = index * bit_width;
+    int32_t pos[4] = {pos0, pos0 + bit_width, pos0 + 2 * bit_width,
+                      pos0 + 3 * bit_width};
+    int32_t bidx[4] = {pos[0] >> 3, pos[1] >> 3, pos[2] >> 3, pos[3] >> 3};
+    int32_t off[4] = {pos[0] & 7, pos[1] & 7, pos[2] & 7, pos[3] & 7};
+    __m128i IDX = _mm_setr_epi32(bidx[0], bidx[1], bidx[2], bidx[3]);
+    int rshift = 64 - bit_width;
+    __m256i w64_le = _mm256_i32gather_epi64((const long long*)in, IDX, 1);
+    __m256i w64_be = _mm256_shuffle_epi8(w64_le, SHUF_REV8);
+    __m256i OFF64 =
+        _mm256_cvtepu32_epi64(_mm_setr_epi32(off[0], off[1], off[2], off[3]));
+    __m256i U64 = _mm256_sllv_epi64(w64_be, OFF64);
+    __m256i V64 = _mm256_srl_epi64(U64, _mm_cvtsi32_si128(rshift));
+    // Add delta_min
+    V64 = _mm256_add_epi64(V64, VMIN4);
+    // Prefix sum (64-bit, 4 lanes)
+    __m256i t = _mm256_slli_si256(V64, 8);
+    V64 = _mm256_add_epi64(V64, t);
+    int64_t tmp_buf[4];
+    _mm256_storeu_si256((__m256i*)tmp_buf, V64);
+    tmp_buf[2] += tmp_buf[1];
+    tmp_buf[3] += tmp_buf[1];
+    V64 = _mm256_loadu_si256((const __m256i*)tmp_buf);
+    // Add base
+    __m256i C4 = _mm256_set1_epi64x(base);
+    V64 = _mm256_add_epi64(V64, C4);
+    _mm256_storeu_si256((__m256i*)out, V64);
+    return out[3];
+}
+#endif  // TSFILE_X86_AVX2_DISPATCH
+
+static inline int64_t simd_decode_4_i64(const uint8_t* in, int32_t bit_width,
+                                        int64_t delta_min, int32_t index,
+                                        int64_t base, int64_t out[4]) {
+#ifdef TSFILE_X86_AVX2_DISPATCH
+    if (common::cpu_has_avx2()) {
+        return simd_decode_4_i64_avx2(in, bit_width, delta_min, index, base,
+                                      out);
+    }
+#endif
+    return simd_decode_4_i64_simde(in, bit_width, delta_min, index, base, out);
 }
 
 #endif  // ENABLE_SIMD
