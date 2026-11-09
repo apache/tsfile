@@ -74,9 +74,8 @@ TEST(NonAsciiPathTest, ReadsJavaWrittenNonAsciiPaths) {
     const std::string device(kDevice);
     EXPECT_EQ(10, CountRows(reader, {device + "." + kTemperature}));
     EXPECT_EQ(10, CountRows(reader, {device + "." + kHumidity}));
-    EXPECT_EQ(10, CountRows(
-                      reader, {device + "." + kTemperature,
-                               device + "." + kHumidity}));
+    EXPECT_EQ(10, CountRows(reader, {device + "." + kTemperature,
+                                     device + "." + kHumidity}));
     reader.close();
 }
 
