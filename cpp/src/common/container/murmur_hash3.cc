@@ -22,6 +22,16 @@ namespace common {
 
 /* ================ Murmur128Hash ================ */
 // follow Java IoTDB exactly.
+namespace {
+// Java's byte is signed and its tail loop does `(long) key[i]`, so bytes with
+// the high bit set contribute 0xFFFF...FF instead of 0x00...FF. Bloom filter
+// positions are persisted in the file and must match Java's.
+FORCE_INLINE uint64_t tail_byte(const char* buf, int32_t index) {
+    return static_cast<uint64_t>(
+        static_cast<int64_t>(static_cast<int8_t>(buf[index])));
+}
+}  // namespace
+
 int64_t Murmur128Hash::inner_hash(const char* buf, int32_t len, int64_t seed) {
     const int32_t block_count = len >> 4;
     uint64_t h1 = static_cast<uint64_t>(seed);
@@ -57,53 +67,53 @@ int64_t Murmur128Hash::inner_hash(const char* buf, int32_t len, int64_t seed) {
     uint64_t k2 = 0;
     switch (len & 15) {
         case 15:
-            k2 ^= (uint64_t)(uint8_t)buf[offset + 14] << 48;
+            k2 ^= tail_byte(buf, offset + 14) << 48;
             // fallthrough
         case 14:
-            k2 ^= (uint64_t)(uint8_t)buf[offset + 13] << 40;
+            k2 ^= tail_byte(buf, offset + 13) << 40;
             // fallthrough
         case 13:
-            k2 ^= (uint64_t)(uint8_t)buf[offset + 12] << 32;
+            k2 ^= tail_byte(buf, offset + 12) << 32;
             // fallthrough
         case 12:
-            k2 ^= (uint64_t)(uint8_t)buf[offset + 11] << 24;
+            k2 ^= tail_byte(buf, offset + 11) << 24;
             // fallthrough
         case 11:
-            k2 ^= (uint64_t)(uint8_t)buf[offset + 10] << 16;
+            k2 ^= tail_byte(buf, offset + 10) << 16;
             // fallthrough
         case 10:
-            k2 ^= (uint64_t)(uint8_t)buf[offset + 9] << 8;
+            k2 ^= tail_byte(buf, offset + 9) << 8;
             // fallthrough
         case 9:
-            k2 ^= (uint64_t)(uint8_t)buf[offset + 8];
+            k2 ^= tail_byte(buf, offset + 8);
             k2 *= c2;
             k2 = rotl64(k2, 33);
             k2 *= c1;
             h2 ^= k2;
             // fallthrough
         case 8:
-            k1 ^= (uint64_t)(uint8_t)buf[offset + 7] << 56;
+            k1 ^= tail_byte(buf, offset + 7) << 56;
             // fallthrough
         case 7:
-            k1 ^= (uint64_t)(uint8_t)buf[offset + 6] << 48;
+            k1 ^= tail_byte(buf, offset + 6) << 48;
             // fallthrough
         case 6:
-            k1 ^= (uint64_t)(uint8_t)buf[offset + 5] << 40;
+            k1 ^= tail_byte(buf, offset + 5) << 40;
             // fallthrough
         case 5:
-            k1 ^= (uint64_t)(uint8_t)buf[offset + 4] << 32;
+            k1 ^= tail_byte(buf, offset + 4) << 32;
             // fallthrough
         case 4:
-            k1 ^= (uint64_t)(uint8_t)buf[offset + 3] << 24;
+            k1 ^= tail_byte(buf, offset + 3) << 24;
             // fallthrough
         case 3:
-            k1 ^= (uint64_t)(uint8_t)buf[offset + 2] << 16;
+            k1 ^= tail_byte(buf, offset + 2) << 16;
             // fallthrough
         case 2:
-            k1 ^= (uint64_t)(uint8_t)buf[offset + 1] << 8;
+            k1 ^= tail_byte(buf, offset + 1) << 8;
             // fallthrough
         case 1:
-            k1 ^= (uint64_t)(uint8_t)buf[offset];
+            k1 ^= tail_byte(buf, offset);
             k1 *= c1;
             k1 = rotl64(k1, 31);
             k1 *= c2;

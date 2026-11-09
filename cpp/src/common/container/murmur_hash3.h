@@ -49,6 +49,9 @@ class Murmur128Hash {
                           seed);
     }
 
+    // Java sign-extends the tail bytes (`(long) key[i]`). Bloom filter
+    // positions are persisted in the file, so C++ has to sign-extend too or a
+    // non-ASCII path yields positions Java never set.
     FORCE_INLINE static int32_t hash(const common::String& buf, int32_t seed) {
         return inner_hash(buf.buf_, buf.len_ - 1, seed);
     }
