@@ -108,6 +108,7 @@ export const enSidebar = {
       prefix: 'Ecosystem-Integration/',
       children: [
         { text: 'DuckDB TsFile Extension', link: 'Duck-TsFile' },
+        { text: 'SQLite TsFile Extension', link: 'SQLite-TsFile' },
       ],
     },
   ]

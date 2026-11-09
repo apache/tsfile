@@ -108,6 +108,7 @@ export const zhSidebar = {
       prefix: 'Ecosystem-Integration/',
       children: [
         { text: 'DuckDB TsFile 扩展', link: 'Duck-TsFile' },
+        { text: 'SQLite TsFile 扩展', link: 'SQLite-TsFile' },
       ],
     },
   ]
