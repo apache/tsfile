@@ -217,27 +217,15 @@ bool BloomFilter::contains(const String& device_name,
     if (IS_NULL(entry.buf_)) {
         return true;  // OOM — conservatively assume present
     }
-    // Filters on disk were built with either the Java (signed tail bytes) or
-    // the legacy C++ (zero-extended) variant, and the two only diverge when a
-    // tail byte is non-ASCII. Accept a hit under either variant; a bloom
-    // filter may return false positives, never false negatives.
-    bool present = true;
-    bool present_legacy_unsigned = true;
     for (uint32_t i = 0; i < hash_func_count_; i++) {
-        HashFunction& hf = hash_func_arr_[i];
-        if (present && !bitset_.get(hf.hash(entry))) {
-            present = false;
-        }
-        if (present_legacy_unsigned &&
-            !bitset_.get(hf.hash_legacy_unsigned(entry))) {
-            present_legacy_unsigned = false;
-        }
-        if (!present && !present_legacy_unsigned) {
-            break;
+        int32_t hv = hash_func_arr_[i].hash(entry);
+        if (!bitset_.get(hv)) {
+            free_entry_buf(entry.buf_);
+            return false;  // definitely not present
         }
     }
     free_entry_buf(entry.buf_);
-    return present || present_legacy_unsigned;
+    return true;  // probably present
 }
 
 int BloomFilter::serialize_to(ByteStream& out) {

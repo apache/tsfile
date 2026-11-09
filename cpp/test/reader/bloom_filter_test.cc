@@ -124,15 +124,11 @@ TEST(BloomfilterTest, MurmurHashMatchesJavaForNonAsciiTail) {
     EXPECT_EQ(1456000382, common::Murmur128Hash::hash(dorm, 5));
     EXPECT_EQ(-210460151, common::Murmur128Hash::hash(dorm, 7));
     EXPECT_EQ(2133117767, common::Murmur128Hash::hash(dorm, 11));
-    // The legacy C++ variant zero-extends and therefore lands elsewhere.
-    EXPECT_NE(common::Murmur128Hash::hash(dorm, 5),
-              common::Murmur128Hash::hash_legacy_unsigned(dorm, 5));
 
-    // ASCII tails are unaffected, so existing files keep their positions.
+    // ASCII tails are unaffected.
     char ascii_buf[] = "test_table.test1.test.value";
     common::String ascii(ascii_buf, sizeof(ascii_buf));
-    EXPECT_EQ(common::Murmur128Hash::hash(ascii, 5),
-              common::Murmur128Hash::hash_legacy_unsigned(ascii, 5));
+    EXPECT_EQ(-823637368, common::Murmur128Hash::hash(ascii, 5));
 }
 
 TEST(BloomfilterTest, ContainsFindsNonAsciiPathAddedByCpp) {
@@ -148,28 +144,4 @@ TEST(BloomfilterTest, ContainsFindsNonAsciiPathAddedByCpp) {
         common::String("root.sensors.实验1.TH", arena);
     common::String other_sensor = common::String("temperature", arena);
     EXPECT_FALSE(filter.contains(other_device, other_sensor));
-}
-
-TEST(BloomfilterTest, ContainsAcceptsLegacyCppPositions) {
-    BloomFilter filter;
-    ASSERT_EQ(common::E_OK, filter.init(0.1, 2));
-    common::PageArena arena;
-    common::String device = common::String("root.sensors.宿舍.TH", arena);
-    common::String sensor = common::String("humidity", arena);
-    char entry_buf[] = "root.sensors.宿舍.TH.humidity";
-    common::String entry(entry_buf, sizeof(entry_buf));
-
-    // Reproduce what a C++ writer did before it adopted Java's signed tail:
-    // only the zero-extended positions are set.
-    for (uint32_t i = 0; i < filter.get_hash_func_count(); i++) {
-        int32_t res = common::Murmur128Hash::hash_legacy_unsigned(
-            entry, BloomFilter::SEEDS[i]);
-        if (res == INT32_MIN) {
-            res = 0;
-        }
-        int32_t pos = (res > 0 ? res : (0 - res)) %
-                      static_cast<int32_t>(filter.get_size());
-        filter.get_bit_set()->set(pos);
-    }
-    EXPECT_TRUE(filter.contains(device, sensor));
 }

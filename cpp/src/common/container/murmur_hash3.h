@@ -49,20 +49,11 @@ class Murmur128Hash {
                           seed);
     }
 
-    // Java sign-extends the tail bytes (`(long) key[i]`); C++ historically
-    // zero-extended them. The two differ whenever a tail byte has its high bit
-    // set, i.e. for multi-byte UTF-8 in the path. Bloom filter positions are
-    // persisted in the file, so this entry point must match Java.
+    // Java sign-extends the tail bytes (`(long) key[i]`). Bloom filter
+    // positions are persisted in the file, so C++ has to sign-extend too or a
+    // non-ASCII path yields positions Java never set.
     FORCE_INLINE static int32_t hash(const common::String& buf, int32_t seed) {
-        return inner_hash(buf.buf_, buf.len_ - 1, seed, /*signed_tail=*/true);
-    }
-
-    // Zero-extends tail bytes, as C++ writers did before the Java-compatible
-    // behaviour above was adopted. Readers still have to accept bloom filters
-    // produced that way, since the bits are already on disk.
-    FORCE_INLINE static int32_t hash_legacy_unsigned(const common::String& buf,
-                                                     int32_t seed) {
-        return inner_hash(buf.buf_, buf.len_ - 1, seed, /*signed_tail=*/false);
+        return inner_hash(buf.buf_, buf.len_ - 1, seed);
     }
 
    private:
@@ -80,8 +71,7 @@ class Murmur128Hash {
         return (int64_t)uk;
     }
     static int64_t get_block(const char* buf, int32_t index);
-    static int64_t inner_hash(const char* buf, int32_t len, int64_t seed,
-                              bool signed_tail = false);
+    static int64_t inner_hash(const char* buf, int32_t len, int64_t seed);
 };
 
 }  // end namespace common

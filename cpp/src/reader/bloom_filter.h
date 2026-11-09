@@ -35,18 +35,7 @@ class HashFunction {
         seed_ = seed;
     }
     FORCE_INLINE int32_t hash(common::String buf) {
-        return hash_impl(buf, /*java_tail=*/true);
-    }
-    // Positions written by C++ versions that zero-extended tail bytes.
-    FORCE_INLINE int32_t hash_legacy_unsigned(common::String buf) {
-        return hash_impl(buf, /*java_tail=*/false);
-    }
-
-   private:
-    FORCE_INLINE int32_t hash_impl(common::String buf, bool java_tail) {
-        int res = java_tail
-                      ? common::Murmur128Hash::hash(buf, seed_)
-                      : common::Murmur128Hash::hash_legacy_unsigned(buf, seed_);
+        int res = common::Murmur128Hash::hash(buf, seed_);
         if (res == INT32_MIN) {
             res = 0;
         }
@@ -54,6 +43,7 @@ class HashFunction {
         return res;
     }
 
+   private:
     int32_t cap_;
     int32_t seed_;
 };
@@ -127,8 +117,6 @@ class BloomFilter {
     int serialize_to(common::ByteStream& out);
     int deserialize_from(common::ByteStream& in);
     bool is_empty() const { return size_ == 0; }
-    uint32_t get_size() const { return size_; }
-    uint32_t get_hash_func_count() const { return hash_func_count_; }
     BitSet* get_bit_set() { return &bitset_; }
 
    private:
