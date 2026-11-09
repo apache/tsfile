@@ -97,6 +97,34 @@ TEST_F(CWrapperTest, CodecAndCompressionConfigIncludesJavaIds) {
     EXPECT_EQ(set_global_compression(old_compression), common::E_OK);
 }
 
+TEST_F(CWrapperTest, DatatypeEncodingConfigCoversTimestampAndBlob) {
+    uint8_t old_int64_encoding = get_datatype_encoding(TS_DATATYPE_INT64);
+    uint8_t old_string_encoding = get_datatype_encoding(TS_DATATYPE_STRING);
+
+    // TIMESTAMP shares the INT64 default-encoding slot.
+    EXPECT_EQ(set_datatype_encoding(TS_DATATYPE_TIMESTAMP, TS_ENCODING_SPRINTZ),
+              common::E_OK);
+    EXPECT_EQ(get_datatype_encoding(TS_DATATYPE_TIMESTAMP),
+              TS_ENCODING_SPRINTZ);
+    EXPECT_EQ(get_datatype_encoding(TS_DATATYPE_INT64), TS_ENCODING_SPRINTZ);
+
+    // BLOB shares the STRING default-encoding slot.
+    EXPECT_EQ(set_datatype_encoding(TS_DATATYPE_BLOB, TS_ENCODING_DICTIONARY),
+              common::E_OK);
+    EXPECT_EQ(get_datatype_encoding(TS_DATATYPE_BLOB), TS_ENCODING_DICTIONARY);
+    EXPECT_EQ(get_datatype_encoding(TS_DATATYPE_STRING),
+              TS_ENCODING_DICTIONARY);
+
+    // VECTOR has no writable default encoding.
+    EXPECT_EQ(set_datatype_encoding(TS_DATATYPE_VECTOR, TS_ENCODING_PLAIN),
+              common::E_NOT_SUPPORT);
+
+    EXPECT_EQ(set_datatype_encoding(TS_DATATYPE_INT64, old_int64_encoding),
+              common::E_OK);
+    EXPECT_EQ(set_datatype_encoding(TS_DATATYPE_STRING, old_string_encoding),
+              common::E_OK);
+}
+
 TEST_F(CWrapperTest, TestForPythonInterfaceInsert) {
     ERRNO code = 0;
     const char* filename = "cwrapper_for_python.tsfile";

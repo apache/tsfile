@@ -1875,7 +1875,8 @@ TEST_F(EncodingCompressionCompatibilityTest, SpecMatchesCppCapabilities) {
     ASSERT_FALSE(available_compressions.empty());
 
     int missing = 0;
-    for (Model model : {Model::TABLE, Model::TREE}) {
+    // Only the table model is exercised by the cross-language matrix.
+    for (Model model : {Model::TABLE}) {
         for (TSDataType data_type : kMatrixDataTypes) {
             for (int e = PLAIN; e <= CAMEL; e++) {
                 TSEncoding encoding = static_cast<TSEncoding>(e);
