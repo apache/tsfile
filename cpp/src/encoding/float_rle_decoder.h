@@ -20,6 +20,7 @@
 #ifndef ENCODING_FLOAT_RLE_DECODER_H
 #define ENCODING_FLOAT_RLE_DECODER_H
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <vector>
@@ -73,6 +74,30 @@ class FloatRLEDecoder : public Decoder {
         }
         ret_value = value_at(value_int);
         page_pos_++;
+        return ret;
+    }
+    int read_batch_float(float* out, int capacity, int& actual,
+                         common::ByteStream& in) override {
+        actual = 0;
+        int ret = ensure_page_meta(in);
+        if (RET_FAIL(ret)) {
+            return ret;
+        }
+        int32_t tmp[64];
+        while (actual < capacity && int_decoder_.has_remaining(in)) {
+            const int chunk = std::min(capacity - actual, 64);
+            int got = 0;
+            if (RET_FAIL(int_decoder_.read_batch_int32(tmp, chunk, got, in))) {
+                return ret;
+            }
+            if (got == 0) {
+                break;
+            }
+            for (int i = 0; i < got; i++) {
+                out[actual++] = value_at(tmp[i]);
+                page_pos_++;
+            }
+        }
         return ret;
     }
     int read_double(double& /*ret_value*/,
@@ -168,6 +193,30 @@ class DoubleRLEDecoder : public Decoder {
         }
         ret_value = value_at(value_long);
         page_pos_++;
+        return ret;
+    }
+    int read_batch_double(double* out, int capacity, int& actual,
+                          common::ByteStream& in) override {
+        actual = 0;
+        int ret = ensure_page_meta(in);
+        if (RET_FAIL(ret)) {
+            return ret;
+        }
+        int64_t tmp[64];
+        while (actual < capacity && int_decoder_.has_remaining(in)) {
+            const int chunk = std::min(capacity - actual, 64);
+            int got = 0;
+            if (RET_FAIL(int_decoder_.read_batch_int64(tmp, chunk, got, in))) {
+                return ret;
+            }
+            if (got == 0) {
+                break;
+            }
+            for (int i = 0; i < got; i++) {
+                out[actual++] = value_at(tmp[i]);
+                page_pos_++;
+            }
+        }
         return ret;
     }
     int read_String(common::String& /*ret_value*/, common::PageArena& /*pa*/,

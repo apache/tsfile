@@ -133,7 +133,9 @@ class FloatSprintzDecoder : public SprintzDecoder {
             common::SerializationUtil::read_float(pre_value_, input);
             current_buffer_[0] = pre_value_;
             // read packed data
-            std::vector<uint8_t> pack_buf(bit_width_);
+            // +8 zero bytes: the SIMD unpack gathers 8 bytes per value and
+            // may read up to 7 bytes past the packed group.
+            std::vector<uint8_t> pack_buf(bit_width_ + 8, 0);
             uint32_t read_len = 0;
             input.read_buf(reinterpret_cast<char*>(pack_buf.data()), bit_width_,
                            read_len);
