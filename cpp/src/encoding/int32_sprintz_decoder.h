@@ -130,6 +130,11 @@ class Int32SprintzDecoder : public SprintzDecoder {
                 }
             }
         } else {
+            if (bit_width_ > 32) {
+                // Int32Packer supports at most 32 bits per value; the header
+                // byte is not otherwise validated.
+                return common::E_DECODE_ERR;
+            }
             decode_size_ = block_size_ + 1;
             uint32_t tmp_prev_value;
             common::SerializationUtil::read_var_uint(tmp_prev_value, input);

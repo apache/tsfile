@@ -128,6 +128,11 @@ class FloatSprintzDecoder : public SprintzDecoder {
                 }
             }
         } else {
+            if (bit_width_ > 32) {
+                // Int32Packer supports at most 32 bits per value; the header
+                // byte is not otherwise validated.
+                return common::E_DECODE_ERR;
+            }
             // packed block
             decode_size_ = block_size_ + 1;
             common::SerializationUtil::read_float(pre_value_, input);

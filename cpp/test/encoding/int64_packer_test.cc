@@ -252,4 +252,46 @@ TEST(Int64PackerTest, UnpackAllValuesMultipleBlocks) {
     }
 }
 
+// unpack_all_values must not require padding past the final group: it decodes
+// the last group from an internal zero-padded copy. 59/61/62/63 take the
+// scalar fallback, 64 the SIMD path.
+TEST(Int64PackerTest, UnpackAllValuesWithoutTrailingPadding) {
+    for (int width : {16, 59, 63, 64}) {
+        const int blocks = 3;
+        Int64Packer packer(width);
+        std::vector<int64_t> orig(blocks * NUM_OF_INTS);
+        std::vector<unsigned char> buf(blocks * width);  // exact, no +8
+        const uint64_t mask = width == 64
+                                  ? ~static_cast<uint64_t>(0)
+                                  : ((static_cast<uint64_t>(1) << width) - 1);
+        for (int b = 0; b < blocks; ++b) {
+            for (int i = 0; i < NUM_OF_INTS; ++i) {
+                const uint64_t raw =
+                    (static_cast<uint64_t>(b * NUM_OF_INTS + i) *
+                     0x9E3779B97F4A7C15ULL) &
+                    mask;
+                orig[b * NUM_OF_INTS + i] = static_cast<int64_t>(raw);
+            }
+            packer.pack_8values(orig.data() + b * NUM_OF_INTS, 0,
+                                buf.data() + b * width);
+        }
+
+        std::vector<int64_t> res(blocks * NUM_OF_INTS, 0);
+        packer.unpack_all_values(buf.data(), blocks * width, res.data());
+        EXPECT_EQ(res, orig) << "width=" << width;
+    }
+}
+
+// A zero width is invalid; unpack_all_values must return instead of looping
+// forever without advancing.
+TEST(Int64PackerTest, ZeroWidthUnpackAllValuesDoesNotHang) {
+    Int64Packer packer(0);
+    unsigned char buf[8] = {0};
+    int64_t out[8] = {7, 7, 7, 7, 7, 7, 7, 7};
+    packer.unpack_all_values(buf, 8, out);
+    for (int i = 0; i < NUM_OF_INTS; ++i) {
+        EXPECT_EQ(out[i], 7);
+    }
+}
+
 }  // namespace storage

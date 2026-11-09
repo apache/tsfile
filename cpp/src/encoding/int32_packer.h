@@ -22,6 +22,9 @@
 
 #define NUM_OF_INTS 8
 
+#include <cstring>
+#include <vector>
+
 #include "encoder.h"
 
 #ifdef ENABLE_SIMD
@@ -35,14 +38,20 @@
 namespace storage {
 
 #ifdef ENABLE_SIMD
+namespace rle_simd_detail {
+// A byte array (constant-initialized, no thread-safe-static guard) that the
+// hot kernel loads into a vector. A function-local static simde__m256i would
+// instead be dynamically initialized and pay an __cxa_guard_acquire per call.
+static const unsigned char SHUF_REV8_I32_BYTES[32] = {
+    7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8,
+    7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8};
+}  // namespace rle_simd_detail
+
 // SIMD decode of 4 big-endian bit-packed INT32 values. Uses the 64-bit gather
 // so all widths 1..32 fit without a width guard; the trailing permute packs
 // the low 32 bits of each 64-bit lane into four contiguous INT32 lanes.
 static inline void rle_simd_unpack_4_i32(const uint8_t* in, int32_t width,
                                          int32_t index, int32_t out[4]) {
-    static const simde__m256i SHUF_REV8 = simde_mm256_setr_epi8(
-        7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2,
-        1, 0, 15, 14, 13, 12, 11, 10, 9, 8);
     const int32_t pos0 = index * width;
     const int32_t pos[4] = {pos0, pos0 + width, pos0 + 2 * width,
                             pos0 + 3 * width};
@@ -54,7 +63,9 @@ static inline void rle_simd_unpack_4_i32(const uint8_t* in, int32_t width,
     const int32_t rshift = 64 - width;
     simde__m256i w64_le =
         simde_mm256_i32gather_epi64((const int64_t*)in, IDX, 1);
-    simde__m256i w64_be = simde_mm256_shuffle_epi8(w64_le, SHUF_REV8);
+    const simde__m256i shuf_mask = simde_mm256_loadu_si256(
+        (const simde__m256i*)rle_simd_detail::SHUF_REV8_I32_BYTES);
+    simde__m256i w64_be = simde_mm256_shuffle_epi8(w64_le, shuf_mask);
     simde__m256i OFF64 = simde_mm256_cvtepu32_epi64(
         simde_mm_setr_epi32(off[0], off[1], off[2], off[3]));
     simde__m256i U64 = simde_mm256_sllv_epi64(w64_be, OFF64);
@@ -177,10 +188,10 @@ class Int32Packer {
      * @param values - decoded result , the length of 'values' should be @{link
      * IntPacker#NUM_OF_INTS}
      *
-     * The SIMD paths gather 8 bytes per value, so the buffer must hold at
-     * least 8 readable bytes past the packed group; callers allocate that
-     * padding (the RLE decoders zero it, the Sprintz decoders size their
-     * block buffer with +8).
+     * The SIMD paths gather 8 bytes per value, so a direct caller must hold
+     * at least 8 readable bytes past the packed group (the Sprintz decoders
+     * size their block buffer with +8). unpack_all_values() removes that
+     * requirement by decoding the final group from a zero-padded copy.
      */
     void unpack_8values(const unsigned char buf[], int offset,
                         int32_t values[]) {
@@ -236,16 +247,44 @@ class Int32Packer {
      */
     void unpack_all_values(const unsigned char buf[], int length,
                            int32_t values[]) {
+        if (width_ <= 0) {
+            return;  // invalid width; avoid the non-advancing loop below
+        }
         int idx = 0;
         int k = 0;
         while (idx < length) {
             int32_t tv[8];
             // decode 8 values one time, current result will be saved in the
             // array named 'tv'
-            unpack_8values(buf, idx, tv);
+            if (static_cast<int64_t>(idx) + width_ + 8 > length) {
+                // unpack_8values may read up to 7 bytes past the group.
+                // Decode the final (possibly partial) group from a
+                // zero-padded copy so callers can pass an exact-size buffer.
+                const int avail = length - idx;
+                const int copy_len = avail < width_ ? avail : width_;
+                if (width_ <= 64) {
+                    unsigned char tail[64 + 8] = {0};
+                    std::memcpy(tail, buf + idx, static_cast<size_t>(copy_len));
+                    unpack_8values(tail, 0, tv);
+                } else {
+                    // Width is outside this packer's valid range; stay
+                    // memory-safe without a fixed-size stack buffer.
+                    std::vector<unsigned char> tail(
+                        static_cast<size_t>(width_) + 8, 0);
+                    std::memcpy(tail.data(), buf + idx,
+                                static_cast<size_t>(copy_len));
+                    unpack_8values(tail.data(), 0, tv);
+                }
+            } else {
+                unpack_8values(buf, idx, tv);
+            }
             // System.arraycopy(tv, 0, values, k, 8);
             std::memmove(values + k, tv, 8 * sizeof(int32_t));
-            idx += width_;
+            if (width_ > length - idx) {
+                idx = length;
+            } else {
+                idx += width_;
+            }
             k += 8;
         }
     }

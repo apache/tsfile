@@ -195,4 +195,37 @@ TEST(Int32PackerTest, UnpackAllValuesMultipleBlocks) {
     }
 }
 
+// unpack_all_values must not require padding past the final group: it decodes
+// the last group from an internal zero-padded copy.
+TEST(Int32PackerTest, UnpackAllValuesWithoutTrailingPadding) {
+    const int width = 16;
+    const int blocks = 10;
+    Int32Packer packer(width);
+    std::vector<int32_t> orig(blocks * NUM_OF_INTS);
+    std::vector<unsigned char> buf(blocks * width);  // exact size, no +8
+    for (int b = 0; b < blocks; ++b) {
+        for (int i = 0; i < NUM_OF_INTS; ++i) {
+            orig[b * NUM_OF_INTS + i] = (b << 4) | i;
+        }
+        packer.pack_8values(orig.data() + b * NUM_OF_INTS, 0,
+                            buf.data() + b * width);
+    }
+
+    std::vector<int32_t> res(blocks * NUM_OF_INTS, 0);
+    packer.unpack_all_values(buf.data(), blocks * width, res.data());
+    EXPECT_EQ(res, orig);
+}
+
+// A zero width is invalid; unpack_all_values must return instead of looping
+// forever without advancing.
+TEST(Int32PackerTest, ZeroWidthUnpackAllValuesDoesNotHang) {
+    Int32Packer packer(0);
+    unsigned char buf[8] = {0};
+    int32_t out[8] = {7, 7, 7, 7, 7, 7, 7, 7};
+    packer.unpack_all_values(buf, 8, out);
+    for (int i = 0; i < NUM_OF_INTS; ++i) {
+        EXPECT_EQ(out[i], 7);
+    }
+}
+
 }  // namespace storage

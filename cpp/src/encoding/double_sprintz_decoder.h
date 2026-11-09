@@ -127,6 +127,11 @@ class DoubleSprintzDecoder : public SprintzDecoder {
                 }
             }
         } else {
+            if (bit_width_ > 64) {
+                // Int64Packer supports at most 64 bits per value; the header
+                // byte is not otherwise validated.
+                return common::E_DECODE_ERR;
+            }
             decode_size_ = block_size_ + 1;
             common::SerializationUtil::read_double(pre_value_, input);
             current_buffer_[0] = pre_value_;
