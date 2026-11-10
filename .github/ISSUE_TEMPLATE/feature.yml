@@ -21,7 +21,26 @@ name: Feature request
 description: Propose a new feature or capability
 title: "feature: "
 labels: [enhancement]
+assignees: []
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to propose a new feature for Apache TsFile!
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language
+      description: Which language implementation this issue is about.
+      multiple: true
+      options:
+        - Java
+        - C++
+        - Python
+        - Other
+    validations:
+      required: true
+
   - type: textarea
     id: motivation
     attributes:
