@@ -18,33 +18,33 @@
 # ----------------------------------------------------------------------------
 
 name: Bug report
-description: 报告一个缺陷或异常行为
+description: Report a defect or unexpected behavior
 title: "bug: "
 labels: [bug]
 body:
   - type: textarea
     id: description
     attributes:
-      label: 问题描述
-      description: 发生了什么、期望是什么，尽量具体。
+      label: Description
+      description: What happened and what you expected.
     validations:
       required: true
   - type: textarea
     id: repro
     attributes:
-      label: 复现步骤
-      description: 最小可复现步骤，最好附带最小代码/数据。
+      label: Reproduction steps
+      description: Minimal reproducible steps, ideally with minimal code or data.
     validations:
       required: true
   - type: input
     id: version
     attributes:
-      label: 版本
-      description: TsFile 版本、语言（Java/C++/Python）、构建方式。
+      label: Version
+      description: TsFile version, language (Java/C++/Python), and build method.
     validations:
       required: true
   - type: textarea
     id: context
     attributes:
-      label: 补充上下文
-      description: 日志、报错信息、已排查的方向等。
+      label: Additional context
+      description: Logs, error messages, or anything you have already investigated.
