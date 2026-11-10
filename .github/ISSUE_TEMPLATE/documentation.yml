@@ -18,21 +18,21 @@
 # ----------------------------------------------------------------------------
 
 name: Documentation
-description: 文档缺失、错误或需要改进
+description: Missing, incorrect, or unclear documentation
 title: "docs: "
 labels: [documentation]
 body:
   - type: input
     id: location
     attributes:
-      label: 文档位置
-      description: 文件路径或页面链接。
+      label: Location
+      description: File path or page URL.
     validations:
       required: true
   - type: textarea
     id: issue
     attributes:
-      label: 问题
-      description: 缺失了什么、哪里写错了、期望改成什么。
+      label: Issue
+      description: What is missing or incorrect, and how it should read.
     validations:
       required: true
