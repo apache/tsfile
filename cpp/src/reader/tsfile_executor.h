@@ -48,11 +48,11 @@ class TsFileExecutor  // : public QueryExecutor
     int execute_prepared(const std::shared_ptr<PreparedSeries>& prepared,
                          int64_t start_time, int64_t end_time, int offset,
                          int limit, const std::string& column_name,
-                         ResultSet*& ret_qds);
+                         ResultSet*& ret_qds, uint32_t block_rows = 0);
     int execute_prepared_multi(
         const std::vector<std::shared_ptr<PreparedSeries>>& prepared,
         int64_t start_time, int64_t end_time, int offset, int limit,
-        ResultSet*& ret_qds);
+        ResultSet*& ret_qds, uint32_t block_rows = 0);
     void destroy_query_data_set(ResultSet* qds);
     int get_tsfile_meta(TsFileMeta*& tsfile_meta) {
         return io_reader_.get_tsfile_meta(tsfile_meta);

@@ -197,3 +197,30 @@ The object must provide `seek()`, `tell()`, and explicitly sized binary
 `read(size)` operations. The caller owns the object: `TsFileReader` keeps it
 alive while in use, preserves its cursor position, and does not close it.
 The local `FileReadBackend` setting does not apply to file objects.
+
+## Repeated point queries
+
+A batch query whose tag filter selects exactly one device caches the resolved
+field columns on the reader. Repeated queries for the same
+(table, tag filter, columns) skip the device and timeseries-index lookup; one
+column is served by `query_prepared`, several aligned columns by
+`query_prepared_multi`. The cache is an LRU bounded by
+`TSFILE_QUERY_CACHE_SIZE` (default `1024`; `0` disables it), and results are
+unchanged. Queries that also select a TAG column, row-by-row queries, and
+filters that select zero or several devices keep the regular path.
+
+```python
+reader = TsFileReader("data.tsfile")
+for start, end in windows:
+    with reader.query_table(
+        "sensors", ["value"], start, end,
+        tag_filter=tag_eq("device", "dev_a"), batch_size=4096,
+    ) as result:
+        ...
+```
+
+For explicit control, `reader.prepare_table_series(table, column, tag_filter)`
+resolves one column once and returns a handle usable with
+`reader.query_prepared(...)`; `reader.query_prepared_multi([...])` serves
+several aligned columns together. The filter must select exactly one device;
+otherwise the automatic cache is bypassed.

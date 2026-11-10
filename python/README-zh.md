@@ -183,3 +183,26 @@ with fsspec.open("s3://bucket/example.tsfile", "rb") as source:
 文件对象必须提供 `seek()`、`tell()` 和带明确长度的二进制 `read(size)`。
 该对象仍由调用方管理：`TsFileReader` 会在使用期间保持其存活、恢复其游标位置，
 但不会关闭它。本地 `FileReadBackend` 配置不适用于文件对象。
+
+## 重复点查
+
+批量查询在 tag 过滤条件只命中一个设备时，会在 reader 上缓存已解析的字段列。
+对同一 (表, tag 过滤条件, 列组合) 的重复查询不再重新解析设备与 timeseries 索引；
+单列走 `query_prepared`，多列走 `query_prepared_multi`。缓存是按
+`TSFILE_QUERY_CACHE_SIZE` 限制的 LRU（默认 `1024`，`0` 关闭），查询结果不变。
+同时选择 TAG 列、行模式查询、以及过滤命中 0 个或多个设备的情况保持原路径。
+
+```python
+reader = TsFileReader("data.tsfile")
+for start, end in windows:
+    with reader.query_table(
+        "sensors", ["value"], start, end,
+        tag_filter=tag_eq("device", "dev_a"), batch_size=4096,
+    ) as result:
+        ...
+```
+
+需要显式控制时，`reader.prepare_table_series(table, column, tag_filter)`
+只解析一列并返回句柄，可配合 `reader.query_prepared(...)` 使用；
+`reader.query_prepared_multi([...])` 用于多列对齐读取。过滤条件必须只命中
+一个设备，否则自动缓存会退回普通查询路径。

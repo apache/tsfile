@@ -20,6 +20,7 @@
 
 import os
 import weakref
+from collections import OrderedDict
 from typing import List, Optional, Dict
 
 import pandas as pd
@@ -33,7 +34,7 @@ from libc.stdint cimport INT64_MIN, INT64_MAX, uint32_t, uintptr_t
 from tsfile.schema import TSDataType as TSDataTypePy
 from tsfile.schema import DeviceID, DeviceTimeseriesMetadataGroup
 from tsfile.exceptions import TsFileCorruptedError
-from tsfile.tag_filter import ComparisonTagFilter, BetweenTagFilter, AndTagFilter, OrTagFilter, NotTagFilter
+from tsfile.tag_filter import ComparisonTagFilter, BetweenTagFilter, AndTagFilter, OrTagFilter, NotTagFilter, cache_key
 from .date_utils import parse_int_to_date
 from .tsfile_cpp cimport *
 from .tsfile_py_cpp cimport *
@@ -41,6 +42,23 @@ from .tsfile_py_cpp cimport *
 cdef extern from "python_random_access_read_file.h":
     TsFileReader create_tsfile_reader_from_python_file(
         PyObject* source, int32_t* error_code) except? NULL
+
+
+def _query_cache_size():
+    """Per-reader prepared-query cache size, from TSFILE_QUERY_CACHE_SIZE."""
+    raw = os.environ.get("TSFILE_QUERY_CACHE_SIZE", "1024")
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return 1024
+    return value if value > 0 else 0
+
+
+# Errors that mean "this query cannot be served by a prepared series" (invalid
+# argument, type mismatch, not supported, missing table/device/measurement).
+# I/O, short-read, corruption and OOM errors are not listed: they must reach
+# the caller instead of silently falling back to a second read.
+_CACHE_FALLBACK_CODES = frozenset((4, 27, 40, 44, 45, 49, 50))
 
 cdef class ResultSetPy:
     """
@@ -370,6 +388,11 @@ cdef class TsFileReaderPy:
 
     cdef TsFileReader reader
     cdef object activate_result_set_list
+    # LRU of prepared single-column table queries, keyed by
+    # (table, tag-filter key, column). Values are PreparedSeriesPy or None for
+    # filters that select several devices (negative cache).
+    cdef object _prepared_query_cache
+    cdef int _prepared_query_cache_size
 
     def __init__(self, source):
         """
@@ -377,6 +400,8 @@ cdef class TsFileReaderPy:
         """
         self.reader = NULL
         self.activate_result_set_list = weakref.WeakSet()
+        self._prepared_query_cache = OrderedDict()
+        self._prepared_query_cache_size = _query_cache_size()
         self.init_reader(source)
 
     cdef init_reader(self, source):
@@ -393,12 +418,42 @@ cdef class TsFileReaderPy:
                     tag_filter = None, batch_size : int = 0) -> ResultSetPy:
         """
         Execute a time range query on specified table and columns.
+
+        Batch queries whose tag filter selects exactly one device reuse cached
+        prepared series, so repeated point queries skip the device and
+        timeseries-index lookup. Any number of field columns is supported; a
+        query that also selects a TAG column, or whose filter selects several
+        devices, keeps the regular path. The cache size is set by
+        ``TSFILE_QUERY_CACHE_SIZE`` (default 1024, 0 disables it).
+
         :param tag_filter: Optional TagFilter to filter by TAG column values.
         :param batch_size: <= 0 for row-by-row mode; > 0 for batch (TsBlock) mode.
         :return: query result handler.
         """
         cdef ResultSet result
         cdef TagFilterHandle c_tag_filter = NULL
+        cdef ResultSetPy pyresult
+        if (self._prepared_query_cache_size > 0 and batch_size > 0
+                and len(column_names) > 0 and tag_filter is not None):
+            key = self._prepared_query_key(table_name, column_names, tag_filter)
+            if key is not None:
+                prepared = self._prepared_query_for(key, tag_filter)
+                if prepared is not None:
+                    try:
+                        pyresult = self._run_prepared(
+                            prepared, start_time, end_time, batch_size)
+                    except Exception as exc:
+                        if (getattr(exc, "code", None)
+                                not in _CACHE_FALLBACK_CODES):
+                            raise
+                        # The prepared form cannot serve this query (for
+                        # example a non-aligned multi-column read); remember
+                        # that and use the regular path.
+                        self._prepared_query_cache[key] = None
+                        self._close_prepared_entry(prepared)
+                    else:
+                        pyresult.metadata.set_table_name(table_name)
+                        return pyresult
         pyresult = ResultSetPy(self)
         if tag_filter is not None:
             c_tag_filter = self._build_c_tag_filter(table_name.lower(), tag_filter)
@@ -416,6 +471,104 @@ cdef class TsFileReaderPy:
         pyresult.init_c(result, table_name)
         self.activate_result_set_list.add(pyresult)
         return pyresult
+
+    def prepare_table_series(self, table_name : str, column_name : str,
+                             tag_filter = None) -> PreparedSeriesPy:
+        """
+        Resolve a table column selected by a tag filter once, for repeated queries.
+
+        The filter must match exactly one device; otherwise an exception is
+        raised and the regular ``query_table`` path should be used instead.
+        Subsequent reads go through :meth:`query_prepared`.
+
+        :param table_name: the table name.
+        :param column_name: the measurement (field) column name.
+        :param tag_filter: Optional TagFilter selecting the device.
+        :return: reusable prepared series handle.
+        """
+        cdef TagFilterHandle c_tag_filter = NULL
+        table = table_name.lower()
+        column = column_name.lower()
+        if tag_filter is not None:
+            c_tag_filter = self._build_c_tag_filter(table, tag_filter)
+        try:
+            prepared = tsfile_reader_prepare_table_series_c(
+                self.reader, table, column, c_tag_filter)
+        finally:
+            if c_tag_filter != NULL:
+                tsfile_tag_filter_free(c_tag_filter)
+        py_prepared = PreparedSeriesPy()
+        py_prepared.init_c(prepared)
+        return py_prepared
+
+    def prepared_query_cache_size(self):
+        """Return the number of prepared table queries currently cached."""
+        return len(self._prepared_query_cache)
+
+    def clear_prepared_query_cache(self):
+        """Drop every cached prepared table query."""
+        for prepared in self._prepared_query_cache.values():
+            self._close_prepared_entry(prepared)
+        self._prepared_query_cache.clear()
+
+    cdef object _prepared_query_key(self, str table_name, object column_names,
+                                    object tag_filter):
+        cdef object filter_key = cache_key(tag_filter)
+        if filter_key is None:
+            return None
+        return (
+            table_name.lower(), filter_key,
+            tuple(column.lower() for column in column_names))
+
+    cdef object _run_prepared(self, object prepared, int64_t start_time,
+                              int64_t end_time, int block_rows):
+        if isinstance(prepared, tuple):
+            return self.query_prepared_multi(
+                list(prepared), start_time, end_time, 0, -1, block_rows)
+        return self.query_prepared(
+            prepared, start_time, end_time, 0, -1, block_rows)
+
+    cdef object _prepared_query_for(self, object key, object tag_filter):
+        """Return cached prepared series (one or a tuple), or None to fall back."""
+        if key in self._prepared_query_cache:
+            prepared = self._prepared_query_cache[key]
+            self._prepared_query_cache.move_to_end(key)
+            return prepared
+        prepared = self._prepare_series_group(key[0], tuple(key[2]), tag_filter)
+        # A None value is a negative cache entry: the filter selects no device
+        # or several devices, or a requested column is not a stored field, so
+        # the regular query path stays in charge.
+        self._prepared_query_cache[key] = prepared
+        while len(self._prepared_query_cache) > self._prepared_query_cache_size:
+            _, evicted = self._prepared_query_cache.popitem(last=False)
+            self._close_prepared_entry(evicted)
+        return prepared
+
+    def _prepare_series_group(self, table_name, column_names, tag_filter):
+        """Prepare every requested column of one single-device query."""
+        prepared = []
+        try:
+            for column in column_names:
+                prepared.append(
+                    self.prepare_table_series(table_name, column, tag_filter))
+        except Exception as exc:
+            for entry in prepared:
+                entry.close()
+            if getattr(exc, "code", None) not in _CACHE_FALLBACK_CODES:
+                raise
+            return None
+        if len(prepared) == 1:
+            return prepared[0]
+        return tuple(prepared)
+
+    cdef void _close_prepared_entry(self, object entry):
+        if entry is None:
+            return
+        if isinstance(entry, tuple):
+            for item in entry:
+                item.close()
+        else:
+            entry.close()
 
     cdef TagFilterHandle _build_c_tag_filter(self, str table_name, object tag_filter):
         """Recursively build C TagFilterHandle from Python TagFilter tree."""
@@ -575,11 +728,24 @@ cdef class TsFileReaderPy:
     def query_prepared(self, PreparedSeriesPy prepared,
                        start_time : int = INT64_MIN,
                        end_time : int = INT64_MAX,
-                       offset : int = 0, limit : int = -1) -> ResultSetPy:
+                       offset : int = 0, limit : int = -1,
+                       block_rows : int = 0) -> ResultSetPy:
+        """Query a prepared series.
+
+        ``block_rows`` bounds each returned TsBlock; 0 keeps the native
+        default capacity. It does not limit the number of rows returned.
+        """
         if prepared.prepared == NULL:
             raise RuntimeError("PreparedSeries is closed")
-        cdef ResultSet result = tsfile_reader_query_prepared_c(
-            self.reader, prepared.prepared, start_time, end_time, offset, limit)
+        cdef ResultSet result
+        if block_rows > 0:
+            result = tsfile_reader_query_prepared_ex_c(
+                self.reader, prepared.prepared, start_time, end_time, offset,
+                limit, block_rows)
+        else:
+            result = tsfile_reader_query_prepared_c(
+                self.reader, prepared.prepared, start_time, end_time, offset,
+                limit)
         pyresult = ResultSetPy(self, True)
         pyresult.init_c(result, "prepared")
         self.activate_result_set_list.add(pyresult)
@@ -588,8 +754,13 @@ cdef class TsFileReaderPy:
     def query_prepared_multi(self, prepared_list,
                              start_time : int = INT64_MIN,
                              end_time : int = INT64_MAX,
-                             offset : int = 0, limit : int = -1) -> ResultSetPy:
-        """Query aligned prepared value columns through one shared time reader."""
+                             offset : int = 0, limit : int = -1,
+                             block_rows : int = 0) -> ResultSetPy:
+        """Query aligned prepared value columns through one shared time reader.
+
+        ``block_rows`` bounds each returned TsBlock; 0 keeps the native
+        default capacity. It does not limit the number of rows returned.
+        """
         cdef Py_ssize_t count = len(prepared_list)
         cdef Py_ssize_t i
         cdef PreparedSeriesPy prepared
@@ -600,6 +771,7 @@ cdef class TsFileReaderPy:
         cdef int64_t c_end_time = end_time
         cdef int c_offset = offset
         cdef int c_limit = limit
+        cdef uint32_t c_block_rows = block_rows if block_rows > 0 else 0
         if count <= 0:
             raise ValueError("prepared_list must not be empty")
         handles = <PreparedSeriesHandle*>malloc(
@@ -612,10 +784,17 @@ cdef class TsFileReaderPy:
                 if prepared.prepared == NULL:
                     raise RuntimeError("PreparedSeries is closed")
                 handles[i] = prepared.prepared
-            with nogil:
-                result = tsfile_reader_query_prepared_multi(
-                    self.reader, handles, <uint32_t>count,
-                    c_start_time, c_end_time, c_offset, c_limit, &code)
+            if block_rows > 0:
+                with nogil:
+                    result = tsfile_reader_query_prepared_multi_ex(
+                        self.reader, handles, <uint32_t>count,
+                        c_start_time, c_end_time, c_offset, c_limit,
+                        c_block_rows, &code)
+            else:
+                with nogil:
+                    result = tsfile_reader_query_prepared_multi(
+                        self.reader, handles, <uint32_t>count,
+                        c_start_time, c_end_time, c_offset, c_limit, &code)
             check_error(code, b"Failed to query aligned prepared series")
         finally:
             free(handles)
@@ -718,6 +897,10 @@ cdef class TsFileReaderPy:
         """
         if self.reader == NULL:
             return
+        if self._prepared_query_cache is not None:
+            for prepared in self._prepared_query_cache.values():
+                self._close_prepared_entry(prepared)
+            self._prepared_query_cache.clear()
         # result_set_bak to avoid runtime error.
         result_set_bak = list(self.activate_result_set_list)
         for result_set in result_set_bak:

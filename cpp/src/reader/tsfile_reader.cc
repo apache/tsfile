@@ -26,6 +26,7 @@
 #include "common/allocator/byte_stream.h"
 #include "common/schema.h"
 #include "common/tsfile_common.h"
+#include "device_meta_iterator.h"
 #include "file/local_random_access_read_file.h"
 #include "filter/time_operator.h"
 #include "tsfile_executor.h"
@@ -295,23 +296,134 @@ int TsFileReader::prepare_series(
                                             aligned_time_owner, prepared);
 }
 
+int TsFileReader::prepare_table_series(
+    const std::string& table_name, const std::string& column_name,
+    Filter* tag_filter, std::shared_ptr<PreparedSeries>& prepared) {
+    int ret = E_OK;
+    prepared.reset();
+    if (read_file_ == nullptr || tsfile_executor_ == nullptr) {
+        return E_INVALID_ARG;
+    }
+    TsFileIOReader* io_reader = tsfile_executor_->get_tsfile_io_reader();
+    if (io_reader == nullptr) {
+        return E_INVALID_ARG;
+    }
+    TsFileMeta* file_metadata = nullptr;
+    if (RET_FAIL(io_reader->get_tsfile_meta(file_metadata))) {
+        return ret;
+    }
+    const std::string table = to_lower(table_name);
+    std::shared_ptr<TableSchema> table_schema;
+    if (RET_FAIL(file_metadata->get_table_schema(table, table_schema))) {
+        return ret;
+    }
+    MetaIndexNode* table_root = nullptr;
+    file_metadata->get_table_metaindex_node(table, table_root);
+    if (table_root == nullptr) {
+        return E_DEVICE_NOT_EXIST;
+    }
+
+    common::PageArena pa;
+    pa.init(512, common::MOD_TSFILE_READER);
+    DeviceMetaIterator device_iterator(io_reader, table_root, tag_filter);
+    bool has_next = false;
+    if (RET_FAIL(device_iterator.has_next(has_next))) {
+        return ret;
+    }
+    if (!has_next) {
+        return E_DEVICE_NOT_EXIST;
+    }
+    std::pair<std::shared_ptr<IDeviceID>, MetaIndexNode*> device_meta;
+    if (RET_FAIL(device_iterator.next(device_meta))) {
+        return ret;
+    }
+    if (RET_FAIL(device_iterator.has_next(has_next))) {
+        return ret;
+    }
+    if (has_next) {
+        // Several devices match: a single prepared series would not reproduce
+        // the result of the regular query, so let the caller fall back.
+        return E_NOT_SUPPORT;
+    }
+    if (device_meta.first == nullptr) {
+        return E_DEVICE_NOT_EXIST;
+    }
+
+    std::unordered_set<std::string> measurement_names;
+    measurement_names.insert(to_lower(column_name));
+    std::vector<ITimeseriesIndex*> timeseries_indexs(1, nullptr);
+    if (RET_FAIL(io_reader->get_timeseries_indexes(
+            device_meta.first, measurement_names, timeseries_indexs, pa))) {
+        return ret;
+    }
+    ITimeseriesIndex* index = timeseries_indexs[0];
+    if (index == nullptr) {
+        return E_MEASUREMENT_NOT_EXIST;
+    }
+
+    PreparedLocator locator;
+    if (auto* aligned = dynamic_cast<AlignedTimeseriesIndex*>(index)) {
+        if (aligned->value_ts_idx_ == nullptr) {
+            return E_TYPE_NOT_MATCH;
+        }
+        locator.layout = 1;
+        const auto value_offset = aligned->value_ts_idx_->get_metadata_offset();
+        const auto value_length = aligned->value_ts_idx_->get_metadata_length();
+        if (value_offset < 0 || value_length == 0) {
+            return E_NOT_SUPPORT;
+        }
+        locator.value_metadata_offset = static_cast<uint64_t>(value_offset);
+        locator.value_metadata_length = value_length;
+        if (aligned->time_ts_idx_ != nullptr) {
+            const auto time_offset =
+                aligned->time_ts_idx_->get_metadata_offset();
+            const auto time_length =
+                aligned->time_ts_idx_->get_metadata_length();
+            if (time_offset >= 0 && time_length > 0) {
+                locator.time_metadata_offset =
+                    static_cast<uint64_t>(time_offset);
+                locator.time_metadata_length = time_length;
+            }
+        }
+    } else if (auto* value = dynamic_cast<TimeseriesIndex*>(index)) {
+        locator.layout = 0;
+        const auto value_offset = value->get_metadata_offset();
+        const auto value_length = value->get_metadata_length();
+        if (value_offset < 0 || value_length == 0) {
+            return E_NOT_SUPPORT;
+        }
+        locator.value_metadata_offset = static_cast<uint64_t>(value_offset);
+        locator.value_metadata_length = value_length;
+    } else {
+        return E_TYPE_NOT_MATCH;
+    }
+
+    FileGeneration generation;
+    // file_fingerprint 0 means "not checked"; the size is validated by
+    // TsFileIOReader::prepare_series().
+    generation.file_size = static_cast<uint64_t>(read_file_->file_size());
+    return io_reader->prepare_series(generation, locator, prepared);
+}
+
 int TsFileReader::query_prepared(
     const std::shared_ptr<PreparedSeries>& prepared, int64_t start_time,
-    int64_t end_time, int offset, int limit, ResultSet*& result_set) {
+    int64_t end_time, int offset, int limit, ResultSet*& result_set,
+    uint32_t block_rows) {
     if (prepared == nullptr || prepared->index() == nullptr) {
         return E_INVALID_ARG;
     }
     return tsfile_executor_->execute_prepared(
         prepared, start_time, end_time, offset, limit,
-        prepared->index()->get_measurement_name().to_std_string(), result_set);
+        prepared->index()->get_measurement_name().to_std_string(), result_set,
+        block_rows);
 }
 
 int TsFileReader::query_prepared_multi(
     const std::vector<std::shared_ptr<PreparedSeries>>& prepared,
     int64_t start_time, int64_t end_time, int offset, int limit,
-    ResultSet*& result_set) {
+    ResultSet*& result_set, uint32_t block_rows) {
     return tsfile_executor_->execute_prepared_multi(
-        prepared, start_time, end_time, offset, limit, result_set);
+        prepared, start_time, end_time, offset, limit, result_set, block_rows);
 }
 
 int TsFileReader::queryByRow(const std::string& table_name,

@@ -50,8 +50,9 @@ common::TSDataType prepared_value_data_type(ITimeseriesIndex* index) {
 
 int PreparedSeriesTsBlockReader::init(
     TsFileIOReader* io_reader, const std::shared_ptr<PreparedSeries>& prepared,
-    Filter* owned_time_filter, int offset, int limit) {
+    Filter* owned_time_filter, int offset, int limit, uint32_t block_rows) {
     owned_time_filter_ = owned_time_filter;
+    block_rows_ = block_rows == 0 ? PREPARED_BATCH_ROWS : block_rows;
     if (io_reader == nullptr || prepared == nullptr ||
         prepared->index() == nullptr || offset < 0 || closed_) {
         return common::E_INVALID_ARG;
@@ -92,8 +93,9 @@ int PreparedSeriesTsBlockReader::init(
 int PreparedSeriesTsBlockReader::init_multi(
     TsFileIOReader* io_reader,
     const std::vector<std::shared_ptr<PreparedSeries>>& prepared,
-    Filter* owned_time_filter, int offset, int limit) {
+    Filter* owned_time_filter, int offset, int limit, uint32_t block_rows) {
     owned_time_filter_ = owned_time_filter;
+    block_rows_ = block_rows == 0 ? PREPARED_BATCH_ROWS : block_rows;
     if (io_reader == nullptr || prepared.empty() || offset < 0 || closed_) {
         return common::E_INVALID_ARG;
     }
@@ -149,9 +151,9 @@ int PreparedSeriesTsBlockReader::has_next(bool& has_next) {
     while (true) {
         const uint32_t desired_rows =
             remaining_limit_ > 0
-                ? std::min<uint32_t>(PREPARED_BATCH_ROWS,
+                ? std::min<uint32_t>(block_rows_,
                                      static_cast<uint32_t>(remaining_limit_))
-                : PREPARED_BATCH_ROWS;
+                : block_rows_;
         if (block_ != nullptr) {
             if (block_->get_max_row_count() != desired_rows) {
                 ssi_->revert_tsblock();
