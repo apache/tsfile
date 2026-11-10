@@ -18,14 +18,14 @@
 # ----------------------------------------------------------------------------
 
 name: Question
-description: 用法、设计或兼容性的问题（不是缺陷）
+description: A usage, design, or compatibility question (not a defect)
 title: "question: "
 labels: [question]
 body:
   - type: textarea
     id: question
     attributes:
-      label: 问题
-      description: 具体想确认什么、已尝试过什么。
+      label: Question
+      description: What you want to confirm and what you have already tried.
     validations:
       required: true
