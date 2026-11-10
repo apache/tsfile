@@ -21,19 +21,22 @@ name: Bug report
 description: Report a defect or unexpected behavior
 title: "bug: "
 labels: [bug]
+assignees: []
 body:
   - type: dropdown
     id: language
     attributes:
       label: Language
-      description: Which language implementation this bug is about.
+      description: Which language implementation this issue is about.
+      multiple: true
       options:
         - Java
         - C++
         - Python
-        - Multiple / not sure
+        - Other
     validations:
       required: true
+
   - type: textarea
     id: description
     attributes:
