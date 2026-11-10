@@ -21,6 +21,7 @@ name: Documentation
 description: Missing, incorrect, or unclear documentation
 title: "docs: "
 labels: [documentation]
+assignees: []
 body:
   - type: input
     id: location
