@@ -21,6 +21,7 @@ name: Question
 description: A usage, design, or compatibility question (not a defect)
 title: "question: "
 labels: [question]
+assignees: []
 body:
   - type: textarea
     id: question
