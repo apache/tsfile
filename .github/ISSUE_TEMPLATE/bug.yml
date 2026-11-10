@@ -22,6 +22,18 @@ description: Report a defect or unexpected behavior
 title: "bug: "
 labels: [bug]
 body:
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language
+      description: Which language implementation this bug is about.
+      options:
+        - Java
+        - C++
+        - Python
+        - Multiple / not sure
+    validations:
+      required: true
   - type: textarea
     id: description
     attributes:
@@ -40,7 +52,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: TsFile version, language (Java/C++/Python), and build method.
+      description: TsFile version and build method.
     validations:
       required: true
   - type: textarea
