@@ -20,6 +20,6 @@
 blank_issues_enabled: true
 
 contact_links:
-  - name: Apache TsFile 社区
+  - name: Apache TsFile Community
     url: https://github.com/apache/tsfile/discussions
-    about: 用法讨论或非缺陷问题请到 Discussions 提问。
+    about: For usage or non-defect questions, please use Discussions.
