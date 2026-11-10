@@ -18,37 +18,37 @@
 # ----------------------------------------------------------------------------
 
 name: Feature request
-description: 提出一个新功能或能力
+description: Propose a new feature or capability
 title: "feature: "
 labels: [enhancement]
 body:
   - type: textarea
     id: motivation
     attributes:
-      label: 动机
-      description: 解决什么问题、当前为什么做不到。
+      label: Motivation
+      description: What problem this solves and why it cannot be done today.
     validations:
       required: true
   - type: textarea
     id: proposal
     attributes:
-      label: 期望行为
-      description: 希望新增什么能力、对外表现如何。
+      label: Expected behavior
+      description: What capability should be added and how it should behave.
     validations:
       required: true
   - type: textarea
     id: acceptance
     attributes:
-      label: 验收条件
-      description: 可验证的完成标准（尽量可执行）。
+      label: Acceptance criteria
+      description: Verifiable completion criteria.
   - type: dropdown
     id: model
     attributes:
-      label: 写入模型
-      description: 该功能面向哪种写入模型。
+      label: Write model
+      description: Which write model this feature targets.
       options:
-        - 表模型（table）
-        - 树模型（tree）
-        - 两者都要
+        - Table model
+        - Tree model
+        - Both
     validations:
       required: true
