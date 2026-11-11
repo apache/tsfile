@@ -2587,3 +2587,45 @@ TEST_F(TsFileWriterTest, EqualTimestampsRejectedAlignedWhenFlagOff) {
     EXPECT_NE(tsfile_writer_->write_tablet_aligned(tablet), E_OK);
     ASSERT_EQ(tsfile_writer_->close(), E_OK);
 }
+
+// With the flag on, equal timestamps must be accepted on the non-aligned row
+// path (TimePageWriter::write) and read back as separate rows.
+TEST_F(TsFileWriterTest, AllowNonDecreasingNonAlignedRecordWriteAndRead) {
+    ScopedAllowNonDecreasingTimestamps guard(true);
+    std::string device_name = "device_dup_non_aligned";
+    ASSERT_EQ(
+        tsfile_writer_->register_timeseries(
+            device_name, MeasurementSchema("v0", INT64, PLAIN, UNCOMPRESSED)),
+        E_OK);
+
+    const int64_t times[4] = {0, 1, 1, 2};
+    for (int i = 0; i < 4; ++i) {
+        TsRecord record(times[i], device_name);
+        record.add_point("v0", static_cast<int64_t>(i));
+        ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    std::vector<storage::Path> select_list;
+    select_list.emplace_back(device_name + ".v0");
+    storage::QueryExpression* qe =
+        storage::QueryExpression::create(select_list, nullptr);
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    storage::ResultSet* tmp_qds = nullptr;
+    ASSERT_EQ(reader.query(qe, tmp_qds), E_OK);
+    ASSERT_NE(tmp_qds, nullptr);
+
+    bool has_next = false;
+    int64_t cur_row = 0;
+    while (IS_SUCC(tmp_qds->next(has_next)) && has_next) {
+        auto* rec = tmp_qds->get_row_record();
+        ASSERT_NE(rec, nullptr);
+        EXPECT_EQ(rec->get_timestamp(), times[cur_row]);
+        ++cur_row;
+    }
+    EXPECT_EQ(cur_row, 4);
+    reader.destroy_query_data_set(tmp_qds);
+    ASSERT_EQ(reader.close(), E_OK);
+}
