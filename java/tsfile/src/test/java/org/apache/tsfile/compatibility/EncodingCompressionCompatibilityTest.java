@@ -1613,8 +1613,7 @@ public class EncodingCompressionCompatibilityTest {
         }
         if (withAnchor) {
           assertFalse("anchor null at " + fixtureCase.id + " t=" + time, resultSet.isNull(4));
-          assertEquals(
-              fixtureCase.id + " anchor at t=" + time, row, resultSet.getLong(4));
+          assertEquals(fixtureCase.id + " anchor at t=" + time, row, resultSet.getLong(4));
         }
 
         row++;
@@ -1680,10 +1679,7 @@ public class EncodingCompressionCompatibilityTest {
               isNull);
           if (!isNull) {
             assertFieldValue(
-                fixtureCase,
-                expectedValue(fixtureCase, row),
-                valueField,
-                timeOf(fixtureCase, row));
+                fixtureCase, expectedValue(fixtureCase, row), valueField, timeOf(fixtureCase, row));
           }
           if (withAnchor) {
             Field anchorField = record.getFields().get(1);
@@ -1700,8 +1696,7 @@ public class EncodingCompressionCompatibilityTest {
             row++;
           }
         }
-        assertEquals(
-            fixtureCase.id + " tree row count for device " + device, end + 1, row);
+        assertEquals(fixtureCase.id + " tree row count for device " + device, end + 1, row);
       }
     }
   }
