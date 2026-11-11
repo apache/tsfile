@@ -68,6 +68,13 @@ typedef struct ConfigValue {
     // throughput: writes return success as soon as data is in the page cache.
     // Only set to false if the caller drives its own fsync policy.
     bool sync_on_close_ = true;
+    // When true, a timestamp equal to the previous one is accepted; only a
+    // strictly decreasing timestamp is rejected with E_OUT_OF_ORDER. Equal
+    // timestamps are preserved as separate rows (no write-time dedup). Like
+    // thread_count_/sync_on_close_ it keeps its in-class default rather than
+    // being reset by init_config_value(), so a setter called before
+    // libtsfile_init() is not clobbered.
+    bool allow_non_decreasing_timestamps_ = false;
 } ConfigValue;
 
 extern void init_config_value();

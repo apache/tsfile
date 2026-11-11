@@ -18,6 +18,7 @@
  */
 package org.apache.tsfile.write.chunk;
 
+import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
@@ -192,7 +193,7 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
 
   private void checkIsHistoryData(String measurementId, long time) throws WriteProcessException {
     final Long lastTime = lastTimeMap.get(measurementId);
-    if (lastTime != null && time <= lastTime) {
+    if (lastTime != null && isOutOfOrder(time, lastTime)) {
       throw new WriteProcessException(
           Messages.format(
               "error.write.chunk_group_non_aligned_out_of_order",
@@ -201,6 +202,12 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
               measurementId,
               lastTimeMap.get(measurementId)));
     }
+  }
+
+  private static boolean isOutOfOrder(long time, long lastTime) {
+    return TSFileDescriptor.getInstance().getConfig().isAllowNonDecreasingTimestamps()
+        ? time < lastTime
+        : time <= lastTime;
   }
 
   public Map<String, Long> getLastTimeMap() {

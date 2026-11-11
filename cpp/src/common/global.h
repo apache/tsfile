@@ -209,6 +209,14 @@ FORCE_INLINE bool get_parallel_write_enabled() {
     return g_config_value_.parallel_write_enabled_;
 }
 
+FORCE_INLINE void set_allow_non_decreasing_timestamps(bool enabled) {
+    g_config_value_.allow_non_decreasing_timestamps_ = enabled;
+}
+
+FORCE_INLINE bool get_allow_non_decreasing_timestamps() {
+    return g_config_value_.allow_non_decreasing_timestamps_;
+}
+
 // Select the backend used by subsequently opened local files. Existing
 // LocalRandomAccessReadFile instances retain the backend selected when opened.
 // This setting deliberately lives outside exported ConfigValue so adding it

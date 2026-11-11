@@ -331,7 +331,12 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
   }
 
   protected void checkIsHistoryData(long time) throws WriteProcessException {
-    if (isInitLastTime && time <= lastTime) {
+    final boolean outOfOrder =
+        isInitLastTime
+            && (TSFileDescriptor.getInstance().getConfig().isAllowNonDecreasingTimestamps()
+                ? time < lastTime
+                : time <= lastTime);
+    if (outOfOrder) {
       throw new WriteProcessException(
           Messages.format(
               "error.write.chunk_group_aligned_out_of_order",

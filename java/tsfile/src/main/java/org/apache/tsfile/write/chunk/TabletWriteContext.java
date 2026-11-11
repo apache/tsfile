@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.write.chunk;
 
+import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
@@ -40,7 +41,7 @@ public final class TabletWriteContext {
   }
 
   public void checkTime(long time) throws WriteProcessException {
-    if (hasLastTime && time <= lastTime) {
+    if (hasLastTime && isOutOfOrder(time, lastTime)) {
       throw new WriteProcessException(
           Messages.format(
               "error.write.chunk_group_non_aligned_out_of_order",
@@ -49,6 +50,12 @@ public final class TabletWriteContext {
               measurementId,
               lastTime));
     }
+  }
+
+  private static boolean isOutOfOrder(long time, long lastTime) {
+    return TSFileDescriptor.getInstance().getConfig().isAllowNonDecreasingTimestamps()
+        ? time < lastTime
+        : time <= lastTime;
   }
 
   /** Advance only after a successful write, so failures retain the last accepted timestamp. */

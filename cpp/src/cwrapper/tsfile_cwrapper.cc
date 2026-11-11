@@ -146,6 +146,11 @@ int set_global_compression(uint8_t compression) {
     return common::set_global_compression(compression);
 }
 
+int set_allow_non_decreasing_timestamps(bool enabled) {
+    common::set_allow_non_decreasing_timestamps(enabled);
+    return common::E_OK;
+}
+
 ERRNO tsfile_set_file_read_backend(int32_t backend) {
     switch (backend) {
         case TSFILE_READ_BACKEND_AUTO:

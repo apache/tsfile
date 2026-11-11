@@ -20,6 +20,7 @@
 #define WRITER_PAGE_TIME_WRITER_H
 
 #include "common/allocator/byte_stream.h"
+#include "common/global.h"
 #include "common/statistic.h"
 #include "compress/compressor.h"
 #include "encoding/encoder.h"
@@ -74,7 +75,7 @@ class TimePageWriter {
     FORCE_INLINE int write(int64_t timestamp) {
         int ret = common::E_OK;
         if (statistic_->count_ != 0 && is_inited_ &&
-            timestamp <= statistic_->end_time_) {
+            is_out_of_order(timestamp, statistic_->end_time_)) {
             return common::E_OUT_OF_ORDER;
         }
         if (RET_FAIL(time_encoder_->encode(timestamp, time_out_stream_))) {
@@ -89,12 +90,12 @@ class TimePageWriter {
         if (count == 0) return ret;
         // Check order: first timestamp vs existing end_time
         if (statistic_->count_ != 0 && is_inited_ &&
-            timestamps[0] <= statistic_->end_time_) {
+            is_out_of_order(timestamps[0], statistic_->end_time_)) {
             return common::E_OUT_OF_ORDER;
         }
         // Check monotonicity within batch
         for (uint32_t i = 1; i < count; i++) {
-            if (timestamps[i] <= timestamps[i - 1]) {
+            if (is_out_of_order(timestamps[i], timestamps[i - 1])) {
                 return common::E_OUT_OF_ORDER;
             }
         }
@@ -135,6 +136,14 @@ class TimePageWriter {
     void destroy_page_data() { cur_page_data_.destroy(); }
 
    private:
+    // Reject a timestamp only when it is strictly less than the previous one
+    // (allow_non_decreasing_timestamps_ enabled), or at most equal to it
+    // (flag disabled, the historical behavior).
+    FORCE_INLINE static bool is_out_of_order(int64_t time, int64_t last_time) {
+        return common::g_config_value_.allow_non_decreasing_timestamps_
+                   ? time < last_time
+                   : time <= last_time;
+    }
     FORCE_INLINE int prepare_end_page() {
         int ret = common::E_OK;
         if (RET_FAIL(time_encoder_->flush(time_out_stream_))) {

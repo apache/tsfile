@@ -98,14 +98,25 @@ class TsFileTableWriter:
     """
 
     def __init__(
-        self, path: str, table_schema: TableSchema, memory_threshold=128 * 1024 * 1024
+        self,
+        path: str,
+        table_schema: TableSchema,
+        memory_threshold=128 * 1024 * 1024,
+        allow_non_decreasing_timestamps=False,
     ):
         """
         :param path: The path of tsfile, will create if it doesn't exist.
         :param table_schema: describes the schema of the tables they want to write.
         :param memory_threshold(Byte): memory usage threshold for flushing data.
+        :param allow_non_decreasing_timestamps: when True, a timestamp equal to
+            the previously written timestamp is accepted; only a strictly
+            decreasing timestamp is rejected as out-of-order. Duplicate
+            timestamps are preserved as separate rows (no write-time dedup).
+            This is a process-wide setting.
         """
-        self.writer = TsFileWriter(path, memory_threshold)
+        self.writer = TsFileWriter(
+            path, memory_threshold, allow_non_decreasing_timestamps
+        )
         self.writer.register_table(table_schema)
         self.tableSchema = table_schema
 
