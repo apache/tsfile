@@ -52,6 +52,7 @@ summary.
 | `javaWrite`/`cppWrite` | Whether that language writes the fixture. |
 | `javaRead`/`cppRead` | Whether that language validates the fixture when the other side wrote it. |
 | `gapReason` | Required whenever any write/read cell is `no`; the reason is reported in every CI run. |
+| `timestampProfile` | `increasing` (default; the timestamp equals the row index) or `duplicates` (the timestamp is `row/2`, so every value appears twice, written with `allow_non_decreasing_timestamps` enabled). This trailing column is optional; omitting it means `increasing`. |
 
 A case with a `no` in a write column is an explicit declared gap. A case absent
 from the file is not a gap: the completeness test in both suites enumerates the

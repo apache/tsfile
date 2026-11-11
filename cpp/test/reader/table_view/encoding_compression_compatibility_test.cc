@@ -95,7 +95,8 @@ const char* const kSummaryFile = "summary.md";
 
 const char* const kSpecHeader =
     "id,model,dataType,encoding,compressions,rowCount,pageRows,chunks,devices,"
-    "valueProfile,nullPatterns,javaWrite,cppWrite,javaRead,cppRead,gapReason";
+    "valueProfile,nullPatterns,javaWrite,cppWrite,javaRead,cppRead,gapReason,"
+    "timestampProfile";
 const char* const kManifestHeader =
     "producer,id,model,dataType,encoding,compression,rowCount,pageRows,chunks,"
     "devices,valueProfile,nullPattern";
@@ -126,6 +127,8 @@ enum class ValueProfile {
     DICT_HIGH,
     BLOB
 };
+
+enum class TimestampProfile { INCREASING, DUPLICATES };
 
 const char* ModelName(Model model) {
     return model == Model::TABLE ? "TABLE" : "TREE";
@@ -199,6 +202,7 @@ struct FixtureCase {
     bool java_read = false;
     bool cpp_read = false;
     std::string gap_reason;
+    TimestampProfile timestamp_profile = TimestampProfile::INCREASING;
 
     bool Writes(const std::string& language) const {
         return language == "java" ? java_write : cpp_write;
@@ -721,6 +725,19 @@ bool ParseProfile(const std::string& value, ValueProfile& out) {
     return false;
 }
 
+bool ParseTimestampProfile(const std::string& value, TimestampProfile& out) {
+    std::string upper = Upper(value);
+    if (upper.empty() || upper == "INCREASING") {
+        out = TimestampProfile::INCREASING;
+        return true;
+    }
+    if (upper == "DUPLICATES") {
+        out = TimestampProfile::DUPLICATES;
+        return true;
+    }
+    return false;
+}
+
 bool ParseYesNo(const std::string& value, bool& out) {
     if (value == "yes") {
         out = true;
@@ -808,7 +825,10 @@ std::vector<FixtureCase> ReadSpec(const std::string& path) {
             header_seen = true;
             continue;
         }
-        if (columns.empty() || parts.size() != columns.size()) {
+        // The trailing timestampProfile column is optional; a row may omit it
+        // to mean the default INCREASING profile.
+        if (columns.empty() || (parts.size() != columns.size() &&
+                                parts.size() + 1 != columns.size())) {
             ADD_FAILURE() << "Bad spec line: " << line;
             continue;
         }
@@ -837,6 +857,15 @@ std::vector<FixtureCase> ReadSpec(const std::string& path) {
             continue;
         }
         std::string gap_reason = parts[ColumnIndex(columns, "gapReason")];
+        TimestampProfile timestamp_profile = TimestampProfile::INCREASING;
+        int ts_profile_index = ColumnIndex(columns, "timestampProfile");
+        if (ts_profile_index >= 0 &&
+            static_cast<size_t>(ts_profile_index) < parts.size() &&
+            !ParseTimestampProfile(parts[ts_profile_index],
+                                   timestamp_profile)) {
+            ADD_FAILURE() << "Bad timestampProfile in spec line: " << line;
+            continue;
+        }
 
         Model model;
         TSDataType data_type;
@@ -893,6 +922,7 @@ std::vector<FixtureCase> ReadSpec(const std::string& path) {
                 fixture_case.java_read = java_read;
                 fixture_case.cpp_read = cpp_read;
                 fixture_case.gap_reason = gap_reason;
+                fixture_case.timestamp_profile = timestamp_profile;
                 cases.push_back(fixture_case);
             }
         }
@@ -1169,6 +1199,23 @@ class ScopedPageConfig {
     uint32_t old_bytes_;
 };
 
+// Enable allow_non_decreasing_timestamps for the DUPLICATES profile and
+// restore the process-wide flag when the fixture write finishes.
+class ScopedAllowNonDecreasing {
+   public:
+    explicit ScopedAllowNonDecreasing(const FixtureCase& fixture_case)
+        : old_(g_config_value_.allow_non_decreasing_timestamps_) {
+        g_config_value_.allow_non_decreasing_timestamps_ =
+            fixture_case.timestamp_profile == TimestampProfile::DUPLICATES;
+    }
+    ~ScopedAllowNonDecreasing() {
+        g_config_value_.allow_non_decreasing_timestamps_ = old_;
+    }
+
+   private:
+    bool old_;
+};
+
 std::vector<std::pair<int, int>> Segments(const FixtureCase& fixture_case) {
     int chunks = std::max(1, fixture_case.chunks);
     std::vector<std::pair<int, int>> segments;
@@ -1181,6 +1228,12 @@ std::vector<std::pair<int, int>> Segments(const FixtureCase& fixture_case) {
         start += length;
     }
     return segments;
+}
+
+int64_t TimeOf(const FixtureCase& fixture_case, int row) {
+    return fixture_case.timestamp_profile == TimestampProfile::DUPLICATES
+               ? static_cast<int64_t>(row) / 2
+               : static_cast<int64_t>(row);
 }
 
 std::string DeviceId(int device) {
@@ -1260,7 +1313,7 @@ Tablet CreateTablet(TableSchema* table_schema, const FixtureCase& fixture_case,
         static_cast<uint32_t>(std::max(1, end - start)));
     uint32_t index = 0;
     for (int row = start; row < end; row++, index++) {
-        EXPECT_EQ(E_OK, tablet.add_timestamp(index, row));
+        EXPECT_EQ(E_OK, tablet.add_timestamp(index, TimeOf(fixture_case, row)));
         EXPECT_EQ(E_OK, tablet.add_value(index, kTagColumn,
                                          common::String(DeviceId(device))));
         if (!IsNull(fixture_case, row)) {
@@ -1332,6 +1385,7 @@ void AddRecordPoint(TsRecord& record, std::string& keep_alive,
 void WriteTableFixture(const std::string& directory,
                        const FixtureCase& fixture_case) {
     ScopedPageConfig page_config(fixture_case);
+    ScopedAllowNonDecreasing allow_non_decreasing(fixture_case);
     std::string path = JoinPath(directory, fixture_case.FileName());
     WriteFile write_file;
     CreateWriteFile(path, write_file);
@@ -1352,6 +1406,7 @@ void WriteTableFixture(const std::string& directory,
 void WriteTreeFixture(const std::string& directory,
                       const FixtureCase& fixture_case) {
     ScopedPageConfig page_config(fixture_case);
+    ScopedAllowNonDecreasing allow_non_decreasing(fixture_case);
     std::string path = JoinPath(directory, fixture_case.FileName());
     WriteFile write_file;
     CreateWriteFile(path, write_file);
@@ -1375,7 +1430,7 @@ void WriteTreeFixture(const std::string& directory,
         std::string device_id = DeviceId(device);
         for (const std::pair<int, int>& segment : Segments(fixture_case)) {
             for (int row = segment.first; row < segment.second; row++) {
-                TsRecord record(device_id, row);
+                TsRecord record(device_id, TimeOf(fixture_case, row));
                 std::string keep_alive;
                 int points = 0;
                 if (!IsNull(fixture_case, row)) {
@@ -1640,7 +1695,7 @@ void ValidateTableRange(const std::string& directory,
     // from doing a million string copies and map inserts.
     const int range_len = range.end - range.start + 1;
     int device = 0;
-    int expected_time = range.start;
+    int row = range.start;
     int rows_in_device = 0;
     int total_rows = 0;
     bool tag_verified = false;
@@ -1651,8 +1706,8 @@ void ValidateTableRange(const std::string& directory,
             break;
         }
         total_rows++;
-        SCOPED_TRACE(::testing::Message()
-                     << "device=" << device << " t=" << expected_time);
+        SCOPED_TRACE(::testing::Message() << "device=" << device << " t="
+                                          << TimeOf(fixture_case, row));
 
         if (!tag_verified) {
             common::String* tag = owned_result->get_value<common::String*>(2);
@@ -1661,25 +1716,23 @@ void ValidateTableRange(const std::string& directory,
             tag_verified = true;
         }
 
-        EXPECT_EQ(static_cast<int64_t>(expected_time),
-                  owned_result->get_int64_at(1));
+        EXPECT_EQ(TimeOf(fixture_case, row), owned_result->get_int64_at(1));
 
-        const bool expected_null = IsNull(fixture_case, expected_time);
+        const bool expected_null = IsNull(fixture_case, row);
         EXPECT_EQ(expected_null, owned_result->is_null(3));
         if (!expected_null) {
-            ASSERT_NO_FATAL_FAILURE(ExpectTableValue(
-                fixture_case, expected_time, owned_result.get()));
+            ASSERT_NO_FATAL_FAILURE(
+                ExpectTableValue(fixture_case, row, owned_result.get()));
         }
 
         if (with_anchor) {
-            EXPECT_EQ(static_cast<int64_t>(expected_time),
-                      owned_result->get_int64_at(4));
+            EXPECT_EQ(static_cast<int64_t>(row), owned_result->get_int64_at(4));
         }
 
-        expected_time++;
+        row++;
         if (++rows_in_device == range_len) {
             device++;
-            expected_time = range.start;
+            row = range.start;
             rows_in_device = 0;
             tag_verified = false;
         }
@@ -1714,40 +1767,38 @@ void ValidateTreeRange(const std::string& directory,
     };
     std::unique_ptr<ResultSet, decltype(cleanup)> owned_result(result, cleanup);
     ResultSetIterator iter = owned_result->iterator();
-    int expected_time = range.start;
+    int row = range.start;
     while (iter.hasNext()) {
         RowRecord* record = iter.next();
         ASSERT_NE(nullptr, record);
         if (!with_anchor) {
-            while (expected_time <= range.end &&
-                   IsNull(fixture_case, expected_time)) {
-                expected_time++;
+            while (row <= range.end && IsNull(fixture_case, row)) {
+                row++;
             }
         }
-        ASSERT_LE(expected_time, range.end);
-        EXPECT_EQ(static_cast<int64_t>(expected_time), record->get_timestamp());
+        ASSERT_LE(row, range.end);
+        EXPECT_EQ(TimeOf(fixture_case, row), record->get_timestamp());
         Field* value_field = record->get_field(1);
         ASSERT_NE(nullptr, value_field);
         bool is_null = value_field->type_ == NULL_TYPE;
-        EXPECT_EQ(IsNull(fixture_case, expected_time), is_null);
+        EXPECT_EQ(IsNull(fixture_case, row), is_null);
         if (!is_null) {
-            ExpectFieldValue(fixture_case, expected_time, value_field);
+            ExpectFieldValue(fixture_case, row, value_field);
         }
         if (with_anchor) {
             Field* anchor_field = record->get_field(2);
             ASSERT_NE(nullptr, anchor_field);
-            EXPECT_EQ(static_cast<int64_t>(expected_time),
+            EXPECT_EQ(static_cast<int64_t>(row),
                       anchor_field->get_value<int64_t>());
         }
-        expected_time++;
+        row++;
     }
     if (!with_anchor) {
-        while (expected_time <= range.end &&
-               IsNull(fixture_case, expected_time)) {
-            expected_time++;
+        while (row <= range.end && IsNull(fixture_case, row)) {
+            row++;
         }
     }
-    EXPECT_EQ(range.end + 1, expected_time);
+    EXPECT_EQ(range.end + 1, row);
     owned_result.reset();
     ASSERT_EQ(E_OK, reader.close());
 }

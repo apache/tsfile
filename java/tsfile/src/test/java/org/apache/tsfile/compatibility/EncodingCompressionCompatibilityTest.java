@@ -127,7 +127,7 @@ public class EncodingCompressionCompatibilityTest {
 
   private static final String SPEC_HEADER =
       "id,model,dataType,encoding,compressions,rowCount,pageRows,chunks,devices,valueProfile,"
-          + "nullPatterns,javaWrite,cppWrite,javaRead,cppRead,gapReason";
+          + "nullPatterns,javaWrite,cppWrite,javaRead,cppRead,gapReason,timestampProfile";
   private static final String MANIFEST_HEADER =
       "producer,id,model,dataType,encoding,compression,rowCount,pageRows,chunks,devices,"
           + "valueProfile,nullPattern";
@@ -181,6 +181,11 @@ public class EncodingCompressionCompatibilityTest {
     BLOB
   }
 
+  private enum TimestampProfile {
+    INCREASING,
+    DUPLICATES
+  }
+
   private static final class FixtureCase {
     final String specId;
     final String id;
@@ -199,6 +204,7 @@ public class EncodingCompressionCompatibilityTest {
     final boolean javaRead;
     final boolean cppRead;
     final String gapReason;
+    final TimestampProfile timestampProfile;
 
     FixtureCase(
         String specId,
@@ -217,7 +223,8 @@ public class EncodingCompressionCompatibilityTest {
         boolean cppWrite,
         boolean javaRead,
         boolean cppRead,
-        String gapReason) {
+        String gapReason,
+        TimestampProfile timestampProfile) {
       this.specId = specId;
       this.id = id;
       this.model = model;
@@ -235,6 +242,7 @@ public class EncodingCompressionCompatibilityTest {
       this.javaRead = javaRead;
       this.cppRead = cppRead;
       this.gapReason = gapReason;
+      this.timestampProfile = timestampProfile;
     }
 
     String fileName() {
@@ -252,6 +260,10 @@ public class EncodingCompressionCompatibilityTest {
     String describe() {
       return id + " (" + model + "/" + dataType + "/" + encoding + "/" + compression + ")";
     }
+  }
+
+  private static long timeOf(FixtureCase fixtureCase, int row) {
+    return fixtureCase.timestampProfile == TimestampProfile.DUPLICATES ? row / 2L : row;
   }
 
   // ---------------------------------------------------------------------------
@@ -515,7 +527,9 @@ public class EncodingCompressionCompatibilityTest {
         columns = indexColumns(parts, SPEC_HEADER, specPath);
         continue;
       }
-      if (parts.length != columns.size()) {
+      // The trailing timestampProfile column is optional: a row may omit it to
+      // mean the default INCREASING profile.
+      if (parts.length != columns.size() && parts.length != columns.size() - 1) {
         throw new IllegalArgumentException("Bad spec line (" + parts.length + " fields): " + line);
       }
       String id = part(parts, columns, "id");
@@ -534,6 +548,8 @@ public class EncodingCompressionCompatibilityTest {
       boolean javaRead = parseYesNo(part(parts, columns, "javaRead"));
       boolean cppRead = parseYesNo(part(parts, columns, "cppRead"));
       String gapReason = part(parts, columns, "gapReason");
+      TimestampProfile timestampProfile =
+          parseTimestampProfile(part(parts, columns, "timestampProfile"));
 
       List<String> compressionList =
           "ALL".equals(compressions)
@@ -569,7 +585,8 @@ public class EncodingCompressionCompatibilityTest {
                   cppWrite,
                   javaRead,
                   cppRead,
-                  gapReason));
+                  gapReason,
+                  timestampProfile));
         }
       }
     }
@@ -597,7 +614,8 @@ public class EncodingCompressionCompatibilityTest {
     if (index == null) {
       throw new IllegalArgumentException("Missing column " + name);
     }
-    return parts[index];
+    // A spec row may omit the trailing timestampProfile column; default it.
+    return index < parts.length ? parts[index] : "";
   }
 
   private static boolean parseYesNo(String value) {
@@ -608,6 +626,13 @@ public class EncodingCompressionCompatibilityTest {
       return false;
     }
     throw new IllegalArgumentException("Expected yes/no, got: " + value);
+  }
+
+  private static TimestampProfile parseTimestampProfile(String value) {
+    if (value == null || value.isEmpty()) {
+      return TimestampProfile.INCREASING;
+    }
+    return TimestampProfile.valueOf(value.toUpperCase(Locale.ROOT));
   }
 
   private static String capabilityKey(FixtureCase fixtureCase) {
@@ -1258,8 +1283,11 @@ public class EncodingCompressionCompatibilityTest {
     TSFileConfig config = TSFileDescriptor.getInstance().getConfig();
     int oldPageRows = config.getMaxNumberOfPointsInPage();
     int oldPageBytes = config.getPageSizeInByte();
+    boolean oldAllowNonDecreasing = config.isAllowNonDecreasingTimestamps();
     try {
       applyPageConfiguration(config, fixtureCase);
+      config.setAllowNonDecreasingTimestamps(
+          fixtureCase.timestampProfile == TimestampProfile.DUPLICATES);
       try (TsFileWriter writer = new TsFileWriter(file)) {
         writer.setGenerateTableSchema(true);
         writer.registerTableSchema(tableSchema);
@@ -1273,6 +1301,7 @@ public class EncodingCompressionCompatibilityTest {
     } finally {
       config.setMaxNumberOfPointsInPage(oldPageRows);
       config.setPageSizeInByte(oldPageBytes);
+      config.setAllowNonDecreasingTimestamps(oldAllowNonDecreasing);
     }
   }
 
@@ -1280,8 +1309,11 @@ public class EncodingCompressionCompatibilityTest {
     TSFileConfig config = TSFileDescriptor.getInstance().getConfig();
     int oldPageRows = config.getMaxNumberOfPointsInPage();
     int oldPageBytes = config.getPageSizeInByte();
+    boolean oldAllowNonDecreasing = config.isAllowNonDecreasingTimestamps();
     try {
       applyPageConfiguration(config, fixtureCase);
+      config.setAllowNonDecreasingTimestamps(
+          fixtureCase.timestampProfile == TimestampProfile.DUPLICATES);
       try (TsFileWriter writer = new TsFileWriter(file)) {
         for (int device = 0; device < fixtureCase.devices; device++) {
           org.apache.tsfile.read.common.Path devicePath =
@@ -1298,7 +1330,7 @@ public class EncodingCompressionCompatibilityTest {
           String deviceId = deviceId(device);
           for (int[] segment : segments(fixtureCase)) {
             for (int row = segment[0]; row < segment[1]; row++) {
-              TSRecord record = new TSRecord(deviceId, row);
+              TSRecord record = new TSRecord(deviceId, timeOf(fixtureCase, row));
               int points = 0;
               if (!isNull(fixtureCase, row)) {
                 record.addTuple(dataPoint(fixtureCase, row));
@@ -1319,6 +1351,7 @@ public class EncodingCompressionCompatibilityTest {
     } finally {
       config.setMaxNumberOfPointsInPage(oldPageRows);
       config.setPageSizeInByte(oldPageBytes);
+      config.setAllowNonDecreasingTimestamps(oldAllowNonDecreasing);
     }
   }
 
@@ -1386,7 +1419,7 @@ public class EncodingCompressionCompatibilityTest {
             Math.max(1, end - start));
     int index = 0;
     for (int row = start; row < end; row++, index++) {
-      tablet.addTimestamp(index, row);
+      tablet.addTimestamp(index, timeOf(fixtureCase, row));
       tablet.addValue(TAG_COLUMN, index, deviceId(device));
       if (isNull(fixtureCase, row)) {
         tablet.addValue(VALUE_COLUMN, index, null);
@@ -1551,7 +1584,7 @@ public class EncodingCompressionCompatibilityTest {
       // inline instead of buffering every row, so a 1M-row fixture does not keep
       // millions of boxed values and arrays alive until the query finishes.
       int device = 0;
-      int expectedTime = start;
+      int row = start;
       int rowsInDevice = 0;
       int totalRows = 0;
       boolean tagVerified = false;
@@ -1566,28 +1599,28 @@ public class EncodingCompressionCompatibilityTest {
         }
 
         long time = resultSet.getLong(1);
-        assertEquals(fixtureCase.id + " timestamp", expectedTime, time);
+        assertEquals(fixtureCase.id + " timestamp", timeOf(fixtureCase, row), time);
 
         boolean isNull = resultSet.isNull(3);
-        boolean expectedNull = isNull(fixtureCase, expectedTime);
-        assertEquals(fixtureCase.id + " null at t=" + expectedTime, expectedNull, isNull);
+        boolean expectedNull = isNull(fixtureCase, row);
+        assertEquals(fixtureCase.id + " null at t=" + time, expectedNull, isNull);
         if (!expectedNull) {
           assertValue(
               fixtureCase,
-              expectedValue(fixtureCase, expectedTime),
+              expectedValue(fixtureCase, row),
               readResultValue(fixtureCase, resultSet, 3),
-              expectedTime);
+              time);
         }
         if (withAnchor) {
           assertFalse("anchor null at " + fixtureCase.id + " t=" + time, resultSet.isNull(4));
           assertEquals(
-              fixtureCase.id + " anchor at t=" + expectedTime, expectedTime, resultSet.getLong(4));
+              fixtureCase.id + " anchor at t=" + time, row, resultSet.getLong(4));
         }
 
-        expectedTime++;
+        row++;
         if (++rowsInDevice == end - start + 1) {
           device++;
-          expectedTime = start;
+          row = start;
           rowsInDevice = 0;
           tagVerified = false;
         }
@@ -1625,50 +1658,50 @@ public class EncodingCompressionCompatibilityTest {
     try (TsFileSequenceReader sequenceReader = new TsFileSequenceReader(file.getPath())) {
       try (TsFileReader reader = new TsFileReader(sequenceReader)) {
         QueryDataSet dataSet = reader.query(expression);
-        long expectedTime = start;
+        int row = start;
         while (dataSet.hasNext()) {
           RowRecord record = dataSet.next();
           if (!withAnchor) {
             // Without the anchor, timestamps whose value is missing are not
             // returned at all; skip to the next present value.
-            while (expectedTime <= end && isNull(fixtureCase, (int) expectedTime)) {
-              expectedTime++;
+            while (row <= end && isNull(fixtureCase, row)) {
+              row++;
             }
           }
           assertEquals(
               fixtureCase.id + " tree timestamp for device " + device,
-              expectedTime,
+              timeOf(fixtureCase, row),
               record.getTimestamp());
           Field valueField = record.getFields().get(0);
           boolean isNull = valueField == null || valueField.getDataType() == null;
           assertEquals(
-              fixtureCase.id + " tree null at t=" + expectedTime,
-              isNull(fixtureCase, (int) expectedTime),
+              fixtureCase.id + " tree null at t=" + timeOf(fixtureCase, row),
+              isNull(fixtureCase, row),
               isNull);
           if (!isNull) {
             assertFieldValue(
                 fixtureCase,
-                expectedValue(fixtureCase, (int) expectedTime),
+                expectedValue(fixtureCase, row),
                 valueField,
-                expectedTime);
+                timeOf(fixtureCase, row));
           }
           if (withAnchor) {
             Field anchorField = record.getFields().get(1);
             assertNotNull(anchorField);
             assertEquals(
-                fixtureCase.id + " tree anchor at t=" + expectedTime,
-                expectedTime,
+                fixtureCase.id + " tree anchor at t=" + timeOf(fixtureCase, row),
+                row,
                 anchorField.getLongV());
           }
-          expectedTime++;
+          row++;
         }
         if (!withAnchor) {
-          while (expectedTime <= end && isNull(fixtureCase, (int) expectedTime)) {
-            expectedTime++;
+          while (row <= end && isNull(fixtureCase, row)) {
+            row++;
           }
         }
         assertEquals(
-            fixtureCase.id + " tree row count for device " + device, end + 1, expectedTime);
+            fixtureCase.id + " tree row count for device " + device, end + 1, row);
       }
     }
   }
