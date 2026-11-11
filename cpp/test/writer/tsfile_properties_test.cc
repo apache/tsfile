@@ -51,7 +51,14 @@ class TsFilePropertiesTest : public ::testing::Test {
    protected:
     void SetUp() override {
         libtsfile_init();
-        file_name_ = "tsfile_properties_test.tsfile";
+        // CTest runs cases of one binary in parallel; a shared file name would
+        // let two cases truncate or remove each other's fixture mid-test.
+        const ::testing::TestInfo* info =
+            ::testing::UnitTest::GetInstance()->current_test_info();
+        file_name_ = std::string("tsfile_properties_test_") +
+                     (info == nullptr ? std::string("unknown")
+                                      : std::string(info->name())) +
+                     ".tsfile";
         std::remove(file_name_.c_str());
     }
 
