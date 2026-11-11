@@ -34,6 +34,7 @@ import org.apache.tsfile.write.record.TSRecord;
 import org.apache.tsfile.write.record.Tablet;
 import org.apache.tsfile.write.record.datapoint.IntDataPoint;
 import org.apache.tsfile.write.schema.MeasurementSchema;
+import org.apache.tsfile.write.writer.TsFileIOWriter;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -139,6 +140,37 @@ public class AllowNonDecreasingTimestampsTest {
         tablet.addValue("s1", row, row);
       }
       assertThrows(WriteProcessException.class, () -> writer.writeTree(tablet));
+    }
+  }
+
+  @Test
+  public void recordsPolicyPropertyWhenFlagOn() throws IOException, WriteProcessException {
+    config.setAllowNonDecreasingTimestamps(true);
+    writeSingleRecord();
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(file.getAbsolutePath())) {
+      byte[] value =
+          reader.getTsFileProperties().get(TsFileIOWriter.ALLOW_NON_DECREASING_TIMESTAMPS_PROPERTY);
+      Assert.assertArrayEquals("true".getBytes(TSFileConfig.STRING_CHARSET), value);
+    }
+  }
+
+  @Test
+  public void omitsPolicyPropertyWhenFlagOff() throws IOException, WriteProcessException {
+    writeSingleRecord();
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(file.getAbsolutePath())) {
+      Assert.assertFalse(
+          reader
+              .getTsFileProperties()
+              .containsKey(TsFileIOWriter.ALLOW_NON_DECREASING_TIMESTAMPS_PROPERTY));
+    }
+  }
+
+  private void writeSingleRecord() throws IOException, WriteProcessException {
+    try (TsFileWriter writer = new TsFileWriter(file)) {
+      writer.registerTimeseries(new Path(deviceId), Arrays.asList(s1));
+      TSRecord record = new TSRecord(deviceId, 1);
+      record.addTuple(new IntDataPoint("s1", 1));
+      writer.writeRecord(record);
     }
   }
 

@@ -29,6 +29,7 @@ from tsfile import (
     TableSchema,
     TSDataType,
     Tablet,
+    TsFileReader,
     TsFileTableWriter,
     to_dataframe,
 )
@@ -74,6 +75,25 @@ def test_table_writer_duplicates_allowed():
         df = to_dataframe(path, table_name=TABLE_NAME)
         assert df.shape[0] == 4
         assert list(df[TIME_COLUMN]) == [10, 11, 11, 12]
+        with TsFileReader(path) as reader:
+            assert (
+                reader.get_tsfile_properties()["allowNonDecreasingTimestamps"]
+                == b"true"
+            )
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_policy_property_absent_when_flag_off():
+    tmpdir = _new_tmpdir()
+    path = os.path.join(tmpdir, "strict.tsfile")
+    try:
+        with TsFileTableWriter(
+            path, _table_schema(), allow_non_decreasing_timestamps=False
+        ) as writer:
+            writer.write_table(_build_tablet([10, 11, 12]))
+        with TsFileReader(path) as reader:
+            assert "allowNonDecreasingTimestamps" not in reader.get_tsfile_properties()
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 

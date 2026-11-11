@@ -26,6 +26,7 @@
 #include <limits>
 #include <memory>
 
+#include "common/constant/tsfile_constant.h"
 #include "common/device_id.h"
 #include "common/global.h"
 #include "common/logger/elog.h"
@@ -53,6 +54,16 @@ int TsFileIOWriter::init(WriteFile* write_file) {
     meta_allocator_.init(page_size, MOD_TSFILE_WRITER_META);
     chunk_meta_count_ = 0;
     file_ = write_file;
+    // Record the writer's timestamp policy so downstream readers (e.g. an
+    // IoTDB load) can tell that series in this file may contain duplicate
+    // timestamps. Only written when the flag is on, so flag-off files keep
+    // their metadata byte-for-byte unchanged.
+    if (common::g_config_value_.allow_non_decreasing_timestamps_) {
+        tsfile_properties_[TSFILE_PROP_ALLOW_NON_DECREASING_TIMESTAMPS] =
+            TsFilePropertyValue(
+                reinterpret_cast<const uint8_t*>(TSFILE_PROP_VALUE_TRUE.data()),
+                static_cast<uint32_t>(TSFILE_PROP_VALUE_TRUE.size()));
+    }
     // Re-arm destroy() for the new lifecycle.  Without this, a writer that
     // was destroy()'d and then init()'d again would leak the fresh
     // meta_allocator_/write_stream_/file_ on its next destroy().
