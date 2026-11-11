@@ -182,6 +182,15 @@ public class TsFileMetadata {
       fileMetaData.tsFileProperties = propertiesMap;
     }
 
+    if (needTableSchemaMap
+        && fileMetaData.tsFileProperties != null
+        && fileMetaData.tsFileProperties.containsKey(
+            TableSchemaEvolution.TABLE_SCHEMA_EVOLUTION_PROPERTY)) {
+      TableSchemaEvolution.deserializeAndApply(
+          tableSchemaMap,
+          fileMetaData.tsFileProperties.get(TableSchemaEvolution.TABLE_SCHEMA_EVOLUTION_PROPERTY));
+    }
+
     return fileMetaData;
   }
 

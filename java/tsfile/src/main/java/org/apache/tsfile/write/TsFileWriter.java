@@ -25,6 +25,7 @@ import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.encrypt.IEncryptor;
 import org.apache.tsfile.enums.ColumnCategory;
+import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.ConflictDataTypeException;
 import org.apache.tsfile.exception.write.NoDeviceException;
 import org.apache.tsfile.exception.write.NoMeasurementException;
@@ -32,6 +33,8 @@ import org.apache.tsfile.exception.write.NoTableException;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.TableSchema;
+import org.apache.tsfile.file.metadata.enums.CompressionType;
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.utils.MeasurementGroup;
@@ -832,6 +835,68 @@ public class TsFileWriter implements AutoCloseable {
 
   public void registerTableSchema(TableSchema tableSchema) {
     getSchema().registerTableSchema(tableSchema);
+  }
+
+  /**
+   * Add a FIELD column to a registered table. Adding a previously dropped column re-adds it (the
+   * new type wins). Data written before the add reads back as null.
+   *
+   * @throws NoTableException if the table is not registered
+   * @throws IllegalArgumentException if the column already exists or its name was used before
+   */
+  @TsFileApi
+  public void addColumn(String tableName, String columnName, TSDataType dataType)
+      throws NoTableException {
+    getTableSchema(tableName).addColumn(columnName, dataType);
+  }
+
+  /**
+   * Add a FIELD column with explicit encoding and compression. See {@link #addColumn(String,
+   * String, TSDataType)}.
+   */
+  @TsFileApi
+  public void addColumn(
+      String tableName,
+      String columnName,
+      TSDataType dataType,
+      TSEncoding encoding,
+      CompressionType compression)
+      throws NoTableException {
+    getTableSchema(tableName).addColumn(columnName, dataType, encoding, compression);
+  }
+
+  /**
+   * Drop a FIELD column from a registered table. The column is hidden from results; its data
+   * remains on disk until compaction.
+   *
+   * @throws NoTableException if the table is not registered
+   * @throws IllegalArgumentException if the column does not exist or is not a FIELD column
+   */
+  @TsFileApi
+  public void dropColumn(String tableName, String columnName) throws NoTableException {
+    getTableSchema(tableName).dropColumn(columnName);
+  }
+
+  /**
+   * Rename a FIELD column of a registered table. Data written under the old name is returned under
+   * the new name.
+   *
+   * @throws NoTableException if the table is not registered
+   * @throws IllegalArgumentException if the column does not exist, is not a FIELD column, or the
+   *     new name collides with an existing, dropped, or previously renamed column
+   */
+  @TsFileApi
+  public void renameColumn(String tableName, String oldName, String newName)
+      throws NoTableException {
+    getTableSchema(tableName).renameColumn(oldName, newName);
+  }
+
+  private TableSchema getTableSchema(String tableName) throws NoTableException {
+    final TableSchema tableSchema = getSchema().getTableSchemaMap().get(tableName.toLowerCase());
+    if (tableSchema == null) {
+      throw new NoTableException(tableName);
+    }
+    return tableSchema;
   }
 
   public boolean isGenerateTableSchemaForTree() {
