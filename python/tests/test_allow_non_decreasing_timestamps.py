@@ -17,6 +17,8 @@
 #
 
 import os
+import shutil
+import tempfile
 
 import pytest
 
@@ -33,7 +35,6 @@ from tsfile import (
 from tsfile.exceptions import OutOfOrderError
 
 TABLE_NAME = "dup_table"
-FILE_NAME = "allow_non_decreasing_timestamps.tsfile"
 
 
 def _table_schema():
@@ -58,22 +59,23 @@ def _build_tablet(times):
     return tablet
 
 
-def _remove_file():
-    if os.path.exists(FILE_NAME):
-        os.remove(FILE_NAME)
+def _new_tmpdir():
+    return tempfile.mkdtemp(prefix="tsfile_allow_non_decreasing_")
 
 
 def test_table_writer_duplicates_allowed():
+    tmpdir = _new_tmpdir()
+    path = os.path.join(tmpdir, "dup.tsfile")
     try:
         with TsFileTableWriter(
-            FILE_NAME, _table_schema(), allow_non_decreasing_timestamps=True
+            path, _table_schema(), allow_non_decreasing_timestamps=True
         ) as writer:
             writer.write_table(_build_tablet([10, 11, 11, 12]))
-        df = to_dataframe(FILE_NAME, table_name=TABLE_NAME)
+        df = to_dataframe(path, table_name=TABLE_NAME)
         assert df.shape[0] == 4
         assert list(df[TIME_COLUMN]) == [10, 11, 11, 12]
     finally:
-        _remove_file()
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def test_table_writer_duplicates_rejected_by_default():
@@ -85,9 +87,11 @@ def test_table_writer_strictly_decreasing_rejected():
 
 
 def _assert_write_rejected(allow_non_decreasing_timestamps, times):
+    tmpdir = _new_tmpdir()
+    path = os.path.join(tmpdir, "dup.tsfile")
     try:
         writer = TsFileTableWriter(
-            FILE_NAME,
+            path,
             _table_schema(),
             allow_non_decreasing_timestamps=allow_non_decreasing_timestamps,
         )
@@ -96,10 +100,12 @@ def _assert_write_rejected(allow_non_decreasing_timestamps, times):
                 writer.write_table(_build_tablet(times))
         finally:
             # A rejected time column leaves the C++ writer unrecoverable, so
-            # close() may raise DataInconsistencyError; ignore it here.
+            # close() raises DataInconsistencyError instead of releasing the
+            # file; ignore it here. The handle stays open on Windows, so the
+            # rmtree below cleans up best-effort.
             try:
                 writer.close()
             except Exception:
                 pass
     finally:
-        _remove_file()
+        shutil.rmtree(tmpdir, ignore_errors=True)
