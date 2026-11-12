@@ -191,8 +191,10 @@ class TsFileIOReader {
         common::PageArena& in_timeseries_index_pa,
         std::vector<ITimeseriesIndex*>& ts_indexs);
 
-    // Reads [start_offset, end_offset) once and deserializes every
-    // TimeseriesIndex stored in it into @pa, appending them to @ts_indexs.
+    // Reads [start_offset, end_offset) once and deserializes the
+    // TimeseriesIndex stored there into @pa, appending them to @ts_indexs.
+    // Entries with an empty measurement name (the aligned time column) are
+    // skipped, matching do_load_all_timeseries_index().
     int do_load_timeseries_index_range(
         int64_t start_offset, int64_t end_offset, common::PageArena& pa,
         std::vector<ITimeseriesIndex*>& ts_indexs);

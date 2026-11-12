@@ -1301,15 +1301,21 @@ int TsFileIOReader::do_load_timeseries_index_range(
         return E_TSFILE_CORRUPTED;
     }
     const int32_t read_size = static_cast<int32_t>(read_size_i64);
-    int32_t ret_read_len = 0;
-    char* ti_buf = static_cast<char*>(pa.alloc(read_size));
+    // The raw bytes are needed only while the indexes are parsed, so they are
+    // heap-allocated and released below instead of coming from the caller's
+    // arena: a wide device's whole range would otherwise stay resident for as
+    // long as the arena lives.
+    char* ti_buf = static_cast<char*>(mem_alloc(read_size, MOD_TSFILE_READER));
     if (IS_NULL(ti_buf)) {
         return E_OOM;
     }
+    int32_t ret_read_len = 0;
     if (RET_FAIL(
             read_file_->read(start_offset, ti_buf, read_size, ret_read_len))) {
+        mem_free(ti_buf);
         return ret;
     } else if (ret_read_len != read_size) {
+        mem_free(ti_buf);
         return E_FILE_READ_ERR;
     }
     ByteStream bs;
@@ -1318,14 +1324,17 @@ int TsFileIOReader::do_load_timeseries_index_range(
         const uint64_t relative_start = bs.read_pos();
         void* buf = pa.alloc(sizeof(TimeseriesIndex));
         if (IS_NULL(buf)) {
+            mem_free(ti_buf);
             return E_OOM;
         }
         auto ts_idx = new (buf) TimeseriesIndex;
         if (RET_FAIL(ts_idx->deserialize_from(bs, &pa))) {
+            mem_free(ti_buf);
             return ret;
         }
         if (bs.read_pos() < relative_start ||
             bs.read_pos() - relative_start > UINT32_MAX) {
+            mem_free(ti_buf);
             return E_OVERFLOW;
         }
         ts_idx->set_metadata_range(
@@ -1334,6 +1343,7 @@ int TsFileIOReader::do_load_timeseries_index_range(
         if (ts_idx->get_measurement_name().len_ == 0) continue;
         ts_indexs.push_back(ts_idx);
     }
+    mem_free(ti_buf);
     return E_OK;
 }
 
