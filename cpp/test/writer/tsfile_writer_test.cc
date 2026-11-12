@@ -333,6 +333,59 @@ TEST_F(TsFileWriterTest, MultiFlushWriteAndRead) {
     ASSERT_EQ(reader.close(), E_OK);
 }
 
+// The I/O writer drains its pending bytes one stream page at a time, so a
+// chunk larger than one page is written as a chain of write() calls.  Sizes
+// straddling the 64 KiB page boundary check that the chain is flushed in
+// order and that a chunk ending exactly on a page boundary round-trips.
+TEST_F(TsFileWriterTest, WriteChunkSpanningMultipleWriteStreamPages) {
+    const std::vector<int64_t> row_counts = {1000, 8191,  8192,
+                                             8193, 16384, 20000};
+    std::vector<std::string> select_list;
+    for (size_t i = 0; i < row_counts.size(); ++i) {
+        const std::string device = "device_" + std::to_string(i);
+        const std::string measurement = "value";
+        ASSERT_EQ(tsfile_writer_->register_timeseries(
+                      device, storage::MeasurementSchema(
+                                  measurement, common::TSDataType::INT64,
+                                  common::TSEncoding::PLAIN,
+                                  common::CompressionType::UNCOMPRESSED)),
+                  E_OK);
+        select_list.push_back(device + "." + measurement);
+        for (int64_t row = 0; row < row_counts[i]; ++row) {
+            TsRecord record(row, device);
+            record.add_point(measurement, row);
+            ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
+        }
+        ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    for (size_t i = 0; i < row_counts.size(); ++i) {
+        SCOPED_TRACE(::testing::Message() << "rows=" << row_counts[i]
+                                          << ", select=" << select_list[i]);
+        storage::ResultSet* tmp_qds = nullptr;
+        std::vector<std::string> columns{select_list[i]};
+        ASSERT_EQ(reader.query(columns, 0, row_counts[i] - 1, tmp_qds), E_OK);
+        auto* qds = static_cast<QDSWithoutTimeGenerator*>(tmp_qds);
+        int64_t read_rows = 0;
+        bool has_next = false;
+        while (true) {
+            ASSERT_EQ(qds->next(has_next), E_OK);
+            if (!has_next) {
+                break;
+            }
+            ASSERT_EQ(qds->get_value<int64_t>(1), read_rows);
+            ASSERT_EQ(qds->get_value<int64_t>(2), read_rows);
+            ++read_rows;
+        }
+        ASSERT_EQ(read_rows, row_counts[i]);
+        reader.destroy_query_data_set(qds);
+    }
+    ASSERT_EQ(reader.close(), E_OK);
+}
+
 #if defined(ENABLE_ZLIB) && defined(ENABLE_SNAPPY) && defined(ENABLE_LZ4) && \
     defined(ENABLE_LZOKAY)
 TEST_F(TsFileWriterTest, WriteDiffrentTypeCombination) {
