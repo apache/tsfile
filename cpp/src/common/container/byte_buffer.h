@@ -140,6 +140,9 @@ class ByteBuffer {
     // doubling the filled region beats @p count individual append calls.
     FORCE_INLINE int fill_repeated_variable(const char* value, uint32_t len,
                                             uint32_t count) {
+        if (count == 0) {
+            return E_OK;
+        }
         const uint64_t elem_size =
             static_cast<uint64_t>(variable_type_len_) + len;
         const uint64_t need =
@@ -169,6 +172,9 @@ class ByteBuffer {
     // Fixed-width counterpart of fill_repeated_variable().
     FORCE_INLINE int fill_repeated_fixed(const char* value, uint32_t elem_size,
                                          uint32_t count) {
+        if (count == 0) {
+            return E_OK;
+        }
         const uint64_t need = static_cast<uint64_t>(real_data_size_) +
                               static_cast<uint64_t>(elem_size) * count;
         if (need > reserved_size_) {

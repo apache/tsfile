@@ -59,7 +59,12 @@ class FixedLengthVector : public Vector {
         if (count == 0) {
             return common::E_OK;
         }
-        if (values_.fill_repeated_fixed(value, len, count) != common::E_OK) {
+        // Readers always advance by type_len_, so the fill must use the same
+        // stride; a mismatched len would produce a buffer that is written with
+        // one stride and read with another.
+        ASSERT(len == type_len_);
+        if (values_.fill_repeated_fixed(value, type_len_, count) !=
+            common::E_OK) {
             return common::E_OOM;
         }
         add_row_nums(count);

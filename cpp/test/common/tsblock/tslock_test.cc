@@ -18,6 +18,7 @@
  */
 #include <gtest/gtest.h>
 
+#include "common/container/byte_buffer.h"
 #include "common/tsblock/tsblock.h"
 
 namespace common {
@@ -244,6 +245,47 @@ TEST(TsBlockTest, ColAppenderFillRepeatedRejectsOverflow) {
               E_INVALID_ARG);
     EXPECT_EQ(col_appender.get_col_row_count(), 0u);
     EXPECT_EQ(ts_block.get_vector(0)->get_row_num(), 0u);
+}
+
+// ByteBuffer-level zero-count guard: the helpers used to write the pattern
+// before checking count, which writes past the end of an exactly-full buffer.
+TEST(TsBlockTest, ByteBufferFillRepeatedZeroCountWritesNothing) {
+    ByteBuffer buffer;
+    buffer.init(64);
+    char payload[16] = {'a', 'b', 'c'};
+    ASSERT_EQ(buffer.append_variable_value(payload, 16), E_OK);
+    const uint32_t size_before = buffer.get_data_size();
+    char* data = buffer.get_data();
+    data[size_before] = '\x5a';  // sentinel in the slack after the data
+
+    EXPECT_EQ(buffer.fill_repeated_variable("wxyz", 4, 0), E_OK);
+    EXPECT_EQ(buffer.fill_repeated_fixed("ABCD", 4, 0), E_OK);
+    EXPECT_EQ(buffer.get_data_size(), size_before);
+    EXPECT_EQ(data[size_before], '\x5a');
+}
+
+// Fill a tag longer than the per-row reservation so extend_memory() has to
+// grow (and copy) the buffer mid-fill.
+TEST(TsBlockTest, ColAppenderFillRepeatedVariableGrows) {
+    TupleDesc tuple_desc;
+    tuple_desc.push_back(ColumnSchema("tag", STRING, UNCOMPRESSED, PLAIN));
+    TsBlock ts_block(&tuple_desc, 100);
+    ASSERT_EQ(ts_block.init(), E_OK);
+    ColAppender col_appender(0, &ts_block);
+
+    const std::string tag(64, 'g');
+    ASSERT_EQ(col_appender.fill(tag.data(), tag.size(), 100), E_OK);
+    EXPECT_EQ(ts_block.get_vector(0)->get_row_num(), 100u);
+
+    ColIterator iter(0, &ts_block);
+    for (int i = 0; i < 100; ++i) {
+        uint32_t len = 0;
+        char* read = iter.read(&len);
+        ASSERT_NE(read, nullptr);
+        EXPECT_EQ(std::string(read, len), tag);
+        iter.next();
+    }
+    EXPECT_TRUE(iter.end());
 }
 
 TEST(TsBlockTest, ColAppenderFillRepeatedZeroCountIsNoOp) {

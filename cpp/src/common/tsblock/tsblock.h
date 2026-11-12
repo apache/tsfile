@@ -251,8 +251,10 @@ class ColAppender {
         if (column_row_count_ + count > tsblock_->max_row_count_) {
             return E_INVALID_ARG;
         }
-        if (vec_->fill_repeated(value, len, count) != E_OK) {
-            return E_INVALID_ARG;
+        const int ret = vec_->fill_repeated(value, len, count);
+        if (ret != E_OK) {
+            // E_OOM from a failed growth is not an argument error.
+            return ret;
         }
         column_row_count_ += count;
         return E_OK;
