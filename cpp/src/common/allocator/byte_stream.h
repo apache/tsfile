@@ -1250,6 +1250,11 @@ class SerializationUtil {
                 return E_OUT_OF_RANGE;
             } else if (len == 0) {
                 str = new std::string();
+            } else if (static_cast<uint64_t>(len) > in.remaining_size()) {
+                // Reject a corrupt length before resize() zero-fills it: a
+                // bad 4-byte field could otherwise request a 2 GiB string
+                // that is thrown away as soon as the read fails.
+                return E_BUF_NOT_ENOUGH;
             } else {
                 // Read straight into the string's own buffer instead of a
                 // temporary mem_alloc'd buffer that is copied and freed right
