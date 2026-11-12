@@ -20,6 +20,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <map>
@@ -84,11 +85,14 @@ class AlignedBulkCopyTest : public ::testing::Test {
                 {"v", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},
                 {"w", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},
                 {"s", STRING, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD}});
-        // Every gtest case runs as its own process in a shared working
-        // directory, so each case writes to its own file.
+        // Cases of parallel runs (ctest -j, repeated runs) share a working
+        // directory, so the name carries the case and a wall-clock suffix.
         path_ =
             std::string("aligned_bulk_copy_") +
             ::testing::UnitTest::GetInstance()->current_test_info()->name() +
+            "_" +
+            std::to_string(
+                std::chrono::steady_clock::now().time_since_epoch().count()) +
             ".tsfile";
         std::remove(path_.c_str());
         {
@@ -126,7 +130,15 @@ class AlignedBulkCopyTest : public ::testing::Test {
                   E_OK);
         for (ITimeseriesIndex* index : indexes) {
             ASSERT_NE(index, nullptr);
-            time_meta_ = index->get_time_chunk_meta_list()->begin().get();
+            // The aligned time column is shared by every measurement.
+            ChunkMeta* time_meta =
+                index->get_time_chunk_meta_list()->begin().get();
+            if (time_meta_ == nullptr) {
+                time_meta_ = time_meta;
+            } else {
+                EXPECT_EQ(time_meta_, time_meta)
+                    << "measurements disagree on the shared time chunk";
+            }
             value_metas_[index->get_measurement_name().to_std_string()] =
                 index->get_value_chunk_meta_list()->begin().get();
         }
@@ -184,8 +196,11 @@ class AlignedBulkCopyTest : public ::testing::Test {
         for (const auto& name : columns) {
             value_metas.push_back(value_metas_[name]);
         }
-        EXPECT_EQ(reader_->load_by_aligned_meta_multi(time_meta_, value_metas),
-                  E_OK);
+        if (reader_->load_by_aligned_meta_multi(time_meta_, value_metas) !=
+            E_OK) {
+            ADD_FAILURE() << "load_by_aligned_meta_multi failed";
+            return {};
+        }
 
         TupleDesc tuple;
         tuple.push_back(common::g_time_column_schema);
@@ -193,7 +208,10 @@ class AlignedBulkCopyTest : public ::testing::Test {
             tuple.push_back(schema_->get_column_schema(name));
         }
         common::TsBlock block(&tuple, block_rows);
-        EXPECT_EQ(block.init(), common::E_OK);
+        if (block.init() != common::E_OK) {
+            ADD_FAILURE() << "TsBlock init failed";
+            return {};
+        }
 
         std::vector<Row> rows;
         size_t direct_pages = 0;
