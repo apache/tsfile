@@ -60,9 +60,11 @@ class FixedLengthVector : public Vector {
             return common::E_OK;
         }
         // Readers always advance by type_len_, so the fill must use the same
-        // stride; a mismatched len would produce a buffer that is written with
-        // one stride and read with another.
-        ASSERT(len == type_len_);
+        // stride. A mismatch is a caller error and, in a release build, would
+        // read past a shorter value buffer.
+        if (len != type_len_) {
+            return common::E_INVALID_ARG;
+        }
         if (values_.fill_repeated_fixed(value, type_len_, count) !=
             common::E_OK) {
             return common::E_OOM;
