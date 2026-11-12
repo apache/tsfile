@@ -139,6 +139,7 @@ TEST_F(IndexNodeCacheTest, ReusesNodesAcrossDeviceLookups) {
     EXPECT_GT(reader.TEST_index_node_cache_size(), 0u);
     EXPECT_LE(reader.TEST_index_node_cache_size(),
               reader.TEST_index_node_cache_capacity());
+    pa.destroy();
 }
 
 TEST_F(IndexNodeCacheTest, ResetClearsCache) {
