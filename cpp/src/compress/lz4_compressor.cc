@@ -34,6 +34,7 @@ void LZ4Compressor::destroy() {
         mem_free(uncompressed_buf_);
         uncompressed_buf_ = nullptr;
     }
+    uncompressed_buf_capacity_ = 0;
 }
 
 int LZ4Compressor::reset(bool for_compress) {
@@ -109,42 +110,43 @@ int LZ4Compressor::uncompress(char* compressed_buf, uint32_t compressed_buf_len,
                               char*& uncompressed_buf,
                               uint32_t& uncompressed_buf_len, float ratio) {
     int ret = E_OK;
-    char* regen_buffer = nullptr;
-    int src_size = 0;
-    if (ratio > 0) {
-        src_size = (int)(compressed_buf_len * ratio);
-        regen_buffer = (char*)mem_alloc(src_size, MOD_COMPRESSOR_OBJ);
-    } else {
-        ret = E_COMPRESS_ERR;
+    if (ratio <= 0) {
+        return E_COMPRESS_ERR;
+    }
+    int src_size = (int)(compressed_buf_len * ratio);
+    // Reuse the persistent buffer across pages; (re)allocate only when the
+    // requested capacity grows. This avoids one malloc + free per page, which
+    // dominates the read path's allocation churn.
+    if (uncompressed_buf_ == nullptr ||
+        src_size > static_cast<int>(uncompressed_buf_capacity_)) {
+        if (uncompressed_buf_ != nullptr) {
+            mem_free(uncompressed_buf_);
+            uncompressed_buf_ = nullptr;
+        }
+        uncompressed_buf_ =
+            (char*)mem_alloc((size_t)src_size, MOD_COMPRESSOR_OBJ);
+        if (uncompressed_buf_ == nullptr) {
+            uncompressed_buf_capacity_ = 0;
+            return E_OOM;
+        }
+        uncompressed_buf_capacity_ = static_cast<uint32_t>(src_size);
     }
 
-    if (regen_buffer != nullptr) {
-        int decompressed_size = LZ4_decompress_safe(
-            compressed_buf, regen_buffer, compressed_buf_len, src_size);
-
-        if (decompressed_size < 0) {
-            // Release regen_buffer since decompress failed
-            mem_free(regen_buffer);
-            regen_buffer = nullptr;
-            ret = E_COMPRESS_ERR;
-        } else {
-            uncompressed_buf = regen_buffer;
-            uncompressed_buf_ = regen_buffer;
-            uncompressed_buf_len = decompressed_size;
-        }
+    int decompressed_size = LZ4_decompress_safe(
+        compressed_buf, uncompressed_buf_, compressed_buf_len, src_size);
+    if (decompressed_size < 0) {
+        ret = E_COMPRESS_ERR;
     } else {
-        ret = E_OOM;
+        uncompressed_buf = uncompressed_buf_;
+        uncompressed_buf_len = static_cast<uint32_t>(decompressed_size);
     }
     return ret;
 }
 
 void LZ4Compressor::after_uncompress(char* uncompressed_buf) {
-    if (uncompressed_buf != nullptr) {
-        mem_free(uncompressed_buf);
-        if (uncompressed_buf_ == uncompressed_buf) {
-            uncompressed_buf_ = nullptr;
-        }
-    }
+    // The decompression buffer is owned by this compressor and reused across
+    // pages; it is freed in destroy(). Do not free it per page.
+    (void)uncompressed_buf;
 }
 
 }  // end namespace storage

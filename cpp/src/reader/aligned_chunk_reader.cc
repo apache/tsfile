@@ -161,12 +161,10 @@ void AlignedChunkReader::destroy() {
         value_decoder_ = nullptr;
     }
     if (time_compressor_ != nullptr) {
-        time_compressor_->~Compressor();
         CompressorFactory::free(time_compressor_);
         time_compressor_ = nullptr;
     }
     if (value_compressor_ != nullptr) {
-        value_compressor_->~Compressor();
         CompressorFactory::free(value_compressor_);
         value_compressor_ = nullptr;
     }
@@ -196,7 +194,6 @@ void AlignedChunkReader::destroy() {
             col->decoder = nullptr;
         }
         if (col->compressor != nullptr) {
-            col->compressor->~Compressor();
             CompressorFactory::free(col->compressor);
             col->compressor = nullptr;
         }
@@ -236,7 +233,6 @@ void AlignedChunkReader::destroy() {
     std::vector<Decoder*>().swap(time_decoder_pool_);
     for (auto* c : time_compressor_pool_) {
         if (c != nullptr) {
-            c->~Compressor();
             CompressorFactory::free(c);
         }
     }

@@ -26,6 +26,8 @@
 #include <string>
 #include <vector>
 
+#include "compress/compressor_factory.h"
+
 namespace {
 
 class LZ4Test : public ::testing::Test {
@@ -162,4 +164,110 @@ TEST_F(LZ4Test, AfterUncompressFreesParamNotMember) {
     compressor.after_compress(compressed_a);
     compressor.after_compress(compressed_b);
 }
+
+TEST_F(LZ4Test, UncompressReusesBufferAcrossDifferentPageSizes) {
+    storage::LZ4Compressor compressor;
+    // Small page, then a much larger one, then a small one again: the reused
+    // buffer must grow for the large page (new allocation) and must be handed
+    // out again, unchanged, for the following smaller page.
+    const std::vector<std::string> payloads = {std::string(1024, 'a'),
+                                               std::string(200000, 'b'),
+                                               std::string(4096, 'c')};
+
+    char* out_ptr[3] = {nullptr, nullptr, nullptr};
+    for (size_t i = 0; i < payloads.size(); ++i) {
+        std::string input = payloads[i];
+        char* compressed = nullptr;
+        uint32_t compressed_len = 0;
+        ASSERT_EQ(compressor.reset(true), common::E_OK);
+        ASSERT_EQ(compressor.compress(&input[0], input.size(), compressed,
+                                      compressed_len),
+                  common::E_OK);
+
+        char* uncompressed = nullptr;
+        uint32_t uncompressed_len = 0;
+        ASSERT_EQ(compressor.reset(false), common::E_OK);
+        ASSERT_EQ(compressor.uncompress(compressed, compressed_len,
+                                        uncompressed, uncompressed_len),
+                  common::E_OK);
+        ASSERT_NE(uncompressed, nullptr);
+        EXPECT_EQ(uncompressed_len, input.size());
+        EXPECT_EQ(std::string(uncompressed, uncompressed_len), input);
+        out_ptr[i] = uncompressed;
+
+        compressor.after_uncompress(uncompressed);
+        compressor.after_compress(compressed);
+    }
+
+    EXPECT_NE(out_ptr[0], out_ptr[1]);  // grew: a new allocation
+    EXPECT_EQ(out_ptr[1], out_ptr[2]);  // smaller page reuses the same buffer
+}
+
+// CompressorFactory::free() must run ~Compressor(): compressors are
+// placement-new'd into mem_alloc() storage, and LZ4 retains its decompression
+// buffer there.  Before the fix the buffer leaked on every recovered chunk
+// (LeakSanitizer caught it in the file-recovery tests).
+TEST_F(LZ4Test, FactoryFreeReleasesRetainedBuffer) {
+    storage::Compressor* compressor =
+        storage::CompressorFactory::alloc_compressor(common::LZ4);
+    ASSERT_NE(nullptr, compressor);
+
+    std::string input(100000, 'z');
+    char* compressed = nullptr;
+    uint32_t compressed_len = 0;
+    ASSERT_EQ(compressor->reset(true), common::E_OK);
+    ASSERT_EQ(compressor->compress(&input[0], input.size(), compressed,
+                                   compressed_len),
+              common::E_OK);
+    char* uncompressed = nullptr;
+    uint32_t uncompressed_len = 0;
+    ASSERT_EQ(compressor->reset(false), common::E_OK);
+    ASSERT_EQ(compressor->uncompress(compressed, compressed_len, uncompressed,
+                                     uncompressed_len),
+              common::E_OK);
+    EXPECT_EQ(std::string(uncompressed, uncompressed_len), input);
+    compressor->after_uncompress(uncompressed);
+    compressor->after_compress(compressed);
+    storage::CompressorFactory::free(compressor);
+}
+
+TEST_F(LZ4Test, UncompressAfterPreviousPageNoLongerInvalidated) {
+    storage::LZ4Compressor compressor;
+    std::string input_a(2048, 'x');
+    std::string input_b(8192, 'y');
+    char* compressed_a = nullptr;
+    char* compressed_b = nullptr;
+    uint32_t compressed_a_len = 0;
+    uint32_t compressed_b_len = 0;
+    ASSERT_EQ(compressor.reset(true), common::E_OK);
+    ASSERT_EQ(compressor.compress(&input_a[0], input_a.size(), compressed_a,
+                                  compressed_a_len),
+              common::E_OK);
+    ASSERT_EQ(compressor.compress(&input_b[0], input_b.size(), compressed_b,
+                                  compressed_b_len),
+              common::E_OK);
+
+    char* out_a = nullptr;
+    uint32_t out_a_len = 0;
+    ASSERT_EQ(compressor.reset(false), common::E_OK);
+    ASSERT_EQ(
+        compressor.uncompress(compressed_a, compressed_a_len, out_a, out_a_len),
+        common::E_OK);
+    // after_uncompress() releases ownership back to the compressor but must
+    // leave the compressor usable for the next page.
+    compressor.after_uncompress(out_a);
+
+    char* out_b = nullptr;
+    uint32_t out_b_len = 0;
+    ASSERT_EQ(
+        compressor.uncompress(compressed_b, compressed_b_len, out_b, out_b_len),
+        common::E_OK);
+    ASSERT_EQ(out_b_len, input_b.size());
+    EXPECT_EQ(std::string(out_b, out_b_len), input_b);
+
+    compressor.after_uncompress(out_b);
+    compressor.after_compress(compressed_a);
+    compressor.after_compress(compressed_b);
+}
+
 }  // namespace
