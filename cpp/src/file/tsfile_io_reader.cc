@@ -61,6 +61,10 @@ void TsFileIOReader::reset() {
             delete read_file_;
         }
         read_file_ = nullptr;
+        // Drop the arena-backed index graph before the arena is released: the
+        // nodes (and their children vectors) live inside it, and clearing the
+        // map while the arena is still alive lets their destructors run safely.
+        tsfile_meta_.table_metadata_index_node_map_.clear();
         tsfile_meta_page_arena_.destroy();
         {
             std::lock_guard<std::mutex> lk(device_node_cache_mu_);
