@@ -38,8 +38,11 @@ namespace storage {
 
 class LZ4Compressor : public Compressor {
    public:
-    LZ4Compressor() : compressed_buf_(nullptr), uncompressed_buf_(nullptr){};
-    ~LZ4Compressor(){};
+    LZ4Compressor()
+        : compressed_buf_(nullptr),
+          uncompressed_buf_(nullptr),
+          uncompressed_buf_capacity_(0){};
+    ~LZ4Compressor() { destroy(); }
     // @for_compress
     //  true  - for compressiom
     //  false - for uncompression
@@ -55,7 +58,10 @@ class LZ4Compressor : public Compressor {
 
    private:
     char* compressed_buf_;
+    // Reused across uncompress() calls; owned by this compressor and freed in
+    // destroy(). uncompressed_buf_capacity_ tracks its allocated size.
     char* uncompressed_buf_;
+    uint32_t uncompressed_buf_capacity_;
 
     int uncompress(char* compressed_buf, uint32_t compressed_buf_len,
                    char*& uncompressed_buf, uint32_t& uncompressed_buf_len,
