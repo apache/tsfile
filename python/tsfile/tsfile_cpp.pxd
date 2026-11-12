@@ -18,6 +18,7 @@
 
 #cython: language_level=3
 from libc.stdint cimport uint16_t, uint32_t, int32_t, int64_t, uint64_t, uint8_t
+from libcpp cimport bool as cppbool
 
 ctypedef int32_t ErrorCode
 
@@ -524,7 +525,7 @@ cdef extern from "common/config/config.h" namespace "common":
         uint8_t time_compress_type_
         int32_t chunk_group_size_threshold_
         int32_t record_count_for_next_mem_check_
-        bint encrypt_flag_
+        cppbool encrypt_flag_
         uint8_t boolean_encoding_type_;
         uint8_t int32_encoding_type_;
         uint8_t int64_encoding_type_;
@@ -532,9 +533,9 @@ cdef extern from "common/config/config.h" namespace "common":
         uint8_t double_encoding_type_;
         uint8_t string_encoding_type_;
         uint8_t default_compression_type_;
-        bint allow_non_decreasing_timestamps_;
-        bint parallel_read_enabled_;
-        bint parallel_write_enabled_;
+        cppbool allow_non_decreasing_timestamps_;
+        cppbool parallel_read_enabled_;
+        cppbool parallel_write_enabled_;
         int32_t thread_count_;
 
 cdef extern from "common/global.h" namespace "common":

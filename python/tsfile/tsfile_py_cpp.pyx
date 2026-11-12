@@ -955,13 +955,20 @@ cpdef bint get_parallel_write_enabled():
     """Return whether the parallel write path is enabled."""
     return tsfile_get_parallel_write_enabled() != 0
 
-cpdef void set_thread_count(int32_t count):
+cpdef void set_thread_count(object count):
     """Set the size of the global worker thread pool (1..64).
 
     Takes effect immediately. Must not be called while any reader, writer or
-    result set is in use.
+    result set is in use. Accepts any Python integer-like value and raises
+    InvalidArgumentError outside [1, 64] (instead of OverflowError from the
+    int32 conversion).
     """
-    check_error(tsfile_set_thread_count(count))
+    _check_int(count)
+    if count < 1 or count > 64:
+        raise InvalidArgumentError(
+            context=f"thread count must be in [1, 64], got {count}"
+        )
+    check_error(tsfile_set_thread_count(<int32_t> count))
 
 cpdef int32_t get_thread_count():
     """Return the configured worker thread count."""
