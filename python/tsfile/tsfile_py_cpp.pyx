@@ -20,6 +20,7 @@ from datetime import date as date_type
 from .date_utils import parse_date_to_int
 from .tsfile_cpp cimport *
 
+import numbers
 import os
 import pandas as pd
 import numpy as np
@@ -954,13 +955,20 @@ cpdef bint get_parallel_write_enabled():
     """Return whether the parallel write path is enabled."""
     return tsfile_get_parallel_write_enabled() != 0
 
-cpdef void set_thread_count(int32_t count):
+cpdef void set_thread_count(object count):
     """Set the size of the global worker thread pool (1..64).
 
     Takes effect immediately. Must not be called while any reader, writer or
-    result set is in use.
+    result set is in use. Accepts any Python integer-like value and raises
+    InvalidArgumentError outside [1, 64] (instead of OverflowError from the
+    int32 conversion).
     """
-    check_error(tsfile_set_thread_count(count))
+    _check_int(count)
+    if count < 1 or count > 64:
+        raise InvalidArgumentError(
+            context=f"thread count must be in [1, 64], got {count}"
+        )
+    check_error(tsfile_set_thread_count(<int32_t> count))
 
 cpdef int32_t get_thread_count():
     """Return the configured worker thread count."""
@@ -1081,8 +1089,9 @@ cdef _check_bool(value):
         raise TypeError(f"Expected bool, got {type(value)}")
 
 cdef _check_int(value):
-    # bool is an int subclass, but it is not a meaningful thread count.
-    if isinstance(value, bool) or not isinstance(value, int):
+    # Accept integer-like values (numpy integers, IntEnum) but not bool, which
+    # is an int subclass and not a meaningful thread count.
+    if isinstance(value, bool) or not isinstance(value, numbers.Integral):
         raise TypeError(f"Expected int, got {type(value)}")
 
 # Register table and device

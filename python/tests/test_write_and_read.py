@@ -716,7 +716,7 @@ def test_parallel_switches_and_thread_count():
         return rows
 
     try:
-        for invalid in (0, -1, 65):
+        for invalid in (0, -1, 65, 2**40):
             with pytest.raises(InvalidArgumentError):
                 set_thread_count(invalid)
         set_thread_count(4)

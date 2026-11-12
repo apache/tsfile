@@ -196,7 +196,8 @@ int set_thread_count(int32_t count) {
         std::unique_ptr<ThreadPool> new_pool;
         try {
             new_pool.reset(new ThreadPool(static_cast<size_t>(count)));
-        } catch (const std::exception&) {
+        } catch (...) {
+            // Nothing may escape into the C API; keep the old pool intact.
             return E_OOM;
         }
         ThreadPool* old_pool = g_thread_pool_;
