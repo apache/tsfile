@@ -20,6 +20,8 @@
 #include "global.h"
 
 #include <atomic>
+#include <exception>
+#include <memory>
 
 #ifdef ENABLE_THREADS
 #include "common/thread_pool.h"
@@ -86,10 +88,9 @@ void init_config_value() {
 #else
     g_config_value_.default_compression_type_ = UNCOMPRESSED;
 #endif
-    g_config_value_.parallel_read_enabled_ = true;
-    g_config_value_.parallel_write_enabled_ = true;
-    // thread_count_ keeps its in-class default (see config.h) so a
-    // set_thread_count() before libtsfile_init() is not reset here.
+    // parallel_read_enabled_ / parallel_write_enabled_ / thread_count_ keep
+    // their in-class defaults (see config.h) so setters called before
+    // libtsfile_init() are not reset here.
 }
 
 extern TSEncoding get_value_encoder(TSDataType data_type) {
@@ -178,19 +179,34 @@ int init_common() {
 
 int set_thread_count(int32_t count) {
     if (count < 1 || count > 64) return E_INVALID_ARG;
-    g_config_value_.thread_count_ = count;
 #ifdef ENABLE_THREADS
     // If the global pool already exists (libtsfile_init has run) rebuild it at
     // the new size so the change takes effect immediately instead of only at
     // the next libtsfile_init().  This joins all current workers and recreates
-    // them, so the caller must ensure no read/write is concurrently using the
-    // pool — intended for setup / benchmark reconfiguration, not mid-operation
-    // resizing.
+    // them, so the caller must ensure no reader, writer or result set is using
+    // the pool — intended for setup / benchmark reconfiguration, not
+    // mid-operation resizing.
     if (g_thread_pool_ != nullptr) {
-        delete g_thread_pool_;
-        g_thread_pool_ = new ThreadPool(static_cast<size_t>(count));
+        if (count == g_config_value_.thread_count_) {
+            return E_OK;  // already this size; do not join and respawn workers
+        }
+        // Build the replacement before touching the old pool so a failure
+        // (thread creation or allocation) leaves the old one intact, and never
+        // propagate an exception across the C API boundary.
+        std::unique_ptr<ThreadPool> new_pool;
+        try {
+            new_pool.reset(new ThreadPool(static_cast<size_t>(count)));
+        } catch (const std::exception&) {
+            return E_OOM;
+        }
+        ThreadPool* old_pool = g_thread_pool_;
+        g_thread_pool_ = new_pool.release();
+        g_config_value_.thread_count_ = count;
+        delete old_pool;
+        return E_OK;
     }
 #endif
+    g_config_value_.thread_count_ = count;
     return E_OK;
 }
 

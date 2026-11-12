@@ -915,6 +915,9 @@ cpdef object get_tsfile_config():
         "default_compression_type_": CompressorPy(int(g_config_value_.default_compression_type_)),
         "file_read_backend_": FileReadBackendPy(int(tsfile_get_file_read_backend())),
         "allow_non_decreasing_timestamps_": g_config_value_.allow_non_decreasing_timestamps_,
+        "parallel_read_enabled_": bool(g_config_value_.parallel_read_enabled_),
+        "parallel_write_enabled_": bool(g_config_value_.parallel_write_enabled_),
+        "thread_count_": g_config_value_.thread_count_,
     }
 
 cpdef object get_file_read_backend():
@@ -927,6 +930,42 @@ cpdef void set_file_read_backend(object backend):
         raise TypeError(f"Unsupported FileReadBackend: {backend}")
     check_error(tsfile_set_file_read_backend(<int32_t> int(backend.value)))
 
+cpdef void set_parallel_read_enabled(bint enabled):
+    """Enable/disable the parallel read path.
+
+    Applies to every subsequent read. Set it before starting queries; the
+    flag is read without synchronization.
+    """
+    check_error(tsfile_set_parallel_read_enabled(<int32_t> enabled))
+
+cpdef bint get_parallel_read_enabled():
+    """Return whether the parallel read path is enabled."""
+    return tsfile_get_parallel_read_enabled() != 0
+
+cpdef void set_parallel_write_enabled(bint enabled):
+    """Enable/disable the parallel write path.
+
+    Applies to every subsequent write. Same concurrency rule as
+    set_parallel_read_enabled().
+    """
+    check_error(tsfile_set_parallel_write_enabled(<int32_t> enabled))
+
+cpdef bint get_parallel_write_enabled():
+    """Return whether the parallel write path is enabled."""
+    return tsfile_get_parallel_write_enabled() != 0
+
+cpdef void set_thread_count(int32_t count):
+    """Set the size of the global worker thread pool (1..64).
+
+    Takes effect immediately. Must not be called while any reader, writer or
+    result set is in use.
+    """
+    check_error(tsfile_set_thread_count(count))
+
+cpdef int32_t get_thread_count():
+    """Return the configured worker thread count."""
+    return tsfile_get_thread_count()
+
 cpdef void set_tsfile_config(dict new_config):
     if "file_read_backend_" in new_config and not isinstance(
         new_config["file_read_backend_"], FileReadBackendPy
@@ -934,6 +973,15 @@ cpdef void set_tsfile_config(dict new_config):
         raise TypeError(
             f"Unsupported FileReadBackend: {new_config['file_read_backend_']}"
         )
+    if "parallel_read_enabled_" in new_config:
+        _check_bool(new_config["parallel_read_enabled_"])
+        set_parallel_read_enabled(new_config["parallel_read_enabled_"])
+    if "parallel_write_enabled_" in new_config:
+        _check_bool(new_config["parallel_write_enabled_"])
+        set_parallel_write_enabled(new_config["parallel_write_enabled_"])
+    if "thread_count_" in new_config:
+        _check_int(new_config["thread_count_"])
+        set_thread_count(new_config["thread_count_"])
     if "tsblock_mem_inc_step_size_" in new_config:
         _check_uint32(new_config["tsblock_mem_inc_step_size_"])
         g_config_value_.tsblock_max_memory_ = new_config["tsblock_mem_inc_step_size_"]
@@ -1031,6 +1079,11 @@ cdef _check_double(value):
 cdef _check_bool(value):
     if not isinstance(value, bool):
         raise TypeError(f"Expected bool, got {type(value)}")
+
+cdef _check_int(value):
+    # bool is an int subclass, but it is not a meaningful thread count.
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"Expected int, got {type(value)}")
 
 # Register table and device
 cdef ErrorCode tsfile_writer_register_device_py_cpp(TsFileWriter writer, DeviceSchema *schema):

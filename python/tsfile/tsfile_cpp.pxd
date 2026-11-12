@@ -230,6 +230,12 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
 
     ErrorCode tsfile_set_file_read_backend(int32_t backend)
     TsFileReadBackend tsfile_get_file_read_backend()
+    ErrorCode tsfile_set_parallel_read_enabled(int32_t enabled)
+    int tsfile_get_parallel_read_enabled()
+    ErrorCode tsfile_set_parallel_write_enabled(int32_t enabled)
+    int tsfile_get_parallel_write_enabled()
+    ErrorCode tsfile_set_thread_count(int32_t count)
+    int32_t tsfile_get_thread_count()
 
     ctypedef void * TagFilterHandle
 
@@ -527,6 +533,9 @@ cdef extern from "common/config/config.h" namespace "common":
         uint8_t string_encoding_type_;
         uint8_t default_compression_type_;
         bint allow_non_decreasing_timestamps_;
+        bint parallel_read_enabled_;
+        bint parallel_write_enabled_;
+        int32_t thread_count_;
 
 cdef extern from "common/global.h" namespace "common":
     ConfigValue g_config_value_
