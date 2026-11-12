@@ -131,16 +131,15 @@ TEST_F(AlpTsFileTest, AlignedDeviceRoundTrip) {
     const std::string device = "alp_aligned_device";
     const std::string float_name = "f";
     const std::string double_name = "d";
-    ASSERT_EQ(
-        common::E_OK,
-        writer_->register_aligned_timeseries(
-            device, MeasurementSchema(float_name, common::FLOAT, common::ALP,
-                                      common::UNCOMPRESSED)));
-    ASSERT_EQ(
-        common::E_OK,
-        writer_->register_aligned_timeseries(
-            device, MeasurementSchema(double_name, common::DOUBLE, common::ALP,
-                                      common::UNCOMPRESSED)));
+    // An aligned device's schema is fixed at the first registration: every
+    // column must be registered in one call.
+    std::vector<MeasurementSchema*> aligned_schemas = {
+        new MeasurementSchema(float_name, common::FLOAT, common::ALP,
+                              common::UNCOMPRESSED),
+        new MeasurementSchema(double_name, common::DOUBLE, common::ALP,
+                              common::UNCOMPRESSED)};
+    ASSERT_EQ(common::E_OK,
+              writer_->register_aligned_timeseries(device, aligned_schemas));
 
     const int row_count = 5000;
     const int64_t base_time = 1700000000000LL;
