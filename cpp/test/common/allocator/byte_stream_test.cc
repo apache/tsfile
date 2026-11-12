@@ -434,8 +434,6 @@ TEST(OptionalAtomicStorageTest, BackingStorageIsRealAtomic) {
     EXPECT_EQ(oa.load(), 51u);
 }
 
-}  // namespace common
-
 // The write path drains a ByteStream page by page via Consumer::get_next_buf().
 // Its exact-multiple branch (a stream whose total size is a multiple of the
 // page size) decides whether the last page is full, and had no coverage; a
@@ -459,22 +457,21 @@ TEST(ByteStreamConsumerTest, DrainsExactPageMultiplesAndPartialTails) {
 
     for (const auto& test_case : cases) {
         SCOPED_TRACE(::testing::Message() << "total=" << test_case.total);
-        common::ByteStream stream(kPageSize, common::MOD_DEFAULT,
-                                  /*enable_atomic=*/true);
+        ByteStream stream(kPageSize, MOD_DEFAULT,
+                          /*enable_atomic=*/true);
         std::vector<uint8_t> payload(test_case.total);
         for (uint32_t i = 0; i < test_case.total; i++) {
             payload[i] = static_cast<uint8_t>((i * 13 + 5) & 0xff);
         }
         if (test_case.total > 0) {
-            ASSERT_EQ(stream.write_buf(payload.data(), test_case.total),
-                      common::E_OK);
+            ASSERT_EQ(stream.write_buf(payload.data(), test_case.total), E_OK);
         }
 
-        common::ByteStream::Consumer consumer(stream);
+        ByteStream::Consumer consumer(stream);
         std::vector<uint32_t> lens;
         std::vector<uint8_t> drained;
         while (true) {
-            common::ByteStream::Buffer buf = consumer.get_next_buf(stream);
+            ByteStream::Buffer buf = consumer.get_next_buf(stream);
             if (buf.buf_ == nullptr) {
                 break;
             }
@@ -485,3 +482,5 @@ TEST(ByteStreamConsumerTest, DrainsExactPageMultiplesAndPartialTails) {
         EXPECT_EQ(drained, payload);
     }
 }
+
+}  // namespace common
