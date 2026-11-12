@@ -61,9 +61,17 @@ void TsFileIOReader::reset() {
             delete read_file_;
         }
         read_file_ = nullptr;
-        // Drop the arena-backed index graph before the arena is released: the
-        // nodes (and their children vectors) live inside it, and clearing the
-        // map while the arena is still alive lets their destructors run safely.
+        // Drop everything that lives inside tsfile_meta_page_arena_ before
+        // the arena is released: the index graph and the bloom filter are
+        // both allocated there, and touching them afterwards is a
+        // use-after-free (traps under MSVC debug heap and ASan).  Destroying
+        // the bloom filter first releases its separately allocated bit set;
+        // tsfile_meta_'s destructor would otherwise dereference the freed
+        // BloomFilter object.
+        if (tsfile_meta_.bloom_filter_ != nullptr) {
+            tsfile_meta_.bloom_filter_->destroy();
+            tsfile_meta_.bloom_filter_ = nullptr;
+        }
         tsfile_meta_.table_metadata_index_node_map_.clear();
         tsfile_meta_page_arena_.destroy();
         {
