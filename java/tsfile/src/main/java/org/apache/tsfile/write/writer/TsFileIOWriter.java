@@ -130,6 +130,14 @@ public class TsFileIOWriter implements AutoCloseable {
   public static final String CHUNK_METADATA_TEMP_FILE_SUFFIX = ".meta";
   public static final String TABLE_POINT_COUNT_PROPERTY_PREFIX = "tablePointCount.";
 
+  /**
+   * File property written when {@link TSFileConfig#isAllowNonDecreasingTimestamps()} is enabled.
+   * Its presence (value {@code "true"}) tells downstream readers that the file may contain
+   * duplicate timestamps, so they must not assume strictly increasing times within a series.
+   */
+  public static final String ALLOW_NON_DECREASING_TIMESTAMPS_PROPERTY =
+      "allowNonDecreasingTimestamps";
+
   private boolean generateTableSchema = false;
 
   protected String encryptLevel;
@@ -381,7 +389,20 @@ public class TsFileIOWriter implements AutoCloseable {
     out.write(MAGIC_STRING_BYTES);
     out.write(VERSION_NUMBER_BYTE);
     fileStarted = true;
+    registerInterpretationProperties();
     writeEncryptionHeaderIfNecessary();
+  }
+
+  /**
+   * Record writer options that change how readers must interpret the file. Called when the file is
+   * created and when an existing file is reopened for appending, so the final metadata always
+   * reflects the policy this writer ran with.
+   */
+  protected void registerInterpretationProperties() {
+    if (TS_FILE_CONFIG.isAllowNonDecreasingTimestamps()) {
+      tsFileProperties.put(
+          ALLOW_NON_DECREASING_TIMESTAMPS_PROPERTY, "true".getBytes(TSFileConfig.STRING_CHARSET));
+    }
   }
 
   public int startChunkGroup(IDeviceID deviceId) throws IOException {

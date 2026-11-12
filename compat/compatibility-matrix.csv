@@ -53,7 +53,7 @@
 #     'sprintz' profile (values within +/-1e9). Streaming numeric extremes are
 #     covered under PLAIN, RLE, TS_2DIFF, GORILLA, CHIMP and RLBE.
 
-id,model,dataType,encoding,compressions,rowCount,pageRows,chunks,devices,valueProfile,nullPatterns,javaWrite,cppWrite,javaRead,cppRead,gapReason
+id,model,dataType,encoding,compressions,rowCount,pageRows,chunks,devices,valueProfile,nullPatterns,javaWrite,cppWrite,javaRead,cppRead,gapReason,timestampProfile
 table_int32_plain_r10,table,INT32,PLAIN,ALL,10,4,1,1,default,NONE,yes,yes,yes,yes,
 table_int32_plain_r1000,table,INT32,PLAIN,ALL,1000,100,1,1,default,NONE,yes,yes,yes,yes,
 table_int32_plain_r100000,table,INT32,PLAIN,ALL,100000,10000,1,1,default,NONE,yes,yes,yes,yes,
@@ -342,3 +342,5 @@ table_two_pages,table,FLOAT,CHIMP,ALL,250,100,1,1,default,NONE,yes,yes,yes,yes,
 table_multi_chunk,table,INT64,TS_2DIFF,ALL,300,0,3,1,default,NONE,yes,yes,yes,yes,
 table_multi_chunk_group,table,INT32,RLE,ALL,50,0,1,3,runs,NONE,yes,yes,yes,yes,
 table_long_runs,table,INT64,RLE,ALL,1024,0,1,1,runs,NONE,yes,yes,yes,yes,
+table_int32_plain_dups,table,INT32,PLAIN,UNCOMPRESSED,10,4,1,1,default,NONE,yes,yes,yes,yes,,duplicates
+tree_int32_plain_dups,tree,INT32,PLAIN,UNCOMPRESSED,10,4,1,1,default,NONE,yes,yes,yes,yes,,duplicates

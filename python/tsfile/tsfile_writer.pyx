@@ -33,8 +33,11 @@ from .tsfile_py_cpp cimport *
 cdef class TsFileWriterPy:
     cdef TsFileWriter writer
 
-    def __init__(self, pathname: str, memory_threshold: int = 128 * 1024 * 1024):
+    def __init__(self, pathname: str, memory_threshold: int = 128 * 1024 * 1024,
+                 allow_non_decreasing_timestamps: bool = False):
         self.writer = NULL
+        set_allow_non_decreasing_timestamps(
+            <bint> allow_non_decreasing_timestamps)
         self.writer = tsfile_writer_new_c(pathname, memory_threshold)
 
     def register_timeseries(self, device_name : str, timeseries_schema : TimeseriesSchemaPy):

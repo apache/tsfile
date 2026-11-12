@@ -526,6 +526,7 @@ cdef extern from "common/config/config.h" namespace "common":
         uint8_t double_encoding_type_;
         uint8_t string_encoding_type_;
         uint8_t default_compression_type_;
+        bint allow_non_decreasing_timestamps_;
 
 cdef extern from "common/global.h" namespace "common":
     ConfigValue g_config_value_
@@ -534,3 +535,4 @@ cdef extern from "common/global.h" namespace "common":
     int set_global_time_data_type(uint8_t data_type);
     int set_global_time_encoding(uint8_t encoding);
     int set_global_time_compression(uint8_t compression);
+    void set_allow_non_decreasing_timestamps(bint enabled);

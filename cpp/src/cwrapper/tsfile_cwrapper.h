@@ -433,6 +433,20 @@ int set_datatype_encoding(uint8_t data_type, uint8_t encoding);
  */
 int set_global_compression(uint8_t compression);
 
+/**
+ * @brief Allow equal (non-decreasing) timestamps when writing.
+ *
+ * When enabled, a timestamp equal to the previously written timestamp is
+ * accepted; only a strictly decreasing timestamp is rejected with
+ * E_OUT_OF_ORDER. Duplicate timestamps are preserved as separate rows (no
+ * write-time deduplication). Default is false, which rejects both equal and
+ * decreasing timestamps.
+ *
+ * @param enabled true to allow equal timestamps, false to keep strict ordering
+ * @return E_OK
+ */
+int set_allow_non_decreasing_timestamps(bool enabled);
+
 /*--------------------------TsFile Reader and Writer------------------------ */
 
 /**

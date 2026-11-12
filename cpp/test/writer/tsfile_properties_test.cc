@@ -22,6 +22,7 @@
 #include <cstdio>
 #include <vector>
 
+#include "common/constant/tsfile_constant.h"
 #include "common/global.h"
 #include "reader/tsfile_reader.h"
 #include "writer/tsfile_writer.h"
@@ -34,11 +35,30 @@ std::vector<uint8_t> Bytes(const std::string& value) {
     return std::vector<uint8_t>(value.begin(), value.end());
 }
 
+// allow_non_decreasing_timestamps_ is process-global; restore it on scope exit
+// so an ASSERT failure cannot leak the setting into later tests.
+class ScopedAllowNonDecreasingTimestamps {
+   public:
+    explicit ScopedAllowNonDecreasingTimestamps(bool value) {
+        common::set_allow_non_decreasing_timestamps(value);
+    }
+    ~ScopedAllowNonDecreasingTimestamps() {
+        common::set_allow_non_decreasing_timestamps(false);
+    }
+};
+
 class TsFilePropertiesTest : public ::testing::Test {
    protected:
     void SetUp() override {
         libtsfile_init();
-        file_name_ = "tsfile_properties_test.tsfile";
+        // CTest runs cases of one binary in parallel; a shared file name would
+        // let two cases truncate or remove each other's fixture mid-test.
+        const ::testing::TestInfo* info =
+            ::testing::UnitTest::GetInstance()->current_test_info();
+        file_name_ = std::string("tsfile_properties_test_") +
+                     (info == nullptr ? std::string("unknown")
+                                      : std::string(info->name())) +
+                     ".tsfile";
         std::remove(file_name_.c_str());
     }
 
@@ -104,6 +124,45 @@ TEST_F(TsFilePropertiesTest, WriterPreservesBinaryNullAndEmptyValues) {
               properties.at("encryptType").value);
     EXPECT_TRUE(properties.at("encryptKey").is_null);
     EXPECT_TRUE(properties.at("encryptKey").value.empty());
+    EXPECT_EQ(common::E_OK, reader.close());
+}
+
+// A writer created with allow_non_decreasing_timestamps_ must record the
+// policy in the file metadata so downstream readers can tell the file may
+// contain duplicate timestamps.
+TEST_F(TsFilePropertiesTest, RecordsAllowNonDecreasingTimestampsPolicy) {
+    {
+        ScopedAllowNonDecreasingTimestamps guard(true);
+        TsFileWriter writer;
+        ASSERT_EQ(common::E_OK, writer.open(file_name_));
+        ASSERT_EQ(common::E_OK, writer.close());
+    }
+
+    TsFileReader reader;
+    ASSERT_EQ(common::E_OK, reader.open(file_name_));
+    TsFileProperties properties = reader.get_tsfile_properties();
+    auto it = properties.find(TSFILE_PROP_ALLOW_NON_DECREASING_TIMESTAMPS);
+    ASSERT_NE(it, properties.end());
+    EXPECT_FALSE(it->second.is_null);
+    EXPECT_EQ(Bytes("true"), it->second.value);
+    EXPECT_EQ(common::E_OK, reader.close());
+}
+
+// Flag off keeps the metadata free of the policy property, so existing files
+// are byte-for-byte unchanged.
+TEST_F(TsFilePropertiesTest, OmitsPolicyPropertyWhenFlagOff) {
+    {
+        ScopedAllowNonDecreasingTimestamps guard(false);
+        TsFileWriter writer;
+        ASSERT_EQ(common::E_OK, writer.open(file_name_));
+        ASSERT_EQ(common::E_OK, writer.close());
+    }
+
+    TsFileReader reader;
+    ASSERT_EQ(common::E_OK, reader.open(file_name_));
+    TsFileProperties properties = reader.get_tsfile_properties();
+    EXPECT_EQ(properties.find(TSFILE_PROP_ALLOW_NON_DECREASING_TIMESTAMPS),
+              properties.end());
     EXPECT_EQ(common::E_OK, reader.close());
 }
 

@@ -227,6 +227,14 @@ class TsFileWriter {
     // flush/close refuse — can be unit-tested directly.
     friend class TsFileWriterUnrecoverableTest;
 
+    // After recovery (enforce_recovered_last_time_order_), returns true when
+    // `timestamp` must be rejected because it would land at or before a
+    // flushed chunk's end_time for this device. With
+    // allow_non_decreasing_timestamps_ enabled only strictly decreasing
+    // timestamps are rejected; otherwise equality is rejected too.
+    bool recovered_last_time_order_violated(
+        const std::shared_ptr<IDeviceID>& device_id, int64_t timestamp) const;
+
     int write_column_batch(storage::ChunkWriter* chunk_writer,
                            const Tablet& tablet, int col_idx,
                            uint32_t start_idx, uint32_t end_idx);

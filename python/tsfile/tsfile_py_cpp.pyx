@@ -914,6 +914,7 @@ cpdef object get_tsfile_config():
         "string_encoding_type_": TSEncodingPy(int(g_config_value_.string_encoding_type_)),
         "default_compression_type_": CompressorPy(int(g_config_value_.default_compression_type_)),
         "file_read_backend_": FileReadBackendPy(int(tsfile_get_file_read_backend())),
+        "allow_non_decreasing_timestamps_": g_config_value_.allow_non_decreasing_timestamps_,
     }
 
 cpdef object get_file_read_backend():
@@ -1014,6 +1015,10 @@ cpdef void set_tsfile_config(dict new_config):
         check_error(code)
     if "file_read_backend_" in new_config:
         set_file_read_backend(new_config["file_read_backend_"])
+    if "allow_non_decreasing_timestamps_" in new_config:
+        _check_bool(new_config["allow_non_decreasing_timestamps_"])
+        set_allow_non_decreasing_timestamps(
+            <bint> new_config["allow_non_decreasing_timestamps_"])
 
 cdef _check_uint32(value):
     if not isinstance(value, int) or value < 0 or value > 0xFFFFFFFF:
