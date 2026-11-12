@@ -1016,18 +1016,22 @@ int TsFileIOReader::search_from_leaf_node(
 
 int TsFileIOReader::get_cached_index_node(int64_t start_offset,
                                           int64_t end_offset, bool is_device,
-                                          std::shared_ptr<MetaIndexNode>& out) {
+                                          CachedIndexNode& out) {
     {
         std::lock_guard<std::mutex> lk(index_node_cache_mu_);
-        CachedIndexNode cached;
-        if (index_node_cache_.tryGetCopy(start_offset, cached)) {
-            out = cached.node;
+        if (index_node_cache_.tryGetCopy(start_offset, out)) {
             return E_OK;
         }
     }
 
-    ASSERT(start_offset < end_offset);
-    const int32_t read_size = static_cast<int32_t>(end_offset - start_offset);
+    if (start_offset >= end_offset) {
+        return E_TSFILE_CORRUPTED;
+    }
+    const int64_t read_size_i64 = end_offset - start_offset;
+    if (read_size_i64 > INT32_MAX) {
+        return E_OVERFLOW;
+    }
+    const int32_t read_size = static_cast<int32_t>(read_size_i64);
     auto arena = std::make_shared<common::PageArena>();
     arena->init(512, common::MOD_TSFILE_READER);
     void* node_buf = arena->alloc(sizeof(MetaIndexNode));
@@ -1056,11 +1060,17 @@ int TsFileIOReader::get_cached_index_node(int64_t start_offset,
     CachedIndexNode entry;
     entry.arena = arena;
     entry.node = node;
+#ifdef ENABLE_TEST
     {
         std::lock_guard<std::mutex> lk(index_node_cache_mu_);
-        index_node_cache_.insert(start_offset, std::move(entry));
+        ++index_node_cache_misses_;
     }
-    out = std::move(node);
+#endif
+    {
+        std::lock_guard<std::mutex> lk(index_node_cache_mu_);
+        index_node_cache_.insert(start_offset, entry);
+    }
+    out = std::move(entry);
     return E_OK;
 }
 
@@ -1095,22 +1105,23 @@ int TsFileIOReader::search_from_internal_node(
         // previous lookup: one leaf covers up to max_degree_of_index_node
         // devices, so an uncached walk would re-read and re-deserialize the
         // same node for every device in it.
-        std::shared_ptr<MetaIndexNode> cur_level_index_node;
+        // Keep the arena alive for as long as the node is used: the cache
+        // may evict this entry (and release its arena) concurrently.
+        CachedIndexNode cur_level;
         if (RET_FAIL(get_cached_index_node(index_entry->get_offset(),
-                                           end_offset, is_device,
-                                           cur_level_index_node))) {
+                                           end_offset, is_device, cur_level))) {
             return ret;
         }
-        if (cur_level_index_node->node_type_ == LEAF_DEVICE) {
-            return cur_level_index_node->binary_search_children(
+        if (cur_level.node->node_type_ == LEAF_DEVICE) {
+            return cur_level.node->binary_search_children(
                 target_name, /*exact=*/true, ret_index_entry, ret_end_offset,
                 output_pa);
-        } else if (cur_level_index_node->node_type_ == LEAF_MEASUREMENT) {
-            return cur_level_index_node->binary_search_children(
+        } else if (cur_level.node->node_type_ == LEAF_MEASUREMENT) {
+            return cur_level.node->binary_search_children(
                 target_name, /*exact=*/false, ret_index_entry, ret_end_offset,
                 output_pa);
         } else {
-            ret = cur_level_index_node->binary_search_children(
+            ret = cur_level.node->binary_search_children(
                 target_name, /*exact=*/false, index_entry, end_offset,
                 output_pa);
         }

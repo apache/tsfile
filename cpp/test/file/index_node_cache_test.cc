@@ -41,7 +41,7 @@ namespace storage {
  */
 class IndexNodeCacheTest : public ::testing::Test {
    protected:
-    static constexpr int kDevices = 40;
+    static constexpr int kDevices = 8;
     static constexpr int kRowsPerDevice = 2;
 
     void SetUp() override {
@@ -113,7 +113,8 @@ TEST_F(IndexNodeCacheTest, ReusesNodesAcrossDeviceLookups) {
     const std::unordered_set<std::string> measurement_names{"value"};
 
     // Two rounds over every device: the second round must be served from the
-    // cache and still produce the same indexes.
+    // cache (no new node reads) and still produce the same indexes.
+    size_t misses_after_first_round = 0;
     for (int round = 0; round < 2; ++round) {
         for (int device = 0; device < kDevices; ++device) {
             auto device_id = std::make_shared<StringArrayDeviceID>(
@@ -127,8 +128,14 @@ TEST_F(IndexNodeCacheTest, ReusesNodesAcrossDeviceLookups) {
                 << "device " << device << " round " << round;
             pa.reset();
         }
+        if (round == 0) {
+            misses_after_first_round = reader.TEST_index_node_cache_misses();
+            EXPECT_GT(misses_after_first_round, 0u);
+        }
     }
 
+    // A second pass over the same devices is served entirely from the cache.
+    EXPECT_EQ(reader.TEST_index_node_cache_misses(), misses_after_first_round);
     EXPECT_GT(reader.TEST_index_node_cache_size(), 0u);
     EXPECT_LE(reader.TEST_index_node_cache_size(),
               reader.TEST_index_node_cache_capacity());

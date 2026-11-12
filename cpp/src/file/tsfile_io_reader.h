@@ -250,12 +250,16 @@ class TsFileIOReader {
 
     /**
      * Returns the index node serialized at [start_offset, end_offset),
-     * reading and deserializing it on a cache miss. The returned node is
-     * immutable and owned by the cache; callers must not destroy or mutate it.
+     * reading and deserializing it on a cache miss.
+     *
+     * The out parameter carries the node *and* the arena it was allocated in:
+     * the node, its children and their names are placement-new'ed into that
+     * arena, and the cache may evict the entry (and release the arena) at any
+     * time.  Callers must keep the returned CachedIndexNode alive for as long
+     * as they touch the node.
      */
     int get_cached_index_node(int64_t start_offset, int64_t end_offset,
-                              bool is_device,
-                              std::shared_ptr<MetaIndexNode>& out);
+                              bool is_device, CachedIndexNode& out);
 
     // Returns E_OK on hit (out is filled), or an error code on miss / load
     // failure (E_DEVICE_NOT_EXIST when the device is absent, the propagated
@@ -284,6 +288,12 @@ class TsFileIOReader {
     static size_t TEST_index_node_cache_capacity() {
         return INDEX_NODE_CACHE_CAPACITY;
     }
+    // Nodes actually read from the file (i.e. cache misses).  Lets a test
+    // prove that a second lookup round is served from the cache.
+    size_t TEST_index_node_cache_misses() const {
+        std::lock_guard<std::mutex> lk(index_node_cache_mu_);
+        return index_node_cache_misses_;
+    }
 #endif
 
    private:
@@ -311,6 +321,9 @@ class TsFileIOReader {
     // Keyed by the node's start offset in the file.
     common::Cache<int64_t, CachedIndexNode> index_node_cache_;
     mutable std::mutex index_node_cache_mu_;
+#ifdef ENABLE_TEST
+    size_t index_node_cache_misses_ = 0;
+#endif
 };
 
 }  // end namespace storage
