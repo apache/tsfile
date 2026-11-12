@@ -2373,16 +2373,19 @@ int AlignedChunkReader::get_next_page_multi_serial(TsBlock* ret_tsblock,
                 }
             }
             if (IS_FAIL(ret)) break;
+            // get_cur_page_header returns E_OK with a reset header once the
+            // chunk's data has been consumed.  Report the end of the chunk
+            // instead of handing a zero-byte page to the decompressor.
+            if (!has_more_data_multi()) {
+                ret = E_NO_MORE_DATA;
+                break;
+            }
             if (!cur_page_may_satisfy_filter_multi(filter)) {
                 if (RET_FAIL(skip_cur_page_multi())) break;
             } else if (cur_page_fully_satisfies_filter_multi(filter) &&
                        should_skip_page_by_offset_multi(row_offset)) {
                 if (RET_FAIL(skip_cur_page_multi())) break;
             } else {
-                break;
-            }
-            if (!has_more_data()) {
-                ret = E_NO_MORE_DATA;
                 break;
             }
         }
