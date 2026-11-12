@@ -44,10 +44,11 @@
 
 using namespace common;
 
-// The bulk-copy and direct-decode paths live on the page-plan path, which a
-// multi-column reader takes when a decode pool is set (what a parallel read
-// uses) or when an offset or FIELD filter is present. Without threads those
-// tests cannot reach it.
+// A multi-column reader uses the page-plan path when a decode pool is set
+// (what a parallel read does) or when an offset / FIELD filter is present.
+// The no-filter bulk-copy and direct-decode tests need the pool, so they are
+// skipped in a build without threads; the FIELD filter test reaches the plan
+// either way.
 #ifdef ENABLE_THREADS
 #define SKIP_WITHOUT_THREADS() ((void)0)
 #else
@@ -192,6 +193,7 @@ class AlignedBulkCopyTest : public ::testing::Test {
 
         std::vector<Row> rows;
         size_t direct_pages = 0;
+        size_t last_bulk_seen = 0;
         for (int call = 0; call < 64; call++) {
             block.reset();
             const int ret = reader_->get_next_page(&block, time_filter, arena_);
@@ -201,7 +203,10 @@ class AlignedBulkCopyTest : public ::testing::Test {
                 std::max(direct_pages,
                          static_cast<size_t>(reader_->TEST_direct_page_end()));
             if (bulk_pages != nullptr) {
-                *bulk_pages += reader_->TEST_bulk_page_count();
+                // The reader's counter is cumulative.
+                const size_t seen = reader_->TEST_bulk_page_count();
+                *bulk_pages += seen - last_bulk_seen;
+                last_bulk_seen = seen;
             }
             common::RowIterator iter(&block);
             while (iter.has_next()) {

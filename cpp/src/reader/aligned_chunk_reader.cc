@@ -2406,7 +2406,11 @@ int AlignedChunkReader::get_next_page_multi_impl(TsBlock* ret_tsblock,
             }
             row_appender.add_rows(bulk_count);
 #ifdef ENABLE_TEST
-            ++bulk_page_count_;
+            // One count per page, not per bulk operation: a page is copied in
+            // several operations when the destination block fills up first.
+            if (page_time_cursor_ == page_info.row_begin) {
+                ++bulk_page_count_;
+            }
 #endif
             page_time_cursor_ += bulk_count;
             if (page_time_cursor_ >= page_time_count_) {
