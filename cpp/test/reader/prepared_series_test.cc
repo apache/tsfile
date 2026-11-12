@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <limits>
 #include <vector>
 
 #include "common/global.h"
@@ -557,6 +558,186 @@ TEST_F(PreparedSeriesBatchTest,
               empty_multi_table->get_next_tsblock(block));
     EXPECT_EQ(nullptr, block);
     reader.destroy_query_data_set(empty_multi);
+    EXPECT_EQ(common::E_OK, reader.close());
+}
+
+// A prepared multi-column query without a time bound uses a TimeBetween
+// spanning the full int64 range.  The chunk reader recognises it while
+// building the page plan (the prepared path pushes OFFSET down), returns every
+// row of a boundary page without evaluating the predicate row by row, and
+// still consumes OFFSET from the retained rows.
+TEST_F(PreparedSeriesBatchTest, MultiPreparedUnboundedTimeFilterWithOffset) {
+    constexpr int kRows = 30;
+    constexpr int kRowsPerChunk = 10;
+    // The page limit keeps every chunk to a single page, which carries no
+    // page statistics; such pages are BOUNDARY pages, the case where the
+    // unbounded shortcut has to skip the per-row predicate itself.
+    PagePointGuard guard(kRowsPerChunk);
+    {
+        WriteFile write_file;
+        int flags = O_WRONLY | O_CREAT | O_TRUNC;
+#ifdef _WIN32
+        flags |= O_BINARY;
+#endif
+        ASSERT_EQ(common::E_OK, write_file.create(file_name_, flags, 0666));
+        std::vector<common::ColumnSchema> columns = {
+            common::ColumnSchema("device", common::STRING,
+                                 common::ColumnCategory::TAG),
+            common::ColumnSchema("value", common::DOUBLE,
+                                 common::ColumnCategory::FIELD),
+            common::ColumnSchema("value2", common::DOUBLE,
+                                 common::ColumnCategory::FIELD),
+        };
+        TableSchema schema("weather", columns);
+        TsFileTableWriter writer(&write_file, &schema);
+        for (int chunk = 0; chunk < kRows / kRowsPerChunk; ++chunk) {
+            Tablet tablet(
+                "weather", {"device", "value", "value2"},
+                {common::STRING, common::DOUBLE, common::DOUBLE},
+                {common::ColumnCategory::TAG, common::ColumnCategory::FIELD,
+                 common::ColumnCategory::FIELD},
+                kRowsPerChunk);
+            for (int row = 0; row < kRowsPerChunk; ++row) {
+                const int time = chunk * kRowsPerChunk + row;
+                ASSERT_EQ(common::E_OK, tablet.add_timestamp(row, time));
+                ASSERT_EQ(common::E_OK, tablet.add_value(row, "device", "d0"));
+                ASSERT_EQ(
+                    common::E_OK,
+                    tablet.add_value(row, "value", static_cast<double>(time)));
+                ASSERT_EQ(common::E_OK,
+                          tablet.add_value(row, "value2",
+                                           static_cast<double>(time * 10)));
+            }
+            ASSERT_EQ(common::E_OK, writer.write_table(tablet));
+            ASSERT_EQ(common::E_OK, writer.flush());
+        }
+        ASSERT_EQ(common::E_OK, writer.close());
+    }
+
+    TsFileReader reader;
+    ASSERT_EQ(common::E_OK, reader.open(file_name_));
+    std::shared_ptr<PreparedSeries> prepared_value;
+    std::shared_ptr<PreparedSeries> prepared_value2;
+    auto metadata = reader.get_timeseries_metadata();
+    FileGeneration generation;
+    generation.mapped_index_identity = 1;
+    generation.file_id = 0;
+    struct stat file_stat {};
+    ASSERT_EQ(0, stat(file_name_.c_str(), &file_stat));
+    generation.file_size = static_cast<uint64_t>(file_stat.st_size);
+    for (const auto& device_entry : metadata) {
+        for (const auto& index : device_entry.second) {
+            auto* aligned = dynamic_cast<AlignedTimeseriesIndex*>(index.get());
+            if (aligned == nullptr || aligned->value_ts_idx_ == nullptr) {
+                continue;
+            }
+            const std::string name =
+                aligned->value_ts_idx_->get_measurement_name().to_std_string();
+            PreparedLocator locator;
+            locator.locator_id = name == "value" ? 0 : 1;
+            locator.layout = 1;
+            locator.flags = 1;
+            locator.value_metadata_offset =
+                aligned->value_ts_idx_->get_metadata_offset();
+            locator.value_metadata_length =
+                aligned->value_ts_idx_->get_metadata_length();
+            locator.time_metadata_offset =
+                aligned->time_ts_idx_->get_metadata_offset();
+            locator.time_metadata_length =
+                aligned->time_ts_idx_->get_metadata_length();
+            if (name == "value") {
+                ASSERT_EQ(
+                    common::E_OK,
+                    reader.prepare_series(generation, locator, prepared_value));
+            } else if (name == "value2") {
+                ASSERT_EQ(common::E_OK,
+                          reader.prepare_series(generation, locator,
+                                                prepared_value2));
+            }
+        }
+    }
+    ASSERT_NE(nullptr, prepared_value);
+    ASSERT_NE(nullptr, prepared_value2);
+
+    auto collect = [&](int64_t start_time, int64_t end_time, int offset,
+                       int limit) {
+        ResultSet* result = nullptr;
+        EXPECT_EQ(common::E_OK,
+                  reader.query_prepared_multi({prepared_value2, prepared_value},
+                                              start_time, end_time, offset,
+                                              limit, result));
+        if (result == nullptr) {
+            ADD_FAILURE() << "query_prepared_multi returned no result set";
+            return std::vector<int64_t>();
+        }
+        auto* table_result = dynamic_cast<TableResultSet*>(result);
+        if (table_result == nullptr) {
+            ADD_FAILURE() << "query_prepared_multi returned a non-table result";
+            reader.destroy_query_data_set(result);
+            return std::vector<int64_t>();
+        }
+        std::vector<int64_t> times;
+        common::TsBlock* block = nullptr;
+        while (table_result->get_next_tsblock(block) == common::E_OK) {
+            common::RowIterator rows(block);
+            while (rows.has_next()) {
+                uint32_t len = 0;
+                bool is_null = false;
+                const char* timestamp = rows.read(0, &len, &is_null);
+                EXPECT_FALSE(is_null);
+                times.push_back(*reinterpret_cast<const int64_t*>(timestamp));
+                const char* value2 = rows.read(1, &len, &is_null);
+                EXPECT_FALSE(is_null);
+                EXPECT_DOUBLE_EQ(times.back() * 10.0,
+                                 *reinterpret_cast<const double*>(value2));
+                const char* value = rows.read(2, &len, &is_null);
+                EXPECT_FALSE(is_null);
+                EXPECT_DOUBLE_EQ(static_cast<double>(times.back()),
+                                 *reinterpret_cast<const double*>(value));
+                rows.next();
+            }
+            block = nullptr;
+        }
+        reader.destroy_query_data_set(result);
+        return times;
+    };
+
+    std::vector<int64_t> all_rows;
+    for (int row = 0; row < kRows; ++row) all_rows.push_back(row);
+
+    const int64_t min_time = std::numeric_limits<int64_t>::min();
+    const int64_t max_time = std::numeric_limits<int64_t>::max();
+    std::vector<int64_t> in_window;
+    for (int row = 5; row <= 22; ++row) in_window.push_back(row);
+
+    // Exercise both decode paths: with the worker pool the page plan is
+    // built and decoded in parallel (the planner's prefilled times must be
+    // reused by the workers); without it the plan is decoded lazily, which is
+    // where the planner's times are handed to decode_page_lazy().
+    const bool saved_parallel = common::g_config_value_.parallel_read_enabled_;
+    for (bool parallel : {true, false}) {
+        SCOPED_TRACE(::testing::Message() << "parallel=" << parallel);
+        common::g_config_value_.parallel_read_enabled_ = parallel;
+
+        EXPECT_EQ(collect(min_time, max_time, 0, -1), all_rows);
+        for (int offset : {1, 3, 4, 5, 17, 28, 29, 30}) {
+            SCOPED_TRACE(::testing::Message() << "offset=" << offset);
+            const std::vector<int64_t> expected(all_rows.begin() + offset,
+                                                all_rows.end());
+            EXPECT_EQ(collect(min_time, max_time, offset, -1), expected);
+        }
+
+        EXPECT_EQ(collect(5, 22, 0, -1), in_window);
+        const std::vector<int64_t> offset_in_window(in_window.begin() + 6,
+                                                    in_window.begin() + 10);
+        EXPECT_EQ(collect(5, 22, 6, 4), offset_in_window);
+        const std::vector<int64_t> tail_in_window(in_window.begin() + 10,
+                                                  in_window.end());
+        EXPECT_EQ(collect(5, 22, 10, -1), tail_in_window);
+        EXPECT_TRUE(collect(100, 200, 0, -1).empty());
+    }
+    common::g_config_value_.parallel_read_enabled_ = saved_parallel;
+
     EXPECT_EQ(common::E_OK, reader.close());
 }
 

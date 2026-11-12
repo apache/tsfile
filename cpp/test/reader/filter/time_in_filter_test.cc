@@ -82,3 +82,32 @@ TEST(TimeInFilterTest, BatchTimeFallbackUsesScalarSemantics) {
     EXPECT_TRUE(mask[4]);
     EXPECT_FALSE(mask[5]);
 }
+
+// The aligned chunk reader uses this predicate to skip the per-row time check
+// and to take the bulk path; it must only be true for a plain TimeBetween that
+// accepts every int64 value.
+TEST(TimeBetweenFilterTest, IsUnboundedTimeFilterOnlyForFullRangeBetween) {
+    const int64_t min_time = std::numeric_limits<int64_t>::min();
+    const int64_t max_time = std::numeric_limits<int64_t>::max();
+
+    TimeBetween full(min_time, max_time, /*not_between=*/false);
+    EXPECT_TRUE(full.is_unbounded_time_filter());
+
+    // Negated full range accepts nothing, so it must not take the shortcut.
+    TimeBetween negated(min_time, max_time, /*not_between=*/true);
+    EXPECT_FALSE(negated.is_unbounded_time_filter());
+
+    // Inverted bounds are not "everything".
+    TimeBetween inverted(max_time, min_time, /*not_between=*/false);
+    EXPECT_FALSE(inverted.is_unbounded_time_filter());
+
+    // One missing bound is a real restriction.
+    TimeBetween half_open(min_time + 1, max_time, /*not_between=*/false);
+    EXPECT_FALSE(half_open.is_unbounded_time_filter());
+    TimeBetween narrow(0, 100, /*not_between=*/false);
+    EXPECT_FALSE(narrow.is_unbounded_time_filter());
+
+    // Other filter types never claim to be unbounded.
+    TimeIn time_in({1, 2}, /*not_in=*/false);
+    EXPECT_FALSE(time_in.is_unbounded_time_filter());
+}
