@@ -287,6 +287,47 @@ TEST(AlpCodecTest, HighEntropyUsesPlainScheme) {
     EXPECT_EQ(ALP_SCHEME_PLAIN, header.scheme);
 }
 
+// ALP pages are decoded through a byte pointer, so the page may start at any
+// address.  This exercises the unaligned SIMD loads and gathers on the decode
+// side (the encoder receives a typed array and is always aligned).
+template <typename T>
+static void ExpectUnalignedDecodeRoundTrip(const std::vector<T>& values) {
+    std::vector<uint8_t> encoded;
+    ASSERT_EQ(ALP_OK,
+              AlpEncodePage(&values[0], static_cast<uint32_t>(values.size()),
+                            encoded));
+    for (size_t offset = 1; offset <= 7; ++offset) {
+        std::vector<uint8_t> storage(encoded.size() + offset + 1);
+        std::memcpy(&storage[offset], &encoded[0], encoded.size());
+        std::vector<T> decoded;
+        ASSERT_EQ(ALP_OK,
+                  AlpDecodePage(&storage[offset],
+                                static_cast<uint32_t>(encoded.size()), decoded))
+            << "offset=" << offset;
+        ASSERT_EQ(values.size(), decoded.size());
+        for (size_t i = 0; i < values.size(); ++i) {
+            EXPECT_TRUE(BitEqual(values[i], decoded[i]))
+                << "offset=" << offset << " index=" << i;
+        }
+    }
+}
+
+TEST(AlpCodecTest, DecodeFromUnalignedBuffer) {
+    std::vector<double> doubles;
+    for (int i = 0; i < static_cast<int>(ALP_BLOCK_SIZE) + 17; ++i) {
+        doubles.push_back(static_cast<double>(i % 1000) * 0.001 - 0.5);
+    }
+    ExpectUnalignedDecodeRoundTrip(doubles);
+
+    std::vector<float> floats;
+    for (int i = 0; i < static_cast<int>(ALP_BLOCK_SIZE) + 17; ++i) {
+        floats.push_back(static_cast<float>(i % 100) * 0.01f);
+    }
+    floats.push_back(std::numeric_limits<float>::quiet_NaN());
+    floats.push_back(-0.0f);
+    ExpectUnalignedDecodeRoundTrip(floats);
+}
+
 TEST(AlpCodecTest, SmallIntegerBitWidths) {
     std::vector<double> values(ALP_BLOCK_SIZE);
     for (size_t i = 0; i < values.size(); ++i) {

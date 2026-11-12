@@ -30,6 +30,14 @@ Status: draft for the C++-first implementation on `colin/alp-codec`.
 - The existing Gorilla default is preserved. A column selects ALP by asking
   for `TSEncoding::ALP`; there is no build flag. Readers that predate the
   encoding reject the chunk instead of misreading it.
+- **Java compatibility warning.** ALP is C++/Python-only for now. The Java
+  implementation has no `ALP` enum value, so a Java reader opens a file that
+  contains an ALP chunk but fails when it parses that chunk header (an
+  `IllegalArgumentException` naming the unknown encoding byte). Do not enable
+  ALP for files that are read by Java, and do not mix ALP and non-ALP writers
+  in a deployment that requires cross-language reads. The compatibility matrix
+  (`compat/compatibility-matrix.csv`) intentionally has no ALP rows until a
+  Java decoder exists.
 - The format is language-neutral so a Java decoder can be added later without
   changing encoded bytes.
 - Python reuses the C++ implementation through the C wrapper.
@@ -146,8 +154,12 @@ SIMDe is already a TsFile C++ dependency. The ALP kernels will use the existing
 
 - Write the kernels with `simde__m256i` and `simde_mm256_*`, matching the
   existing encoding code style.
-- Compile an AVX2 kernel translation unit with `-mavx2` or `/arch:AVX2` on
-  x86. Do not apply AVX2 flags to baseline TsFile translation units.
+- The kernels are header-only and compile into baseline TsFile translation
+  units with `ENABLE_SIMD`; there is no separate `-mavx2` translation unit and
+  no runtime CPU dispatch yet. On GCC/Clang, SIMDe annotates the AVX2 helpers
+  with target attributes, so native AVX2 instructions may be emitted inside
+  outlined helper calls; on MSVC without `/arch:AVX2` SIMDe emulates them.
+  A dedicated AVX2 object library plus runtime dispatch is a follow-up.
 - On AArch64 the same SIMDe source maps to NEON without the AVX2 flag.
 - Add a scalar fallback used when SIMD is disabled or unavailable.
 - Select the kernel at compile time through `ENABLE_SIMD`; there is no runtime
