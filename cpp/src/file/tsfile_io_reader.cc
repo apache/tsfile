@@ -978,6 +978,7 @@ int TsFileIOReader::get_timeseries_indexes(
             return ret;
         }
         std::unordered_map<std::string, ITimeseriesIndex*> name_to_index;
+        name_to_index.reserve(loaded_indexes.size());
         for (ITimeseriesIndex* loaded : loaded_indexes) {
             if (is_aligned) {
                 void* aligned_buf = pa.alloc(sizeof(AlignedTimeseriesIndex));
@@ -1355,19 +1356,28 @@ int TsFileIOReader::do_load_timeseries_index_range(
     std::vector<ITimeseriesIndex*>& ts_indexs) {
     int ret = E_OK;
     const int64_t read_size_i64 = end_offset - start_offset;
-    if (read_size_i64 <= 0 || read_size_i64 > INT32_MAX) {
+    if (read_size_i64 <= 0) {
         return E_TSFILE_CORRUPTED;
     }
+    if (read_size_i64 > INT32_MAX) {
+        return E_OVERFLOW;
+    }
     const int32_t read_size = static_cast<int32_t>(read_size_i64);
-    int32_t ret_read_len = 0;
-    char* ti_buf = static_cast<char*>(pa.alloc(read_size));
+    // The raw bytes are needed only while the indexes are parsed, so they are
+    // heap-allocated and released below instead of coming from the caller's
+    // arena: a wide device's whole range would otherwise stay resident for as
+    // long as the arena lives.
+    char* ti_buf = static_cast<char*>(mem_alloc(read_size, MOD_TSFILE_READER));
     if (IS_NULL(ti_buf)) {
         return E_OOM;
     }
+    int32_t ret_read_len = 0;
     if (RET_FAIL(
             read_file_->read(start_offset, ti_buf, read_size, ret_read_len))) {
+        mem_free(ti_buf);
         return ret;
     } else if (ret_read_len != read_size) {
+        mem_free(ti_buf);
         return E_FILE_READ_ERR;
     }
     ByteStream bs;
@@ -1376,14 +1386,17 @@ int TsFileIOReader::do_load_timeseries_index_range(
         const uint64_t relative_start = bs.read_pos();
         void* buf = pa.alloc(sizeof(TimeseriesIndex));
         if (IS_NULL(buf)) {
+            mem_free(ti_buf);
             return E_OOM;
         }
         auto ts_idx = new (buf) TimeseriesIndex;
         if (RET_FAIL(ts_idx->deserialize_from(bs, &pa))) {
+            mem_free(ti_buf);
             return ret;
         }
         if (bs.read_pos() < relative_start ||
             bs.read_pos() - relative_start > UINT32_MAX) {
+            mem_free(ti_buf);
             return E_OVERFLOW;
         }
         ts_idx->set_metadata_range(
@@ -1392,6 +1405,7 @@ int TsFileIOReader::do_load_timeseries_index_range(
         if (ts_idx->get_measurement_name().len_ == 0) continue;
         ts_indexs.push_back(ts_idx);
     }
+    mem_free(ti_buf);
     return E_OK;
 }
 
@@ -1407,8 +1421,12 @@ int TsFileIOReader::do_load_all_timeseries_index(
     // The leaf entries usually tile one contiguous file range, so the whole
     // device's TimeseriesIndex blocks can be read back-to-back with a single
     // pread instead of one syscall per measurement (4500 of them on a wide
-    // table). Fall back to per-entry reads if the entries do not tile.
-    if (leaf_entries_tile_range(index_node_entry_list)) {
+    // table). Fall back to per-entry reads if the entries do not tile, or if
+    // the combined range does not fit one read buffer.
+    if (leaf_entries_tile_range(index_node_entry_list) &&
+        index_node_entry_list.back().second -
+                index_node_entry_list.front().first->get_offset() <=
+            INT32_MAX) {
         return do_load_timeseries_index_range(
             index_node_entry_list.front().first->get_offset(),
             index_node_entry_list.back().second, in_timeseries_index_pa,

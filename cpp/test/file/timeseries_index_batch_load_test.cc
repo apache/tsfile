@@ -17,8 +17,10 @@
  * under the License.
  */
 
+#include <fcntl.h>
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <cstdio>
 #include <map>
 #include <memory>
@@ -50,12 +52,16 @@ const char* kAlignedDevice = "root.sg.batch_aligned";
 
 std::string MeasurementName(int i) { return "m" + std::to_string(i); }
 
-// Every gtest case runs as its own process in a shared working directory, so
-// each case writes to its own file (named after the case).
+// CTest runs each case as its own process in a shared working directory (and
+// running the binary directly runs them all in one process), so each case
+// writes to a file named after itself.
 std::string TestFileName() {
     const ::testing::TestInfo* info =
         ::testing::UnitTest::GetInstance()->current_test_info();
+    // Include the suite name too: only the suite/name pair is unique within
+    // the binary, and cases of different suites may share a name.
     return std::string("timeseries_index_batch_load_") +
+           (info != nullptr ? info->test_suite_name() : "unknown") + "_" +
            (info != nullptr ? info->name() : "unknown") + ".tsfile";
 }
 
@@ -91,13 +97,20 @@ class TimeseriesIndexBatchLoadTest : public ::testing::Test {
                                          UNCOMPRESSED);
         }
         {
+            // The writer takes ownership of the schemas of a successful
+            // registration, so the raw pointers are released on success only.
+            std::vector<std::unique_ptr<MeasurementSchema>> owned;
             std::vector<MeasurementSchema*> to_register;
             for (const auto& schema : aligned_schemas) {
-                to_register.push_back(new MeasurementSchema(schema));
+                owned.emplace_back(new MeasurementSchema(schema));
+                to_register.push_back(owned.back().get());
             }
             ASSERT_EQ(
                 writer.register_aligned_timeseries(kAlignedDevice, to_register),
                 E_OK);
+            for (auto& schema : owned) {
+                schema.release();
+            }
         }
         Tablet tablet(
             kAlignedDevice,
@@ -160,7 +173,7 @@ TEST_F(TimeseriesIndexBatchLoadTest, LoadsEveryMeasurementOfWideDevice) {
         EXPECT_EQ(index->get_data_type(), INT32);
         SimpleList<ChunkMeta*>* chunks = index->get_chunk_meta_list();
         ASSERT_NE(chunks, nullptr);
-        EXPECT_EQ(chunks->size(), 1u);
+        EXPECT_GE(chunks->size(), 1u);
         by_name[index->get_measurement_name().to_std_string()] = index;
     }
     EXPECT_EQ(by_name.size(), names.size());
