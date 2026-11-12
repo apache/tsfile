@@ -182,4 +182,83 @@ TEST(TsBlockTest, ColIterator_ReadAndNext) {
     EXPECT_TRUE(col_iterator.end());
 }
 
+TEST(TsBlockTest, ColAppenderFillRepeatedFixed) {
+    TupleDesc tuple_desc;
+    tuple_desc.push_back(ColumnSchema("value", INT32, UNCOMPRESSED, PLAIN));
+    TsBlock ts_block(&tuple_desc, 10);
+    ASSERT_EQ(ts_block.init(), E_OK);
+    ColAppender col_appender(0, &ts_block);
+
+    int32_t value = 42;
+    ASSERT_EQ(col_appender.fill(reinterpret_cast<const char*>(&value),
+                                sizeof(value), 5),
+              E_OK);
+    EXPECT_EQ(col_appender.get_col_row_count(), 5u);
+    EXPECT_EQ(ts_block.get_vector(0)->get_row_num(), 5u);
+
+    ColIterator iter(0, &ts_block);
+    for (int i = 0; i < 5; ++i) {
+        uint32_t len = 0;
+        char* read = iter.read(&len);
+        ASSERT_NE(read, nullptr);
+        EXPECT_EQ(len, sizeof(int32_t));
+        EXPECT_EQ(*reinterpret_cast<int32_t*>(read), value);
+        iter.next();
+    }
+}
+
+TEST(TsBlockTest, ColAppenderFillRepeatedVariable) {
+    TupleDesc tuple_desc;
+    tuple_desc.push_back(ColumnSchema("tag", STRING, UNCOMPRESSED, PLAIN));
+    TsBlock ts_block(&tuple_desc, 10);
+    ASSERT_EQ(ts_block.init(), E_OK);
+    ColAppender col_appender(0, &ts_block);
+
+    const std::string tag = "device-a";
+    ASSERT_EQ(col_appender.fill(tag.data(), tag.size(), 4), E_OK);
+    // A second fill continues after the rows already present.
+    ASSERT_EQ(col_appender.fill(tag.data(), tag.size(), 7), E_OK);
+    EXPECT_EQ(col_appender.get_col_row_count(), 7u);
+    EXPECT_EQ(ts_block.get_vector(0)->get_row_num(), 7u);
+
+    ColIterator iter(0, &ts_block);
+    for (int i = 0; i < 7; ++i) {
+        uint32_t len = 0;
+        char* read = iter.read(&len);
+        ASSERT_NE(read, nullptr);
+        EXPECT_EQ(std::string(read, len), tag);
+        iter.next();
+    }
+}
+
+TEST(TsBlockTest, ColAppenderFillRepeatedRejectsOverflow) {
+    TupleDesc tuple_desc;
+    tuple_desc.push_back(ColumnSchema("value", INT32, UNCOMPRESSED, PLAIN));
+    TsBlock ts_block(&tuple_desc, 3);
+    ASSERT_EQ(ts_block.init(), E_OK);
+    ColAppender col_appender(0, &ts_block);
+
+    int32_t value = 1;
+    EXPECT_EQ(col_appender.fill(reinterpret_cast<const char*>(&value),
+                                sizeof(value), 4),
+              E_INVALID_ARG);
+    EXPECT_EQ(col_appender.get_col_row_count(), 0u);
+    EXPECT_EQ(ts_block.get_vector(0)->get_row_num(), 0u);
+}
+
+TEST(TsBlockTest, ColAppenderFillRepeatedZeroCountIsNoOp) {
+    TupleDesc tuple_desc;
+    tuple_desc.push_back(ColumnSchema("value", INT32, UNCOMPRESSED, PLAIN));
+    TsBlock ts_block(&tuple_desc, 3);
+    ASSERT_EQ(ts_block.init(), E_OK);
+    ColAppender col_appender(0, &ts_block);
+
+    int32_t value = 1;
+    EXPECT_EQ(col_appender.fill(reinterpret_cast<const char*>(&value),
+                                sizeof(value), 0),
+              E_OK);
+    EXPECT_EQ(col_appender.get_col_row_count(), 0u);
+    EXPECT_EQ(ts_block.get_vector(0)->get_row_num(), 0u);
+}
+
 }  // namespace common
