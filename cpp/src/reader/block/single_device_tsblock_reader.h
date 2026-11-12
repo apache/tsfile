@@ -47,7 +47,8 @@ class ReusableTsBlock {
 
     // Returns a block matching `wanted` (time + value columns), reusing the
     // previous buffers when the shape matches. The caller resets it before use.
-    common::TsBlock* acquire(common::TupleDesc& wanted, uint32_t max_rows) {
+    common::TsBlock* acquire(const common::TupleDesc& wanted,
+                             uint32_t max_rows) {
         bool rebuild = block_ == nullptr || max_rows_ != max_rows ||
                        desc_.get_column_count() != wanted.get_column_count();
         if (!rebuild) {
