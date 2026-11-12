@@ -18,6 +18,7 @@
  */
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <memory>
 #include <random>
 #include <utility>
@@ -350,6 +351,106 @@ TEST_P(TsFileTableReaderTimeFilterTest, QueryContinuesAfterEmptyPageInChunk) {
             EXPECT_EQ(actual_times, expected_times);
         }
     }
+}
+
+// A query without a time bound is a TimeBetween spanning the full int64
+// range.  The chunk reader recognises it, returns every row of a boundary
+// page without evaluating the predicate row by row, and still applies OFFSET
+// to the filtered, device-ordered row stream.
+TEST_P(TsFileTableReaderTimeFilterTest, UnboundedTimeFilterReturnsAllRows) {
+    std::unique_ptr<TableSchema> table_schema(gen_table_schema(0));
+    TsFileTableWriter writer(&write_file_, table_schema.get());
+    constexpr int kDevices = 2;
+    constexpr int kRowsPerDevice = 10;
+    constexpr int kChunks = 3;
+    for (int chunk = 0; chunk < kChunks; ++chunk) {
+        Tablet tablet(table_schema->get_table_name(),
+                      table_schema->get_measurement_names(),
+                      table_schema->get_data_types(),
+                      table_schema->get_column_categories(),
+                      kDevices * kRowsPerDevice);
+        int index = 0;
+        for (int device = 0; device < kDevices; ++device) {
+            const std::string tag = "d" + std::to_string(device);
+            for (int row = 0; row < kRowsPerDevice; ++row) {
+                const int64_t time = chunk * kRowsPerDevice + row;
+                ASSERT_EQ(tablet.add_timestamp(index, time), common::E_OK);
+                for (int c = 0; c < 5; ++c) {
+                    const std::string name = "id" + std::to_string(c);
+                    ASSERT_EQ(tablet.add_value(index, name, tag.c_str()),
+                              common::E_OK);
+                }
+                for (int c = 0; c < 5; ++c) {
+                    const std::string name = "s" + std::to_string(c);
+                    ASSERT_EQ(tablet.add_value(index, name, int64_t(device)),
+                              common::E_OK);
+                }
+                ++index;
+            }
+        }
+        ASSERT_EQ(writer.write_table(tablet), common::E_OK);
+        // Each flush ends a chunk; with the page limit above every chunk
+        // holds a single page, so the planner's decoded times are reused by
+        // the lazy decode instead of decoding the page twice.
+        ASSERT_EQ(writer.flush(), common::E_OK);
+    }
+    ASSERT_EQ(writer.close(), common::E_OK);
+
+    TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), common::E_OK);
+
+    std::vector<std::pair<int64_t, int64_t>> all_rows;
+    for (int device = 0; device < kDevices; ++device) {
+        for (int chunk = 0; chunk < kChunks; ++chunk) {
+            for (int row = 0; row < kRowsPerDevice; ++row) {
+                all_rows.emplace_back(chunk * kRowsPerDevice + row, device);
+            }
+        }
+    }
+
+    // Selecting several value columns uses the aligned multi-value reader,
+    // which is where the page planner and the unbounded shortcut live.
+    const std::vector<std::string> query_columns{"s0", "s1", "s2", "s3", "s4"};
+    auto collect = [&](int64_t start_time, int64_t end_time, int offset,
+                       int limit) {
+        ResultSet* result = nullptr;
+        EXPECT_EQ(reader.query(table_schema->get_table_name(), query_columns,
+                               start_time, end_time, offset, limit, result),
+                  common::E_OK);
+        std::vector<std::pair<int64_t, int64_t>> rows;
+        bool has_next = false;
+        int ret = common::E_OK;
+        while ((ret = result->next(has_next)) == common::E_OK && has_next) {
+            const int64_t device = result->get_value<int64_t>("s0");
+            for (const auto& name : query_columns) {
+                EXPECT_EQ(result->get_value<int64_t>(name), device);
+            }
+            rows.emplace_back(result->get_value<int64_t>(1), device);
+        }
+        EXPECT_EQ(ret, common::E_OK);
+        reader.destroy_query_data_set(result);
+        return rows;
+    };
+
+    const int64_t min_time = std::numeric_limits<int64_t>::min();
+    const int64_t max_time = std::numeric_limits<int64_t>::max();
+    EXPECT_EQ(collect(min_time, max_time, 0, -1), all_rows);
+    const std::vector<std::pair<int64_t, int64_t>> offset_window(
+        all_rows.begin() + 7, all_rows.begin() + 15);
+    EXPECT_EQ(collect(min_time, max_time, 7, 8), offset_window);
+
+    std::vector<std::pair<int64_t, int64_t>> in_window;
+    for (const auto& row : all_rows) {
+        if (row.first >= 5 && row.first <= 14) in_window.push_back(row);
+    }
+    EXPECT_EQ(collect(5, 14, 0, -1), in_window);
+    const std::vector<std::pair<int64_t, int64_t>> offset_in_window(
+        in_window.begin() + 3, in_window.begin() + 7);
+    EXPECT_EQ(collect(5, 14, 3, 4), offset_in_window);
+
+    EXPECT_TRUE(collect(1000, 2000, 0, -1).empty());
+
+    ASSERT_EQ(reader.close(), common::E_OK);
 }
 
 // Regression for #1038: a page whose rows are all rejected by the time filter
