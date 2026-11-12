@@ -26,6 +26,8 @@
 #include <string>
 #include <vector>
 
+#include "compress/compressor_factory.h"
+
 namespace {
 
 class LZ4Test : public ::testing::Test {
@@ -166,13 +168,15 @@ TEST_F(LZ4Test, AfterUncompressFreesParamNotMember) {
 TEST_F(LZ4Test, UncompressReusesBufferAcrossDifferentPageSizes) {
     storage::LZ4Compressor compressor;
     // Small page, then a much larger one, then a small one again: the reused
-    // buffer must grow for the large page and stay correct for every page.
+    // buffer must grow for the large page (new allocation) and must be handed
+    // out again, unchanged, for the following smaller page.
     const std::vector<std::string> payloads = {std::string(1024, 'a'),
                                                std::string(200000, 'b'),
                                                std::string(4096, 'c')};
 
-    for (const auto& payload : payloads) {
-        std::string input = payload;
+    char* out_ptr[3] = {nullptr, nullptr, nullptr};
+    for (size_t i = 0; i < payloads.size(); ++i) {
+        std::string input = payloads[i];
         char* compressed = nullptr;
         uint32_t compressed_len = 0;
         ASSERT_EQ(compressor.reset(true), common::E_OK);
@@ -189,10 +193,42 @@ TEST_F(LZ4Test, UncompressReusesBufferAcrossDifferentPageSizes) {
         ASSERT_NE(uncompressed, nullptr);
         EXPECT_EQ(uncompressed_len, input.size());
         EXPECT_EQ(std::string(uncompressed, uncompressed_len), input);
+        out_ptr[i] = uncompressed;
 
         compressor.after_uncompress(uncompressed);
         compressor.after_compress(compressed);
     }
+
+    EXPECT_NE(out_ptr[0], out_ptr[1]);  // grew: a new allocation
+    EXPECT_EQ(out_ptr[1], out_ptr[2]);  // smaller page reuses the same buffer
+}
+
+// CompressorFactory::free() must run ~Compressor(): compressors are
+// placement-new'd into mem_alloc() storage, and LZ4 retains its decompression
+// buffer there.  Before the fix the buffer leaked on every recovered chunk
+// (LeakSanitizer caught it in the file-recovery tests).
+TEST_F(LZ4Test, FactoryFreeReleasesRetainedBuffer) {
+    storage::Compressor* compressor =
+        storage::CompressorFactory::alloc_compressor(common::LZ4);
+    ASSERT_NE(nullptr, compressor);
+
+    std::string input(100000, 'z');
+    char* compressed = nullptr;
+    uint32_t compressed_len = 0;
+    ASSERT_EQ(compressor->reset(true), common::E_OK);
+    ASSERT_EQ(compressor->compress(&input[0], input.size(), compressed,
+                                   compressed_len),
+              common::E_OK);
+    char* uncompressed = nullptr;
+    uint32_t uncompressed_len = 0;
+    ASSERT_EQ(compressor->reset(false), common::E_OK);
+    ASSERT_EQ(compressor->uncompress(compressed, compressed_len, uncompressed,
+                                     uncompressed_len),
+              common::E_OK);
+    EXPECT_EQ(std::string(uncompressed, uncompressed_len), input);
+    compressor->after_uncompress(uncompressed);
+    compressor->after_compress(compressed);
+    storage::CompressorFactory::free(compressor);
 }
 
 TEST_F(LZ4Test, UncompressAfterPreviousPageNoLongerInvalidated) {

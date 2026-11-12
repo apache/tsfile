@@ -110,6 +110,9 @@ int LZ4Compressor::uncompress(char* compressed_buf, uint32_t compressed_buf_len,
                               char*& uncompressed_buf,
                               uint32_t& uncompressed_buf_len, float ratio) {
     int ret = E_OK;
+    if (ratio <= 0) {
+        return E_COMPRESS_ERR;
+    }
     int src_size = (int)(compressed_buf_len * ratio);
     // Reuse the persistent buffer across pages; (re)allocate only when the
     // requested capacity grows. This avoids one malloc + free per page, which

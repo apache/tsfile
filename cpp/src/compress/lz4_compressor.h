@@ -43,6 +43,9 @@ class LZ4Compressor : public Compressor {
           uncompressed_buf_(nullptr),
           uncompressed_buf_capacity_(0){};
     ~LZ4Compressor() { destroy(); }
+    // Owns the reused decompression buffer; a copy would double-free it.
+    LZ4Compressor(const LZ4Compressor&) = delete;
+    LZ4Compressor& operator=(const LZ4Compressor&) = delete;
     // @for_compress
     //  true  - for compressiom
     //  false - for uncompression
