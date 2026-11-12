@@ -65,7 +65,7 @@ class Filter {
     }
 
     // True when this time filter selects one contiguous interval: inside a
-    // BOUNDARY page's [row_begin, row_end] range every timestamp matches (e.g.
+    // BOUNDARY page's [row_begin, row_end) range every timestamp matches (e.g.
     // TimeBetween, one-sided Gt/Lt), so the range can be bulk-copied. Discrete
     // sets (TimeIn) or negated forms (NOT BETWEEN / NotEq) may contain holes
     // and must still be checked per value. Defaults to false; only explicitly

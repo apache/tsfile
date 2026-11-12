@@ -172,10 +172,14 @@ class AlignedBulkCopyTest : public ::testing::Test {
     // output order. `max_direct_pages` reports the largest direct-decode prefix
     // the reader decided on, `bulk_pages` the number of pages copied by the
     // bulk path.
+    // Reads the whole chunk once; the optional out parameters are written,
+    // not accumulated into.
     std::vector<Row> read_all(const std::vector<std::string>& columns,
                               Filter* time_filter, uint32_t block_rows,
                               size_t* max_direct_pages = nullptr,
                               size_t* bulk_pages = nullptr) {
+        if (max_direct_pages != nullptr) *max_direct_pages = 0;
+        if (bulk_pages != nullptr) *bulk_pages = 0;
         std::vector<ChunkMeta*> value_metas;
         for (const auto& name : columns) {
             value_metas.push_back(value_metas_[name]);

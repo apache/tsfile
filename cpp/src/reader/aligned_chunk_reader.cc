@@ -1934,10 +1934,26 @@ int AlignedChunkReader::decode_value_page_for_slot(uint32_t col_idx,
     }
     pps.predecoded_count = nonnull_total;
     if (page_idx < direct_page_end_) {
-        // Values of this page occupy space in the destination column whether
-        // they were written in place or will be appended from this buffer.
+        // Reserve in the destination column exactly the values the scatter
+        // will emit for this page: the non-null ones in [row_begin, row_end).
+        // A page that could not be written in place (nulls, or a retained
+        // range shorter than the page) is appended from its staging buffer
+        // instead, so advancing by the whole page's non-null count would push
+        // the offsets of the following pages too far ahead.
+        int values_in_range = nonnull_total;
+        if (pps.direct_values == nullptr) {
+            const int up_to_end =
+                count_non_null_prefix(pps.notnull_bitmap, page_info.row_end);
+            const int up_to_begin =
+                count_non_null_prefix(pps.notnull_bitmap, page_info.row_begin);
+            if (up_to_end < 0 || up_to_begin < 0) {
+                cleanup();
+                return E_TSFILE_CORRUPTED;
+            }
+            values_in_range = up_to_end - up_to_begin;
+        }
         direct_col_off_[col_idx] +=
-            static_cast<size_t>(nonnull_total) * elem_size;
+            static_cast<size_t>(values_in_range) * elem_size;
     }
     cleanup();
     return E_OK;
