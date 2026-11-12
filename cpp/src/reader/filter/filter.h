@@ -64,6 +64,10 @@ class Filter {
         return nullptr;
     }
 
+    // True when the predicate accepts every timestamp (e.g. TimeBetween over
+    // the full int64 range). Callers may then skip per-row evaluation.
+    virtual bool is_unbounded_time_filter() const { return false; }
+
     // Batch time filter: evaluate time filter on an array of timestamps.
     // Writes true/false into @mask for each element.
     // Returns the number of elements that passed (mask[i] == true).
