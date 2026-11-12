@@ -31,7 +31,6 @@
 
 #include "common/global.h"
 #include "common/row_record.h"
-#include "common/tablet.h"
 #include "cwrapper/tsfile_cwrapper.h"
 #include "file/write_file.h"
 #include "reader/result_set.h"
@@ -80,31 +79,62 @@ TEST_F(CWrapperTest, ParallelTogglesAndThreadCountValidate) {
 
     EXPECT_EQ(tsfile_set_parallel_read_enabled(0), RET_OK);
     EXPECT_FALSE(common::get_parallel_read_enabled());
+    EXPECT_EQ(0, tsfile_get_parallel_read_enabled());
     EXPECT_EQ(tsfile_set_parallel_read_enabled(1), RET_OK);
     EXPECT_TRUE(common::get_parallel_read_enabled());
+    EXPECT_EQ(1, tsfile_get_parallel_read_enabled());
     // Any non-zero value enables the path, matching the bool parameter.
     EXPECT_EQ(tsfile_set_parallel_read_enabled(42), RET_OK);
     EXPECT_TRUE(common::get_parallel_read_enabled());
 
     EXPECT_EQ(tsfile_set_parallel_write_enabled(0), RET_OK);
     EXPECT_FALSE(common::get_parallel_write_enabled());
+    EXPECT_EQ(0, tsfile_get_parallel_write_enabled());
     EXPECT_EQ(tsfile_set_parallel_write_enabled(1), RET_OK);
     EXPECT_TRUE(common::get_parallel_write_enabled());
+    EXPECT_EQ(1, tsfile_get_parallel_write_enabled());
 
     // Out-of-range counts are rejected and leave the configured size alone.
     for (int32_t invalid : {0, -1, 65, 1000}) {
         EXPECT_EQ(tsfile_set_thread_count(invalid), RET_INVALID_ARG) << invalid;
         EXPECT_EQ(common::g_config_value_.thread_count_, thread_count)
             << invalid;
+        EXPECT_EQ(tsfile_get_thread_count(), thread_count) << invalid;
     }
     for (int32_t valid : {1, 32, 64}) {
         EXPECT_EQ(tsfile_set_thread_count(valid), RET_OK) << valid;
         EXPECT_EQ(common::g_config_value_.thread_count_, valid) << valid;
+        EXPECT_EQ(tsfile_get_thread_count(), valid) << valid;
     }
 
     EXPECT_EQ(tsfile_set_thread_count(thread_count), RET_OK);
     EXPECT_EQ(tsfile_set_parallel_read_enabled(read_enabled), RET_OK);
     EXPECT_EQ(tsfile_set_parallel_write_enabled(write_enabled), RET_OK);
+}
+
+// The switches are read by the library's lazy initialization.  Setting them
+// before the first reader/writer used to be undone: init_config_value()
+// assigned both flags true, silently re-enabling the parallel paths.
+TEST_F(CWrapperTest, ParallelTogglesSurviveLazyInitialization) {
+    storage::libtsfile_destroy();
+    const std::string path = "cwrapper_toggles_before_init.tsfile";
+    remove(path.c_str());
+
+    ASSERT_EQ(tsfile_set_parallel_read_enabled(0), RET_OK);
+    ASSERT_EQ(tsfile_set_parallel_write_enabled(0), RET_OK);
+
+    ERRNO code = RET_OK;
+    WriteFile file = write_file_new(path.c_str(), &code);
+    ASSERT_EQ(RET_OK, code);
+    ASSERT_NE(nullptr, file);
+
+    EXPECT_EQ(0, tsfile_get_parallel_read_enabled());
+    EXPECT_EQ(0, tsfile_get_parallel_write_enabled());
+
+    free_write_file(&file);
+    EXPECT_EQ(tsfile_set_parallel_read_enabled(1), RET_OK);
+    EXPECT_EQ(tsfile_set_parallel_write_enabled(1), RET_OK);
+    remove(path.c_str());
 }
 
 // Flipping the parallel read switch must not change what a query returns; it
@@ -164,12 +194,19 @@ TEST_F(CWrapperTest, ParallelReadToggleReturnsIdenticalRows) {
         ERRNO code = RET_OK;
         TsFileReader reader = tsfile_reader_new(path.c_str(), &code);
         EXPECT_EQ(RET_OK, code);
+        if (reader == nullptr) {
+            return std::vector<std::string>();
+        }
         ResultSet result_set =
             tsfile_query_table(reader, "t", name_ptrs.data(),
                                static_cast<uint32_t>(name_ptrs.size()), 0,
                                std::numeric_limits<int64_t>::max(), &code);
         EXPECT_EQ(RET_OK, code);
         std::vector<std::string> rows;
+        if (result_set == nullptr) {
+            tsfile_reader_close(reader);
+            return rows;
+        }
         while (tsfile_result_set_next(result_set, &code) && code == RET_OK) {
             char* tag = tsfile_result_set_get_value_by_name_string(result_set,
                                                                    "device");

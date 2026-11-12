@@ -17,6 +17,8 @@
 #
 
 import os
+import subprocess
+import sys
 from datetime import date
 
 import numpy as np
@@ -672,10 +674,19 @@ def test_file_read_backend_configuration_and_query_equivalence():
 def test_parallel_switches_and_thread_count():
     from tsfile import (
         InvalidArgumentError,
+        get_parallel_read_enabled,
+        get_parallel_write_enabled,
+        get_thread_count,
+        get_tsfile_config,
         set_parallel_read_enabled,
         set_parallel_write_enabled,
         set_thread_count,
+        set_tsfile_config,
     )
+
+    original_read = get_parallel_read_enabled()
+    original_write = get_parallel_write_enabled()
+    original_threads = get_thread_count()
 
     file_name = "parallel_switches_python_test.tsfile"
     table = TableSchema(
@@ -709,6 +720,16 @@ def test_parallel_switches_and_thread_count():
             with pytest.raises(InvalidArgumentError):
                 set_thread_count(invalid)
         set_thread_count(4)
+        assert get_thread_count() == 4
+
+        # The switches are readable and also reachable through the config dict.
+        set_parallel_read_enabled(False)
+        assert get_parallel_read_enabled() is False
+        assert get_tsfile_config()["parallel_read_enabled_"] is False
+        set_tsfile_config({"parallel_read_enabled_": True})
+        assert get_parallel_read_enabled() is True
+        with pytest.raises(TypeError):
+            set_tsfile_config({"thread_count_": True})
 
         expected = [
             (row, f"device{device}", row * 3)
@@ -741,11 +762,39 @@ def test_parallel_switches_and_thread_count():
             assert parallel_rows == serial_rows
             assert serial_rows == expected
     finally:
-        set_parallel_read_enabled(True)
-        set_parallel_write_enabled(True)
-        set_thread_count(6)
+        set_parallel_read_enabled(original_read)
+        set_parallel_write_enabled(original_write)
+        set_thread_count(original_threads)
         if os.path.exists(file_name):
             os.remove(file_name)
+
+
+def test_parallel_toggles_apply_before_first_use():
+    # Lazy initialization used to assign both switches to true, undoing any
+    # setting made before the first reader/writer existed.  A fresh process is
+    # the only way to exercise that ordering from Python.
+    script = """
+import tsfile
+tsfile.set_parallel_read_enabled(False)
+tsfile.set_parallel_write_enabled(False)
+tsfile.set_thread_count(3)
+try:
+    tsfile.TsFileReader("missing_before_init.tsfile")
+except Exception:
+    pass
+print(
+    tsfile.get_parallel_read_enabled(),
+    tsfile.get_parallel_write_enabled(),
+    tsfile.get_thread_count(),
+)
+"""
+    out = subprocess.run(
+        [sys.executable, "-c", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.split()
+    assert out == ["False", "False", "3"]
 
 
 def test_tsfile_to_df():
