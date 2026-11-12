@@ -52,7 +52,8 @@ class TsFileIOReader {
           tsfile_meta_(&tsfile_meta_page_arena_),
           tsfile_meta_ready_(false),
           read_file_created_(false),
-          device_node_cache_(DEVICE_NODE_CACHE_CAPACITY, 0) {
+          device_node_cache_(DEVICE_NODE_CACHE_CAPACITY, 0),
+          index_node_cache_(INDEX_NODE_CACHE_CAPACITY, 0) {
         tsfile_meta_page_arena_.init(512, common::MOD_TSFILE_READER);
     }
 
@@ -233,6 +234,33 @@ class TsFileIOReader {
 
     static constexpr size_t DEVICE_NODE_CACHE_CAPACITY = 64;
 
+    // A deserialized index-tree node (device- or measurement-level) together
+    // with the arena backing it. Declared before `node` so the node is
+    // destroyed first.
+    struct CachedIndexNode {
+        std::shared_ptr<common::PageArena> arena;
+        std::shared_ptr<MetaIndexNode> node;
+    };
+
+    // One leaf of the device index holds up to max_degree_of_index_node
+    // devices, so an uncached tree walk re-deserializes the same node (and
+    // allocates every device-id string in it) once per device. A small LRU
+    // keyed by the node's file offset turns that into once per node.
+    static constexpr size_t INDEX_NODE_CACHE_CAPACITY = 16;
+
+    /**
+     * Returns the index node serialized at [start_offset, end_offset),
+     * reading and deserializing it on a cache miss.
+     *
+     * The out parameter carries the node *and* the arena it was allocated in:
+     * the node, its children and their names are placement-new'ed into that
+     * arena, and the cache may evict the entry (and release the arena) at any
+     * time.  Callers must keep the returned CachedIndexNode alive for as long
+     * as they touch the node.
+     */
+    int get_cached_index_node(int64_t start_offset, int64_t end_offset,
+                              bool is_device, CachedIndexNode& out);
+
     // Returns E_OK on hit (out is filled), or an error code on miss / load
     // failure (E_DEVICE_NOT_EXIST when the device is absent, the propagated
     // error otherwise).  Copying into out keeps the caller safe from rehash /
@@ -252,6 +280,19 @@ class TsFileIOReader {
     }
     static size_t TEST_device_node_cache_capacity() {
         return DEVICE_NODE_CACHE_CAPACITY;
+    }
+    size_t TEST_index_node_cache_size() const {
+        std::lock_guard<std::mutex> lk(index_node_cache_mu_);
+        return index_node_cache_.size();
+    }
+    static size_t TEST_index_node_cache_capacity() {
+        return INDEX_NODE_CACHE_CAPACITY;
+    }
+    // Nodes actually read from the file (i.e. cache misses).  Lets a test
+    // prove that a second lookup round is served from the cache.
+    size_t TEST_index_node_cache_misses() const {
+        std::lock_guard<std::mutex> lk(index_node_cache_mu_);
+        return index_node_cache_misses_;
     }
 #endif
 
@@ -277,6 +318,12 @@ class TsFileIOReader {
     // shared ownership keeps an entry alive after a concurrent eviction.
     common::Cache<std::string, CachedDeviceNode> device_node_cache_;
     mutable std::mutex device_node_cache_mu_;
+    // Keyed by the node's start offset in the file.
+    common::Cache<int64_t, CachedIndexNode> index_node_cache_;
+    mutable std::mutex index_node_cache_mu_;
+#ifdef ENABLE_TEST
+    size_t index_node_cache_misses_ = 0;
+#endif
 };
 
 }  // end namespace storage
