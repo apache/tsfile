@@ -194,6 +194,12 @@ class ByteBuffer {
         }
         real_data_size_ = static_cast<uint32_t>(need);
         return E_OK;
+    // Declare bytes that were written directly through get_data() without going
+    // through append_*(). Used when a caller decodes straight into this buffer
+    // at a known offset.
+    FORCE_INLINE void set_data_size(uint32_t size) {
+        ASSERT(size <= reserved_size_);
+        real_data_size_ = size;
     }
 
    private:
