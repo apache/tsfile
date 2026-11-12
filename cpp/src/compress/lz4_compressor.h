@@ -47,7 +47,7 @@ class LZ4Compressor : public Compressor {
     LZ4Compressor(const LZ4Compressor&) = delete;
     LZ4Compressor& operator=(const LZ4Compressor&) = delete;
     // @for_compress
-    //  true  - for compressiom
+    //  true  - for compression
     //  false - for uncompression
     int reset(bool for_compress) OVERRIDE;
     void destroy() OVERRIDE;
