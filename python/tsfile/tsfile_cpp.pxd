@@ -312,15 +312,27 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         TsFileReader reader, const TsFilePreparedLocator * locator,
         PreparedSeriesHandle aligned_time_owner, bint trust_index,
         ErrorCode * err_code) nogil
+    PreparedSeriesHandle tsfile_reader_prepare_table_series(
+        TsFileReader reader, const char * table_name, const char * column_name,
+        TagFilterHandle tag_filter, ErrorCode * err_code) nogil
     void tsfile_prepared_series_free(PreparedSeriesHandle prepared)
     ResultSet tsfile_reader_query_prepared(
         TsFileReader reader, PreparedSeriesHandle prepared,
         int64_t start_time, int64_t end_time, int offset, int limit,
         ErrorCode * err_code) nogil
+    ResultSet tsfile_reader_query_prepared_ex(
+        TsFileReader reader, PreparedSeriesHandle prepared,
+        int64_t start_time, int64_t end_time, int offset, int limit,
+        uint32_t block_rows, ErrorCode * err_code) nogil
     ResultSet tsfile_reader_query_prepared_multi(
         TsFileReader reader, const PreparedSeriesHandle * prepared,
         uint32_t prepared_count, int64_t start_time, int64_t end_time,
         int offset, int limit, ErrorCode * err_code) nogil
+    ResultSet tsfile_reader_query_prepared_multi_ex(
+        TsFileReader reader, const PreparedSeriesHandle * prepared,
+        uint32_t prepared_count, int64_t start_time, int64_t end_time,
+        int offset, int limit, uint32_t block_rows,
+        ErrorCode * err_code) nogil
 
     ResultSet tsfile_query_table_on_tree(TsFileReader reader,
                          char** columns, uint32_t column_num,

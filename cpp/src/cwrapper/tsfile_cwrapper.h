@@ -762,6 +762,15 @@ PreparedSeriesHandle tsfile_reader_prepare_series_with_time_owner(
 void tsfile_prepared_series_free(PreparedSeriesHandle prepared);
 
 /**
+ * Resolve one table column selected by a tag filter into a reusable series.
+ * The filter must match exactly one device; otherwise E_NOT_SUPPORT is
+ * returned and the caller should fall back to the regular table query.
+ */
+PreparedSeriesHandle tsfile_reader_prepare_table_series(
+    TsFileReader reader, const char* table_name, const char* column_name,
+    TagFilterHandle tag_filter, ERRNO* err_code);
+
+/**
  * Query a prepared series without traversing the TsFile footer index.
  * An inverted time range succeeds with an empty result set.
  */
@@ -771,6 +780,17 @@ ResultSet tsfile_reader_query_prepared(TsFileReader reader,
                                        int offset, int limit, ERRNO* err_code);
 
 /**
+ * Same as tsfile_reader_query_prepared, with an explicit TsBlock row
+ * capacity. block_rows == 0 keeps the default capacity.
+ */
+ResultSet tsfile_reader_query_prepared_ex(TsFileReader reader,
+                                          PreparedSeriesHandle prepared,
+                                          Timestamp start_time,
+                                          Timestamp end_time, int offset,
+                                          int limit, uint32_t block_rows,
+                                          ERRNO* err_code);
+
+/**
  * Query multiple aligned prepared value columns sharing one time axis.
  * An inverted time range succeeds with an empty result set.
  */
@@ -778,6 +798,15 @@ ResultSet tsfile_reader_query_prepared_multi(
     TsFileReader reader, const PreparedSeriesHandle* prepared,
     uint32_t prepared_count, Timestamp start_time, Timestamp end_time,
     int offset, int limit, ERRNO* err_code);
+
+/**
+ * Same as tsfile_reader_query_prepared_multi, with an explicit TsBlock row
+ * capacity. block_rows == 0 keeps the default capacity.
+ */
+ResultSet tsfile_reader_query_prepared_multi_ex(
+    TsFileReader reader, const PreparedSeriesHandle* prepared,
+    uint32_t prepared_count, Timestamp start_time, Timestamp end_time,
+    int offset, int limit, uint32_t block_rows, ERRNO* err_code);
 
 /**
  * @brief Queries time series data from a specific table within time range.

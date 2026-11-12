@@ -609,6 +609,40 @@ PreparedSeriesHandle tsfile_reader_prepare_series(
     return handle;
 }
 
+PreparedSeriesHandle tsfile_reader_prepare_table_series(
+    TsFileReader reader, const char* table_name, const char* column_name,
+    TagFilterHandle tag_filter, ERRNO* err_code) {
+    if (err_code == nullptr) {
+        return nullptr;
+    }
+    *err_code = common::E_INVALID_ARG;
+    if (reader == nullptr || table_name == nullptr || column_name == nullptr) {
+        return nullptr;
+    }
+    try {
+        std::shared_ptr<storage::PreparedSeries> prepared;
+        *err_code =
+            static_cast<storage::TsFileReader*>(reader)->prepare_table_series(
+                table_name, column_name,
+                static_cast<storage::Filter*>(tag_filter), prepared);
+        if (*err_code != common::E_OK) {
+            return nullptr;
+        }
+        auto* handle = new (std::nothrow)
+            std::shared_ptr<storage::PreparedSeries>(std::move(prepared));
+        if (handle == nullptr) {
+            *err_code = common::E_OOM;
+        }
+        return handle;
+    } catch (const std::bad_alloc&) {
+        *err_code = common::E_OOM;
+        return nullptr;
+    } catch (...) {
+        *err_code = common::E_FILE_READ_ERR;
+        return nullptr;
+    }
+}
+
 PreparedSeriesHandle tsfile_reader_prepare_series_with_time_owner(
     TsFileReader reader, const TsFilePreparedLocator* locator,
     PreparedSeriesHandle aligned_time_owner, bool trust_index,
@@ -661,6 +695,16 @@ ResultSet tsfile_reader_query_prepared(TsFileReader reader,
                                        PreparedSeriesHandle prepared,
                                        Timestamp start_time, Timestamp end_time,
                                        int offset, int limit, ERRNO* err_code) {
+    return tsfile_reader_query_prepared_ex(
+        reader, prepared, start_time, end_time, offset, limit, 0, err_code);
+}
+
+ResultSet tsfile_reader_query_prepared_ex(TsFileReader reader,
+                                          PreparedSeriesHandle prepared,
+                                          Timestamp start_time,
+                                          Timestamp end_time, int offset,
+                                          int limit, uint32_t block_rows,
+                                          ERRNO* err_code) {
     if (err_code == nullptr) {
         return nullptr;
     }
@@ -672,7 +716,7 @@ ResultSet tsfile_reader_query_prepared(TsFileReader reader,
         static_cast<std::shared_ptr<storage::PreparedSeries>*>(prepared);
     storage::ResultSet* result = nullptr;
     *err_code = static_cast<storage::TsFileReader*>(reader)->query_prepared(
-        *handle, start_time, end_time, offset, limit, result);
+        *handle, start_time, end_time, offset, limit, result, block_rows);
     return result;
 }
 
@@ -680,6 +724,15 @@ ResultSet tsfile_reader_query_prepared_multi(
     TsFileReader reader, const PreparedSeriesHandle* prepared,
     uint32_t prepared_count, Timestamp start_time, Timestamp end_time,
     int offset, int limit, ERRNO* err_code) {
+    return tsfile_reader_query_prepared_multi_ex(
+        reader, prepared, prepared_count, start_time, end_time, offset, limit,
+        0, err_code);
+}
+
+ResultSet tsfile_reader_query_prepared_multi_ex(
+    TsFileReader reader, const PreparedSeriesHandle* prepared,
+    uint32_t prepared_count, Timestamp start_time, Timestamp end_time,
+    int offset, int limit, uint32_t block_rows, ERRNO* err_code) {
     if (err_code == nullptr) {
         return nullptr;
     }
@@ -702,7 +755,8 @@ ResultSet tsfile_reader_query_prepared_multi(
     storage::ResultSet* result = nullptr;
     *err_code =
         static_cast<storage::TsFileReader*>(reader)->query_prepared_multi(
-            native_prepared, start_time, end_time, offset, limit, result);
+            native_prepared, start_time, end_time, offset, limit, result,
+            block_rows);
     return result;
 }
 

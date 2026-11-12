@@ -121,6 +121,44 @@ class NotTagFilter(TagFilter):
         return f"NOT({self.filter})"
 
 
+def cache_key(tag_filter):
+    """Return a hashable structural key for a tag filter.
+
+    ``None`` means the filter is absent or contains an unknown node, in which
+    case callers must not cache a resolved device for it.
+    """
+    if tag_filter is None:
+        return None
+    if isinstance(tag_filter, ComparisonTagFilter):
+        return ("cmp", tag_filter.column_name, tag_filter.op, tag_filter.value)
+    if isinstance(tag_filter, BetweenTagFilter):
+        return (
+            "between",
+            tag_filter.column_name,
+            tag_filter.lower,
+            tag_filter.upper,
+            tag_filter.is_not,
+        )
+    if isinstance(tag_filter, AndTagFilter):
+        left = cache_key(tag_filter.left)
+        right = cache_key(tag_filter.right)
+        if left is None or right is None:
+            return None
+        return ("and", left, right)
+    if isinstance(tag_filter, OrTagFilter):
+        left = cache_key(tag_filter.left)
+        right = cache_key(tag_filter.right)
+        if left is None or right is None:
+            return None
+        return ("or", left, right)
+    if isinstance(tag_filter, NotTagFilter):
+        inner = cache_key(tag_filter.filter)
+        if inner is None:
+            return None
+        return ("not", inner)
+    return None
+
+
 # Convenience factory functions
 def tag_eq(column_name: str, value: str) -> TagFilter:
     """Create a tag equality filter: column == value."""

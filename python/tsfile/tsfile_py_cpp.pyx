@@ -881,6 +881,22 @@ cdef PreparedSeriesHandle tsfile_reader_prepare_series_with_time_owner_c(
     check_error(code, b"Failed to prepare aligned Dataset Index locator")
     return prepared
 
+cdef PreparedSeriesHandle tsfile_reader_prepare_table_series_c(
+        TsFileReader reader, object table_name, object column_name,
+        TagFilterHandle tag_filter) except NULL:
+    cdef ErrorCode code = 0
+    cdef bytes table_bytes = table_name.encode('utf-8')
+    cdef bytes column_bytes = column_name.encode('utf-8')
+    cdef const char * c_table = table_bytes
+    cdef const char * c_column = column_bytes
+    cdef PreparedSeriesHandle prepared
+    with nogil:
+        prepared = tsfile_reader_prepare_table_series(
+            reader, c_table, c_column, tag_filter, &code
+        )
+    check_error(code, b"Failed to prepare table series")
+    return prepared
+
 cdef ResultSet tsfile_reader_query_prepared_c(
         TsFileReader reader, PreparedSeriesHandle prepared,
         int64_t start_time, int64_t end_time, int offset, int limit):
@@ -889,6 +905,19 @@ cdef ResultSet tsfile_reader_query_prepared_c(
     with nogil:
         result = tsfile_reader_query_prepared(
             reader, prepared, start_time, end_time, offset, limit, &code)
+    check_error(code, b"Failed to query prepared series")
+    return result
+
+cdef ResultSet tsfile_reader_query_prepared_ex_c(
+        TsFileReader reader, PreparedSeriesHandle prepared,
+        int64_t start_time, int64_t end_time, int offset, int limit,
+        uint32_t block_rows):
+    cdef ErrorCode code = 0
+    cdef ResultSet result
+    with nogil:
+        result = tsfile_reader_query_prepared_ex(
+            reader, prepared, start_time, end_time, offset, limit,
+            block_rows, &code)
     check_error(code, b"Failed to query prepared series")
     return result
 
