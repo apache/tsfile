@@ -363,8 +363,7 @@ int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
         }
         if (IS_SUCC(ret)) {
             if (alloc && ret_tsblock == nullptr) {
-                ret_tsblock =
-                    is_multi_value_ ? alloc_tsblock_multi() : alloc_tsblock();
+                ret_tsblock = alloc_or_reuse_tsblock();
             }
             ret = chunk_reader_->get_next_page(ret_tsblock, filter, *data_pa_,
                                                min_time_hint, row_offset_,
@@ -538,6 +537,35 @@ int TsFileSeriesScanIterator::init_chunk_reader_multi() {
     for (auto& cur : value_chunk_meta_cursors_) cur++;
 
     return ret;
+}
+
+TsBlock* TsFileSeriesScanIterator::alloc_or_reuse_tsblock() {
+    if (!is_multi_value_ || tsblock_factory_ == nullptr) {
+        return is_multi_value_ ? alloc_tsblock_multi() : alloc_tsblock();
+    }
+    auto* acr = static_cast<AlignedChunkReader*>(chunk_reader_);
+    // Same layout alloc_tsblock_multi() would build: time + one column per
+    // value measurement of the series now loaded.
+    tuple_desc_.reset();
+    tuple_desc_.push_back(ColumnSchema("time", common::INT64,
+                                       common::INVALID_COMPRESSION,
+                                       common::INVALID_ENCODING));
+    const uint32_t num_cols = acr->get_value_column_count();
+    for (uint32_t c = 0; c < num_cols; c++) {
+        ChunkHeader& ch = acr->get_value_chunk_header(c);
+        tuple_desc_.push_back(ColumnSchema(ch.measurement_name_, ch.data_type_,
+                                           ch.compression_type_,
+                                           ch.encoding_type_));
+    }
+    common::TsBlock* block =
+        tsblock_factory_(tsblock_factory_ctx_, tuple_desc_, max_block_rows_);
+    if (block != nullptr) {
+        block->reset();
+        return block;
+    }
+    // The factory could not match this layout; a fresh block is allocated and
+    // owned by this iterator (destroyed by revert_tsblock()/destroy()).
+    return alloc_tsblock_multi();
 }
 
 TsBlock* TsFileSeriesScanIterator::alloc_tsblock() {
