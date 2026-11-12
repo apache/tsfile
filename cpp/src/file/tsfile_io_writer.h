@@ -61,7 +61,7 @@ class TsFileIOWriter {
     // a chunk flush into dozens of tiny write() syscalls and page allocations;
     // 64 KiB keeps a chunk's data in one or two pages without wasting much
     // memory on the trailing page.
-    static const uint32_t WRITE_STREAM_PAGE_SIZE = 64 * 1024;
+    static constexpr uint32_t WRITE_STREAM_PAGE_SIZE = 64 * 1024;
 
    public:
     TsFileIOWriter()

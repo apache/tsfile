@@ -343,6 +343,11 @@ TEST_F(TsFileWriterTest, MultiFlushWriteAndRead) {
 TEST_F(TsFileWriterTest, WriteChunkSpanningMultipleWriteStreamPages) {
     const std::vector<int64_t> row_counts = {1000, 8191,  8192,
                                              8193, 16384, 20000};
+    // Keep at least one case spanning several pages even if the page size or
+    // the value width changes: the largest payload alone must exceed one page
+    // (per-chunk metadata only adds bytes on top of this).
+    EXPECT_LT(storage::TsFileIOWriter::WRITE_STREAM_PAGE_SIZE,
+              row_counts.back() * static_cast<int64_t>(sizeof(int64_t)));
     std::vector<std::string> select_list;
     for (size_t i = 0; i < row_counts.size(); ++i) {
         const std::string device = "device_" + std::to_string(i);
