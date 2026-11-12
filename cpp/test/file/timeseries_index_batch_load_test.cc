@@ -17,8 +17,10 @@
  * under the License.
  */
 
+#include <fcntl.h>
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <cstdio>
 #include <map>
 #include <memory>
@@ -56,7 +58,10 @@ std::string MeasurementName(int i) { return "m" + std::to_string(i); }
 std::string TestFileName() {
     const ::testing::TestInfo* info =
         ::testing::UnitTest::GetInstance()->current_test_info();
+    // Include the suite name too: only the suite/name pair is unique within
+    // the binary, and cases of different suites may share a name.
     return std::string("timeseries_index_batch_load_") +
+           (info != nullptr ? info->test_suite_name() : "unknown") + "_" +
            (info != nullptr ? info->name() : "unknown") + ".tsfile";
 }
 

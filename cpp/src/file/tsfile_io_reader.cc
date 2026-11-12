@@ -962,6 +962,7 @@ int TsFileIOReader::get_timeseries_indexes(
             return ret;
         }
         std::unordered_map<std::string, ITimeseriesIndex*> name_to_index;
+        name_to_index.reserve(loaded_indexes.size());
         for (ITimeseriesIndex* loaded : loaded_indexes) {
             if (is_aligned) {
                 void* aligned_buf = pa.alloc(sizeof(AlignedTimeseriesIndex));
@@ -1297,8 +1298,11 @@ int TsFileIOReader::do_load_timeseries_index_range(
     std::vector<ITimeseriesIndex*>& ts_indexs) {
     int ret = E_OK;
     const int64_t read_size_i64 = end_offset - start_offset;
-    if (read_size_i64 <= 0 || read_size_i64 > INT32_MAX) {
+    if (read_size_i64 <= 0) {
         return E_TSFILE_CORRUPTED;
+    }
+    if (read_size_i64 > INT32_MAX) {
+        return E_OVERFLOW;
     }
     const int32_t read_size = static_cast<int32_t>(read_size_i64);
     // The raw bytes are needed only while the indexes are parsed, so they are
@@ -1359,8 +1363,12 @@ int TsFileIOReader::do_load_all_timeseries_index(
     // The leaf entries usually tile one contiguous file range, so the whole
     // device's TimeseriesIndex blocks can be read back-to-back with a single
     // pread instead of one syscall per measurement (4500 of them on a wide
-    // table). Fall back to per-entry reads if the entries do not tile.
-    if (leaf_entries_tile_range(index_node_entry_list)) {
+    // table). Fall back to per-entry reads if the entries do not tile, or if
+    // the combined range does not fit one read buffer.
+    if (leaf_entries_tile_range(index_node_entry_list) &&
+        index_node_entry_list.back().second -
+                index_node_entry_list.front().first->get_offset() <=
+            INT32_MAX) {
         return do_load_timeseries_index_range(
             index_node_entry_list.front().first->get_offset(),
             index_node_entry_list.back().second, in_timeseries_index_pa,
