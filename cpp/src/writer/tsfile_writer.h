@@ -35,7 +35,7 @@
 #include "common/tablet.h"
 
 namespace storage {
-class WriteFile;
+class RandomAccessWriteFile;
 class ChunkWriter;
 class TsFileIOWriter;
 class RestorableTsFileIOWriter;
@@ -60,7 +60,7 @@ class TsFileWriter {
 
     int open(const std::string& file_path, int flags, mode_t mode);
     int open(const std::string& file_path);
-    int init(storage::WriteFile* write_file);
+    int init(storage::RandomAccessWriteFile* write_file);
     int init(storage::RestorableTsFileIOWriter* rw);
 
     void set_generate_table_schema(bool generate_table_schema);
@@ -198,7 +198,7 @@ class TsFileWriter {
     split_tablet_by_device(const Tablet& tablet);
 
    private:
-    storage::WriteFile* write_file_;
+    storage::RandomAccessWriteFile* write_file_;
     storage::TsFileIOWriter* io_writer_;
     // device_id -> MeasurementSchemaGroup
     DeviceSchemasMap schemas_;

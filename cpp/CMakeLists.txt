@@ -303,7 +303,7 @@ endif ()
 option(BUILD_TOOLS "Build the tsfile command-line tools" ON)
 message("cmake using: BUILD_TOOLS=${BUILD_TOOLS}")
 
-option(BUILD_BENCHMARK "Build the read-backend benchmark" OFF)
+option(BUILD_BENCHMARK "Build the file-backend benchmarks" OFF)
 message("cmake using: BUILD_BENCHMARK=${BUILD_BENCHMARK}")
 
 option(ENABLE_ANTLR4 "Enable ANTLR4 runtime" ON)
@@ -471,6 +471,12 @@ if (BUILD_BENCHMARK)
     target_include_directories(read_backend_benchmark PRIVATE
             ${PROJECT_SRC_DIR})
     target_link_libraries(read_backend_benchmark PRIVATE
+            tsfile Threads::Threads)
+    add_executable(write_backend_benchmark
+            bench_mark/bench_mark_src/write_backend_benchmark.cc)
+    target_include_directories(write_backend_benchmark PRIVATE
+            ${PROJECT_SRC_DIR})
+    target_link_libraries(write_backend_benchmark PRIVATE
             tsfile Threads::Threads)
 endif ()
 if (BUILD_TOOLS)
