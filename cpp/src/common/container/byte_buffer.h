@@ -135,7 +135,6 @@ class ByteBuffer {
 
     FORCE_INLINE uint32_t get_data_size() const { return real_data_size_; }
 
-
     // Append @p count copies of one variable-length value. A block's TAG column
     // repeats the same value on every row; writing the pattern once and then
     // doubling the filled region beats @p count individual append calls.
