@@ -1626,8 +1626,8 @@ int AlignedChunkReader::build_page_plan(Filter* filter, int& row_offset) {
                 page_info.row_begin = 0;
                 page_info.row_end = stat != nullptr ? stat->count_ : 0;
             } else {
-                if (RET_FAIL(
-                        decode_time_page_direct(page_info, decoded_page_times))) {
+                if (RET_FAIL(decode_time_page_direct(page_info,
+                                                     decoded_page_times))) {
                     break;
                 }
                 int32_t first = -1;
@@ -1673,8 +1673,8 @@ int AlignedChunkReader::build_page_plan(Filter* filter, int& row_offset) {
 
         if (page_info.pass_type != PagePassType::SKIP) {
             if (page_info.row_end == 0) {
-                if (RET_FAIL(
-                        decode_time_page_direct(page_info, decoded_page_times))) {
+                if (RET_FAIL(decode_time_page_direct(page_info,
+                                                     decoded_page_times))) {
                     break;
                 }
                 page_info.row_end =
