@@ -61,6 +61,18 @@ class VariableLengthVector : public Vector {
         values_.append_variable_value(value, len);
     }
 
+    int fill_repeated(const char* value, uint32_t len,
+                      uint32_t count) OVERRIDE {
+        if (count == 0) {
+            return common::E_OK;
+        }
+        if (values_.fill_repeated_variable(value, len, count) != common::E_OK) {
+            return common::E_OOM;
+        }
+        add_row_nums(count);
+        return common::E_OK;
+    }
+
     // cppcheck-suppress missingOverride
     FORCE_INLINE char* read(uint32_t* __restrict len, bool* __restrict null,
                             uint32_t rowid) OVERRIDE {

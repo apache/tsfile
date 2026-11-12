@@ -54,6 +54,18 @@ class FixedLengthVector : public Vector {
         add_row_nums(count);
     }
 
+    int fill_repeated(const char* value, uint32_t len,
+                      uint32_t count) OVERRIDE {
+        if (count == 0) {
+            return common::E_OK;
+        }
+        if (values_.fill_repeated_fixed(value, len, count) != common::E_OK) {
+            return common::E_OOM;
+        }
+        add_row_nums(count);
+        return common::E_OK;
+    }
+
     FORCE_INLINE uint32_t get_type_len() const { return type_len_; }
 
     // cppcheck-suppress missingOverride

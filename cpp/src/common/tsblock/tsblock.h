@@ -244,12 +244,17 @@ class ColAppender {
         return E_OK;
     }
     FORCE_INLINE int fill(const char* value, uint32_t len, uint32_t end_index) {
-        while (column_row_count_ < end_index) {
-            if (!add_row()) {
-                return E_INVALID_ARG;
-            }
-            append(value, len);
+        if (column_row_count_ >= end_index) {
+            return E_OK;
         }
+        const uint32_t count = end_index - column_row_count_;
+        if (column_row_count_ + count > tsblock_->max_row_count_) {
+            return E_INVALID_ARG;
+        }
+        if (vec_->fill_repeated(value, len, count) != E_OK) {
+            return E_INVALID_ARG;
+        }
+        column_row_count_ += count;
         return E_OK;
     }
     FORCE_INLINE void reset() { column_row_count_ = 0; }
