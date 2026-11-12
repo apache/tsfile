@@ -334,9 +334,12 @@ TEST_F(TsFileWriterTest, MultiFlushWriteAndRead) {
 }
 
 // The I/O writer drains its pending bytes one stream page at a time, so a
-// chunk larger than one page is written as a chain of write() calls.  Sizes
-// straddling the 64 KiB page boundary check that the chain is flushed in
-// order and that a chunk ending exactly on a page boundary round-trips.
+// chunk larger than one page is written as a chain of write() calls.  These
+// sizes produce 1-, 2- and 3-page chains with partial tails, which checks that
+// the chain is flushed in order.  (A chunk ending exactly on a page boundary is
+// covered by ByteStreamConsumerTest.DrainsExactPageMultiplesAndPartialTails,
+// since the per-chunk metadata overhead makes row counts alone unable to land
+// on the boundary.)
 TEST_F(TsFileWriterTest, WriteChunkSpanningMultipleWriteStreamPages) {
     const std::vector<int64_t> row_counts = {1000, 8191,  8192,
                                              8193, 16384, 20000};
