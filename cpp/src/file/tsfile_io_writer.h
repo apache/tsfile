@@ -56,7 +56,12 @@ class TsFileIOWriter {
     typedef DeviceNodeMap::iterator DeviceNodeMapIterator;
 
    public:
-    static const uint32_t WRITE_STREAM_PAGE_SIZE = 512;  // FIXME
+    // Pending bytes drain to the file one page at a time, so this is both the
+    // write() granularity and the per-flush allocation unit. 512 bytes turned
+    // a chunk flush into dozens of tiny write() syscalls and page allocations;
+    // 64 KiB keeps a chunk's data in one or two pages without wasting much
+    // memory on the trailing page.
+    static const uint32_t WRITE_STREAM_PAGE_SIZE = 64 * 1024;
    public:
     TsFileIOWriter()
         : meta_allocator_(),
