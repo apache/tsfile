@@ -18,6 +18,8 @@
  */
 #include <gtest/gtest.h>
 
+#include <cstring>
+
 #include "common/container/byte_buffer.h"
 #include "common/tsblock/tsblock.h"
 

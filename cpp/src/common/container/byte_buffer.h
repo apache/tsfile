@@ -24,6 +24,7 @@
 #include <string.h>
 
 #include <algorithm>
+#include <cstring>
 
 #include "common/allocator/alloc_base.h"
 #include "common/global.h"
