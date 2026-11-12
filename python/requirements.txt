@@ -27,7 +27,7 @@ pandas>=2.0.0; python_version < "3.12"
 pandas>=2.1.1; python_version >= "3.12" and python_version < "3.13"
 pandas>=2.2.3; python_version >= "3.13" and python_version < "3.14"
 pandas>=2.3.3; python_version >= "3.14"
-setuptools==78.1.1
+setuptools==84.1.0
 wheel==0.46.2
 pyarrow>=16.0; python_version < "3.13"
 pyarrow>=18.0; python_version >= "3.13" and python_version < "3.14"
