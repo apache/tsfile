@@ -18,6 +18,8 @@
  */
 #include "lz4_compressor.h"
 
+#include <limits>
+
 #include "common/allocator/alloc_base.h"
 
 using namespace common;
@@ -113,7 +115,15 @@ int LZ4Compressor::uncompress(char* compressed_buf, uint32_t compressed_buf_len,
     if (ratio <= 0) {
         return E_COMPRESS_ERR;
     }
-    int src_size = (int)(compressed_buf_len * ratio);
+    // Compute the requested capacity in double and check it before converting:
+    // compressed_buf_len * ratio can exceed INT_MAX (the last retry ratio is
+    // 255x), and an out-of-range double-to-int conversion is undefined.
+    const double requested_size =
+        static_cast<double>(compressed_buf_len) * ratio;
+    if (requested_size > static_cast<double>(std::numeric_limits<int>::max())) {
+        return E_COMPRESS_ERR;
+    }
+    int src_size = static_cast<int>(requested_size);
     // Reuse the persistent buffer across pages; (re)allocate only when the
     // requested capacity grows. This avoids one malloc + free per page, which
     // dominates the read path's allocation churn.

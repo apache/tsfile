@@ -199,8 +199,10 @@ TEST_F(LZ4Test, UncompressReusesBufferAcrossDifferentPageSizes) {
         compressor.after_compress(compressed);
     }
 
-    EXPECT_NE(out_ptr[0], out_ptr[1]);  // grew: a new allocation
-    EXPECT_EQ(out_ptr[1], out_ptr[2]);  // smaller page reuses the same buffer
+    // Growth frees the old buffer and allocates a new one; the allocator may
+    // reuse the same address, so only the guaranteed reuse for the smaller
+    // page is asserted.
+    EXPECT_EQ(out_ptr[1], out_ptr[2]);
 }
 
 // CompressorFactory::free() must run ~Compressor(): compressors are
