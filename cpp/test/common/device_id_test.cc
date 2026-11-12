@@ -119,4 +119,109 @@ TEST(DeviceIdTest, SplitTableNameIsIdempotent) {
         }
     }
 }
+
+TEST(DeviceIdTest, SerializeDeserializeRoundTrip) {
+    std::vector<std::string*> segments;
+    segments.push_back(new std::string("root.table"));
+    // Longer than any small-string-optimisation buffer, so the segment owns a
+    // heap buffer inside the std::string.
+    segments.push_back(new std::string(64, 'x'));
+    segments.push_back(new std::string(""));
+    // The constructor deep-copies every segment, so the caller keeps
+    // ownership of (and must free) the pointers it passed in.
+    StringArrayDeviceID device(segments);
+    for (std::string* segment : segments) {
+        delete segment;
+    }
+
+    common::ByteStream out(1024, common::MOD_TSFILE_READER);
+    ASSERT_EQ(device.serialize(out), common::E_OK);
+    char* buffer = common::get_bytes_from_bytestream(out);
+    ASSERT_NE(buffer, nullptr);
+
+    common::ByteStream in;
+    in.wrap_from(buffer, static_cast<int32_t>(out.total_size()));
+    StringArrayDeviceID decoded;
+    ASSERT_EQ(decoded.deserialize(in), common::E_OK);
+    EXPECT_EQ(decoded.segment_num(), device.segment_num());
+    EXPECT_EQ(decoded.get_device_name(), device.get_device_name());
+    ASSERT_TRUE(decoded == device);
+
+    common::mem_free(buffer);
+}
+
+TEST(DeviceIdTest, SerializeDeserializeNullSegment) {
+    std::vector<std::string*> segments;
+    segments.push_back(new std::string("root.table"));
+    segments.push_back(nullptr);
+    StringArrayDeviceID device(segments);
+    for (std::string* segment : segments) {
+        delete segment;
+    }
+
+    common::ByteStream out(1024, common::MOD_TSFILE_READER);
+    ASSERT_EQ(device.serialize(out), common::E_OK);
+    char* buffer = common::get_bytes_from_bytestream(out);
+    ASSERT_NE(buffer, nullptr);
+
+    common::ByteStream in;
+    in.wrap_from(buffer, static_cast<int32_t>(out.total_size()));
+    StringArrayDeviceID decoded;
+    ASSERT_EQ(decoded.deserialize(in), common::E_OK);
+    ASSERT_EQ(decoded.segment_num(), 2);
+    EXPECT_EQ(decoded.get_segments()[1], nullptr);
+    ASSERT_TRUE(decoded == device);
+
+    common::mem_free(buffer);
+}
+
+TEST(DeviceIdTest, ReadVarCharPtrHandlesNullEmptyAndInvalidLength) {
+    common::ByteStream out(1024, common::MOD_TSFILE_READER);
+    ASSERT_EQ(common::SerializationUtil::write_var_char_ptr(nullptr, out),
+              common::E_OK);
+    std::string empty;
+    ASSERT_EQ(common::SerializationUtil::write_var_char_ptr(&empty, out),
+              common::E_OK);
+    // A negative length other than the null sentinel is corrupt input.
+    ASSERT_EQ(common::SerializationUtil::write_var_int(-2, out), common::E_OK);
+
+    char* buffer = common::get_bytes_from_bytestream(out);
+    ASSERT_NE(buffer, nullptr);
+    common::ByteStream in;
+    in.wrap_from(buffer, static_cast<int32_t>(out.total_size()));
+
+    std::string* decoded = reinterpret_cast<std::string*>(0x1);
+    ASSERT_EQ(common::SerializationUtil::read_var_char_ptr(decoded, in),
+              common::E_OK);
+    EXPECT_EQ(decoded, nullptr);
+
+    ASSERT_EQ(common::SerializationUtil::read_var_char_ptr(decoded, in),
+              common::E_OK);
+    ASSERT_NE(decoded, nullptr);
+    EXPECT_TRUE(decoded->empty());
+    delete decoded;
+
+    EXPECT_EQ(common::SerializationUtil::read_var_char_ptr(decoded, in),
+              common::E_OUT_OF_RANGE);
+
+    common::mem_free(buffer);
+
+    // A length that exceeds the remaining bytes is rejected before the
+    // string allocates (and zero-fills) that many bytes.
+    common::ByteStream truncated(1024, common::MOD_TSFILE_READER);
+    ASSERT_EQ(common::SerializationUtil::write_var_int(1 << 20, truncated),
+              common::E_OK);
+    char* truncated_buffer = common::get_bytes_from_bytestream(truncated);
+    ASSERT_NE(truncated_buffer, nullptr);
+    common::ByteStream truncated_in;
+    truncated_in.wrap_from(truncated_buffer,
+                           static_cast<int32_t>(truncated.total_size()));
+    decoded = reinterpret_cast<std::string*>(0x1);
+    EXPECT_EQ(
+        common::SerializationUtil::read_var_char_ptr(decoded, truncated_in),
+        common::E_BUF_NOT_ENOUGH);
+    EXPECT_EQ(decoded, nullptr);
+    common::mem_free(truncated_buffer);
+}
+
 }  // namespace storage
