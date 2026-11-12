@@ -927,6 +927,18 @@ cpdef void set_file_read_backend(object backend):
         raise TypeError(f"Unsupported FileReadBackend: {backend}")
     check_error(tsfile_set_file_read_backend(<int32_t> int(backend.value)))
 
+cpdef void set_parallel_read_enabled(bint enabled):
+    """Enable/disable the parallel read path for subsequently opened readers."""
+    check_error(tsfile_set_parallel_read_enabled(<int32_t> enabled))
+
+cpdef void set_parallel_write_enabled(bint enabled):
+    """Enable/disable the parallel write path for subsequently opened writers."""
+    check_error(tsfile_set_parallel_write_enabled(<int32_t> enabled))
+
+cpdef void set_thread_count(int32_t count):
+    """Set the size of the global worker thread pool (1..64)."""
+    check_error(tsfile_set_thread_count(count))
+
 cpdef void set_tsfile_config(dict new_config):
     if "file_read_backend_" in new_config and not isinstance(
         new_config["file_read_backend_"], FileReadBackendPy

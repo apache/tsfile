@@ -230,6 +230,9 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
 
     ErrorCode tsfile_set_file_read_backend(int32_t backend)
     TsFileReadBackend tsfile_get_file_read_backend()
+    ErrorCode tsfile_set_parallel_read_enabled(int32_t enabled)
+    ErrorCode tsfile_set_parallel_write_enabled(int32_t enabled)
+    ErrorCode tsfile_set_thread_count(int32_t count)
 
     ctypedef void * TagFilterHandle
 

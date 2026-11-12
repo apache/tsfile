@@ -358,6 +358,32 @@ ERRNO tsfile_set_file_read_backend(int32_t backend);
 TsFileReadBackend tsfile_get_file_read_backend(void);
 
 /**
+ * @brief Enable/disable the parallel read path for subsequently opened
+ * readers.
+ *
+ * @param enabled Non-zero to enable, zero to disable.
+ * @return RET_OK on success.
+ */
+ERRNO tsfile_set_parallel_read_enabled(int enabled);
+
+/**
+ * @brief Enable/disable the parallel write path for subsequently opened
+ * writers.
+ *
+ * @param enabled Non-zero to enable, zero to disable.
+ * @return RET_OK on success.
+ */
+ERRNO tsfile_set_parallel_write_enabled(int enabled);
+
+/**
+ * @brief Set the size of the global worker thread pool.
+ *
+ * @param count Number of worker threads, in [1, 64].
+ * @return RET_OK on success, or RET_INVALID_ARG for an out-of-range count.
+ */
+ERRNO tsfile_set_thread_count(int32_t count);
+
+/**
  * @brief Get the encoding type for global time column
  *
  * @return uint8_t Time encoding type enum value (cast to uint8_t)

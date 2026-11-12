@@ -169,6 +169,20 @@ TsFileReadBackend tsfile_get_file_read_backend() {
     return static_cast<TsFileReadBackend>(common::get_file_read_backend());
 }
 
+ERRNO tsfile_set_parallel_read_enabled(int enabled) {
+    common::set_parallel_read_enabled(enabled != 0);
+    return common::E_OK;
+}
+
+ERRNO tsfile_set_parallel_write_enabled(int enabled) {
+    common::set_parallel_write_enabled(enabled != 0);
+    return common::E_OK;
+}
+
+ERRNO tsfile_set_thread_count(int32_t count) {
+    return common::set_thread_count(count);
+}
+
 WriteFile write_file_new(const char* pathname, ERRNO* err_code) {
     if (err_code == nullptr) {
         return nullptr;
