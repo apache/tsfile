@@ -1635,16 +1635,19 @@ int AlignedChunkReader::build_page_plan(Filter* filter, int& row_offset) {
                 const int32_t n =
                     static_cast<int32_t>(decoded_page_times.size());
                 if (filter->is_unbounded_time_filter()) {
-                    // Every timestamp matches; skip the per-row predicate.
-                    // OFFSET still consumes rows from this page.
-                    int32_t begin = 0;
-                    if (field_filter_ == nullptr && row_offset > 0) {
-                        begin = std::min<int32_t>(n, row_offset);
-                        row_offset -= begin;
-                    }
-                    if (begin < n) {
-                        first = begin;
+                    // Every timestamp matches, so the per-row predicate can
+                    // be skipped.  Without a FIELD filter the whole page is
+                    // passed and takes the bulk-copy path; the shared
+                    // FULL_PASS handling below consumes OFFSET.  With a FIELD
+                    // filter the exact rows depend on statistics that are not
+                    // available here, so the page stays a boundary page and
+                    // the mask decides (OFFSET is applied after the mask).
+                    if (n > 0) {
+                        first = 0;
                         last = n - 1;
+                        if (field_filter_ == nullptr) {
+                            page_info.pass_type = PagePassType::FULL_PASS;
+                        }
                     }
                 } else {
                     for (int32_t i = 0; i < n; i++) {
@@ -2009,6 +2012,12 @@ int AlignedChunkReader::decode_all_planned_pages() {
                     Compressor* comp = time_compressor_pool_[k];
                     for (size_t p = k; p < chunk_pages_.size();
                          p += time_task_count) {
+                        // The planner may already have decoded this page to
+                        // classify it (single-page plans prefill slot 0);
+                        // decoding it again would undo that reuse.
+                        if (!per_page_times_[p].empty()) {
+                            continue;
+                        }
                         int r = decode_time_page_with(
                             chunk_pages_[p], per_page_times_[p], dec, comp);
                         if (IS_FAIL(r)) {

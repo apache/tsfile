@@ -417,6 +417,10 @@ TEST_P(TsFileTableReaderTimeFilterTest, UnboundedTimeFilterReturnsAllRows) {
         EXPECT_EQ(reader.query(table_schema->get_table_name(), query_columns,
                                start_time, end_time, offset, limit, result),
                   common::E_OK);
+        if (result == nullptr) {
+            ADD_FAILURE() << "query returned no result set";
+            return std::vector<std::pair<int64_t, int64_t>>();
+        }
         std::vector<std::pair<int64_t, int64_t>> rows;
         bool has_next = false;
         int ret = common::E_OK;
@@ -451,6 +455,41 @@ TEST_P(TsFileTableReaderTimeFilterTest, UnboundedTimeFilterReturnsAllRows) {
     EXPECT_TRUE(collect(1000, 2000, 0, -1).empty());
 
     ASSERT_EQ(reader.close(), common::E_OK);
+}
+
+// The unbounded shortcut must only fire for a plain TimeBetween; its negation
+// accepts no rows and must stay empty even though the bounds are full-range.
+TEST_P(TsFileTableReaderTimeFilterTest, NotBetweenFullRangeReturnsNoRows) {
+    std::unique_ptr<TableSchema> table_schema(gen_table_schema(0));
+    TsFileTableWriter writer(&write_file_, table_schema.get());
+    auto tablet = gen_tablet(table_schema.get(), 0, 1, 10);
+    ASSERT_EQ(writer.write_table(tablet), common::E_OK);
+    ASSERT_EQ(writer.flush(), common::E_OK);
+    ASSERT_EQ(writer.close(), common::E_OK);
+
+    LocalRandomAccessReadFile read_file;
+    ASSERT_EQ(read_file.open(file_name_), common::E_OK);
+    TableQueryExecutor executor(&read_file);
+
+    const int64_t min_time = std::numeric_limits<int64_t>::min();
+    const int64_t max_time = std::numeric_limits<int64_t>::max();
+    ResultSet* result = nullptr;
+    ASSERT_EQ(executor.query(
+                  table_schema->get_table_name(),
+                  std::vector<std::string>{"s0", "s1"},
+                  new TimeBetween(min_time, max_time, /*not_between=*/true),
+                  nullptr, nullptr, 0, -1, result),
+              common::E_OK);
+    ASSERT_NE(nullptr, result);
+    bool has_next = false;
+    int ret = common::E_OK;
+    int rows = 0;
+    while ((ret = result->next(has_next)) == common::E_OK && has_next) {
+        ++rows;
+    }
+    EXPECT_EQ(ret, common::E_OK);
+    EXPECT_EQ(rows, 0);
+    executor.destroy_query_data_set(result);
 }
 
 // Regression for #1038: a page whose rows are all rejected by the time filter

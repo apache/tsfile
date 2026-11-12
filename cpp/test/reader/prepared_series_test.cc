@@ -666,8 +666,16 @@ TEST_F(PreparedSeriesBatchTest, MultiPreparedUnboundedTimeFilterWithOffset) {
                   reader.query_prepared_multi({prepared_value2, prepared_value},
                                               start_time, end_time, offset,
                                               limit, result));
+        if (result == nullptr) {
+            ADD_FAILURE() << "query_prepared_multi returned no result set";
+            return std::vector<int64_t>();
+        }
         auto* table_result = dynamic_cast<TableResultSet*>(result);
-        EXPECT_NE(nullptr, table_result);
+        if (table_result == nullptr) {
+            ADD_FAILURE() << "query_prepared_multi returned a non-table result";
+            reader.destroy_query_data_set(result);
+            return std::vector<int64_t>();
+        }
         std::vector<int64_t> times;
         common::TsBlock* block = nullptr;
         while (table_result->get_next_tsblock(block) == common::E_OK) {
@@ -699,24 +707,36 @@ TEST_F(PreparedSeriesBatchTest, MultiPreparedUnboundedTimeFilterWithOffset) {
 
     const int64_t min_time = std::numeric_limits<int64_t>::min();
     const int64_t max_time = std::numeric_limits<int64_t>::max();
-    EXPECT_EQ(collect(min_time, max_time, 0, -1), all_rows);
-    for (int offset : {1, 3, 4, 5, 17, 28, 29, 30}) {
-        SCOPED_TRACE(::testing::Message() << "offset=" << offset);
-        const std::vector<int64_t> expected(all_rows.begin() + offset,
-                                            all_rows.end());
-        EXPECT_EQ(collect(min_time, max_time, offset, -1), expected);
-    }
-
     std::vector<int64_t> in_window;
     for (int row = 5; row <= 22; ++row) in_window.push_back(row);
-    EXPECT_EQ(collect(5, 22, 0, -1), in_window);
-    const std::vector<int64_t> offset_in_window(in_window.begin() + 6,
-                                                in_window.begin() + 10);
-    EXPECT_EQ(collect(5, 22, 6, 4), offset_in_window);
-    const std::vector<int64_t> tail_in_window(in_window.begin() + 10,
-                                              in_window.end());
-    EXPECT_EQ(collect(5, 22, 10, -1), tail_in_window);
-    EXPECT_TRUE(collect(100, 200, 0, -1).empty());
+
+    // Exercise both decode paths: with the worker pool the page plan is
+    // built and decoded in parallel (the planner's prefilled times must be
+    // reused by the workers); without it the plan is decoded lazily, which is
+    // where the planner's times are handed to decode_page_lazy().
+    const bool saved_parallel = common::g_config_value_.parallel_read_enabled_;
+    for (bool parallel : {true, false}) {
+        SCOPED_TRACE(::testing::Message() << "parallel=" << parallel);
+        common::g_config_value_.parallel_read_enabled_ = parallel;
+
+        EXPECT_EQ(collect(min_time, max_time, 0, -1), all_rows);
+        for (int offset : {1, 3, 4, 5, 17, 28, 29, 30}) {
+            SCOPED_TRACE(::testing::Message() << "offset=" << offset);
+            const std::vector<int64_t> expected(all_rows.begin() + offset,
+                                                all_rows.end());
+            EXPECT_EQ(collect(min_time, max_time, offset, -1), expected);
+        }
+
+        EXPECT_EQ(collect(5, 22, 0, -1), in_window);
+        const std::vector<int64_t> offset_in_window(in_window.begin() + 6,
+                                                    in_window.begin() + 10);
+        EXPECT_EQ(collect(5, 22, 6, 4), offset_in_window);
+        const std::vector<int64_t> tail_in_window(in_window.begin() + 10,
+                                                  in_window.end());
+        EXPECT_EQ(collect(5, 22, 10, -1), tail_in_window);
+        EXPECT_TRUE(collect(100, 200, 0, -1).empty());
+    }
+    common::g_config_value_.parallel_read_enabled_ = saved_parallel;
 
     EXPECT_EQ(common::E_OK, reader.close());
 }
