@@ -28,6 +28,10 @@ import org.apache.tsfile.write.schema.IMeasurementSchema;
 import java.io.File;
 import java.io.IOException;
 
+/**
+ * Builder for v4 TsFile writers. build() validates the output path, schema, table-model settings,
+ * and memory thresholds before creating a writer.
+ */
 public class TsFileWriterBuilder {
 
   private static final long defaultMemoryThresholdInByte = 32 * 1024 * 1024;

@@ -22,6 +22,10 @@ package org.apache.tsfile.enums;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Column roles in table-model files. TAG columns identify entities, FIELD columns contain
+ * measurements, ATTRIBUTE columns contain descriptive values, and TIME is the timestamp column.
+ */
 public enum ColumnCategory {
   TAG,
   FIELD,

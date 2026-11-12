@@ -19,6 +19,11 @@
 
 package org.apache.tsfile.encoding.encoder;
 
+/**
+ * Implements Swinging Door Trending lossy compression. compDeviation bounds value error, while
+ * compMinTime and compMaxTime control the time window. The pending boundary point is emitted when
+ * the door closes or flush is called.
+ */
 public class SDTEncoder {
 
   // the last read time and value if upperDoor >= lowerDoor meaning out of compDeviation range, will
