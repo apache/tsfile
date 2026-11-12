@@ -18,6 +18,8 @@
  */
 #include <gtest/gtest.h>
 
+#include <limits>
+
 #include "reader/filter/time_operator.h"
 
 using namespace storage;

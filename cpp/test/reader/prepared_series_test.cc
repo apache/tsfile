@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <limits>
 #include <vector>
 
@@ -683,17 +684,23 @@ TEST_F(PreparedSeriesBatchTest, MultiPreparedUnboundedTimeFilterWithOffset) {
             while (rows.has_next()) {
                 uint32_t len = 0;
                 bool is_null = false;
+                // Values are copied out instead of reinterpret_cast'ing the
+                // returned buffer: the row data has no alignment guarantee.
                 const char* timestamp = rows.read(0, &len, &is_null);
                 EXPECT_FALSE(is_null);
-                times.push_back(*reinterpret_cast<const int64_t*>(timestamp));
-                const char* value2 = rows.read(1, &len, &is_null);
+                int64_t time = 0;
+                std::memcpy(&time, timestamp, sizeof(time));
+                times.push_back(time);
+                const char* value2_buf = rows.read(1, &len, &is_null);
                 EXPECT_FALSE(is_null);
-                EXPECT_DOUBLE_EQ(times.back() * 10.0,
-                                 *reinterpret_cast<const double*>(value2));
-                const char* value = rows.read(2, &len, &is_null);
+                double value2 = 0.0;
+                std::memcpy(&value2, value2_buf, sizeof(value2));
+                EXPECT_DOUBLE_EQ(time * 10.0, value2);
+                const char* value_buf = rows.read(2, &len, &is_null);
                 EXPECT_FALSE(is_null);
-                EXPECT_DOUBLE_EQ(static_cast<double>(times.back()),
-                                 *reinterpret_cast<const double*>(value));
+                double value = 0.0;
+                std::memcpy(&value, value_buf, sizeof(value));
+                EXPECT_DOUBLE_EQ(static_cast<double>(time), value);
                 rows.next();
             }
             block = nullptr;
