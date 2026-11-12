@@ -23,6 +23,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <algorithm>
+
 #include "common/allocator/alloc_base.h"
 #include "common/global.h"
 #include "utils/util_define.h"
@@ -132,6 +134,67 @@ class ByteBuffer {
     FORCE_INLINE char* get_data() { return data_; }
 
     FORCE_INLINE uint32_t get_data_size() const { return real_data_size_; }
+
+    // Append @p count copies of one variable-length value. A block's TAG column
+    // repeats the same value on every row; writing the pattern once and then
+    // doubling the filled region beats @p count individual append calls.
+    FORCE_INLINE int fill_repeated_variable(const char* value, uint32_t len,
+                                            uint32_t count) {
+        if (count == 0) {
+            return E_OK;
+        }
+        const uint64_t elem_size =
+            static_cast<uint64_t>(variable_type_len_) + len;
+        const uint64_t need =
+            static_cast<uint64_t>(real_data_size_) + elem_size * count;
+        if (need > reserved_size_) {
+            if (need > 0xFFFFFFFFULL ||
+                extend_memory(static_cast<uint32_t>(need)) != E_OK) {
+                return E_OOM;
+            }
+        }
+        char* dst = data_ + real_data_size_;
+        std::memcpy(dst, &len, variable_type_len_);
+        if (len > 0) {
+            std::memcpy(dst + variable_type_len_, value, len);
+        }
+        uint32_t filled = 1;
+        while (filled < count) {
+            const uint32_t copy = std::min(filled, count - filled);
+            std::memcpy(dst + static_cast<size_t>(filled) * elem_size, dst,
+                        static_cast<size_t>(copy) * elem_size);
+            filled += copy;
+        }
+        real_data_size_ = static_cast<uint32_t>(need);
+        return E_OK;
+    }
+
+    // Fixed-width counterpart of fill_repeated_variable().
+    FORCE_INLINE int fill_repeated_fixed(const char* value, uint32_t elem_size,
+                                         uint32_t count) {
+        if (count == 0) {
+            return E_OK;
+        }
+        const uint64_t need = static_cast<uint64_t>(real_data_size_) +
+                              static_cast<uint64_t>(elem_size) * count;
+        if (need > reserved_size_) {
+            if (need > 0xFFFFFFFFULL ||
+                extend_memory(static_cast<uint32_t>(need)) != E_OK) {
+                return E_OOM;
+            }
+        }
+        char* dst = data_ + real_data_size_;
+        std::memcpy(dst, value, elem_size);
+        uint32_t filled = 1;
+        while (filled < count) {
+            const uint32_t copy = std::min(filled, count - filled);
+            std::memcpy(dst + static_cast<size_t>(filled) * elem_size, dst,
+                        static_cast<size_t>(copy) * elem_size);
+            filled += copy;
+        }
+        real_data_size_ = static_cast<uint32_t>(need);
+        return E_OK;
+    }
 
    private:
     char* data_;
