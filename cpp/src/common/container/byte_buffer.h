@@ -144,6 +144,11 @@ class ByteBuffer {
         if (count == 0) {
             return E_OK;
         }
+        // The stored length prefix is copied from a uint32_t, so the width
+        // must not exceed it (the constructor fixes it to sizeof(uint32_t)).
+        if (variable_type_len_ > sizeof(uint32_t)) {
+            return E_INVALID_ARG;
+        }
         const uint64_t elem_size =
             static_cast<uint64_t>(variable_type_len_) + len;
         const uint64_t need =

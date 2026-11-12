@@ -205,7 +205,9 @@ TEST(TsBlockTest, ColAppenderFillRepeatedFixed) {
         char* read = iter.read(&len);
         ASSERT_NE(read, nullptr);
         EXPECT_EQ(len, sizeof(int32_t));
-        EXPECT_EQ(*reinterpret_cast<int32_t*>(read), value);
+        int32_t read_value = 0;
+        std::memcpy(&read_value, read, sizeof(read_value));
+        EXPECT_EQ(read_value, value);
         iter.next();
     }
 }
