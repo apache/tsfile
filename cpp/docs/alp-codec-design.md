@@ -172,3 +172,22 @@ SIMDe is already a TsFile C++ dependency. The ALP kernels will use the existing
   access.
 - Benchmarks compare ALP against Gorilla for decimal, normalized, smooth,
   repeated, and high-entropy data.
+
+## References and Provenance
+
+- Algorithm: Xinyu Zeng, Yulong Hui, Jiahua Ding, Ziqi Wang, Lin Ma,
+  Huanchen Zhang, "ALP: Adaptive Lossless Floating-Point Compression",
+  Proceedings of the ACM on Management of Data (SIGMOD 2024),
+  DOI 10.1145/3626717.
+- This codec is an independent implementation of the published algorithm. It
+  shares no source code with the authors' reference implementation
+  (`github.com/cwida/ALP`, MIT License). The page/block wire format, the
+  `Encoder`/`Decoder` integration and the SIMD kernels are TsFile-specific
+  and carry the Apache License 2.0 like the rest of the repository, so no
+  additional `LICENSE`/`NOTICE` entry is required.
+- If code is ever ported from the MIT-licensed reference implementation, the
+  upstream copyright notice must be preserved and the MIT text added to the
+  root `LICENSE` file.
+- The dictionary-based ALP-RD variant from the paper is not implemented.
+  Scheme value 2 is reserved for it, so it can be added without a format
+  version bump.
