@@ -669,6 +669,85 @@ def test_file_read_backend_configuration_and_query_equivalence():
             os.remove(file_name)
 
 
+def test_parallel_switches_and_thread_count():
+    from tsfile import (
+        InvalidArgumentError,
+        set_parallel_read_enabled,
+        set_parallel_write_enabled,
+        set_thread_count,
+    )
+
+    file_name = "parallel_switches_python_test.tsfile"
+    table = TableSchema(
+        "parallel_table",
+        [
+            ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("value", TSDataType.INT64, ColumnCategory.FIELD),
+        ],
+    )
+    devices = 4
+    rows_per_device = 500
+
+    def read_rows():
+        rows = []
+        with TsFileReader(file_name) as reader:
+            with reader.query_table(
+                "parallel_table", ["device", "value"], 0, rows_per_device - 1
+            ) as result:
+                while result.next():
+                    rows.append(
+                        (
+                            result.get_value_by_name(TIME_COLUMN),
+                            result.get_value_by_name("device"),
+                            result.get_value_by_name("value"),
+                        )
+                    )
+        return rows
+
+    try:
+        for invalid in (0, -1, 65):
+            with pytest.raises(InvalidArgumentError):
+                set_thread_count(invalid)
+        set_thread_count(4)
+
+        expected = [
+            (row, f"device{device}", row * 3)
+            for device in range(devices)
+            for row in range(rows_per_device)
+        ]
+        for write_parallel in (False, True):
+            set_parallel_write_enabled(write_parallel)
+            if os.path.exists(file_name):
+                os.remove(file_name)
+            with TsFileTableWriter(file_name, table) as writer:
+                tablet = Tablet(
+                    ["device", "value"],
+                    [TSDataType.STRING, TSDataType.INT64],
+                    devices * rows_per_device,
+                )
+                index = 0
+                for device in range(devices):
+                    for row in range(rows_per_device):
+                        tablet.add_timestamp(index, row)
+                        tablet.add_value_by_name("device", index, f"device{device}")
+                        tablet.add_value_by_name("value", index, row * 3)
+                        index += 1
+                writer.write_table(tablet)
+
+            set_parallel_read_enabled(False)
+            serial_rows = read_rows()
+            set_parallel_read_enabled(True)
+            parallel_rows = read_rows()
+            assert parallel_rows == serial_rows
+            assert serial_rows == expected
+    finally:
+        set_parallel_read_enabled(True)
+        set_parallel_write_enabled(True)
+        set_thread_count(6)
+        if os.path.exists(file_name):
+            os.remove(file_name)
+
+
 def test_tsfile_to_df():
     table = TableSchema(
         "test_table",
