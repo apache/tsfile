@@ -233,6 +233,29 @@ class TsFileIOReader {
 
     static constexpr size_t DEVICE_NODE_CACHE_CAPACITY = 64;
 
+    // A deserialized index-tree node (device- or measurement-level) together
+    // with the arena backing it. Declared before `node` so the node is
+    // destroyed first.
+    struct CachedIndexNode {
+        std::shared_ptr<common::PageArena> arena;
+        std::shared_ptr<MetaIndexNode> node;
+    };
+
+    // One leaf of the device index holds up to max_degree_of_index_node
+    // devices, so an uncached tree walk re-deserializes the same node (and
+    // allocates every device-id string in it) once per device. A small LRU
+    // keyed by the node's file offset turns that into once per node.
+    static constexpr size_t INDEX_NODE_CACHE_CAPACITY = 16;
+
+    /**
+     * Returns the index node serialized at [start_offset, end_offset),
+     * reading and deserializing it on a cache miss. The returned node is
+     * immutable and owned by the cache; callers must not destroy or mutate it.
+     */
+    int get_cached_index_node(int64_t start_offset, int64_t end_offset,
+                              bool is_device,
+                              std::shared_ptr<MetaIndexNode>& out);
+
     // Returns E_OK on hit (out is filled), or an error code on miss / load
     // failure (E_DEVICE_NOT_EXIST when the device is absent, the propagated
     // error otherwise).  Copying into out keeps the caller safe from rehash /
@@ -277,6 +300,9 @@ class TsFileIOReader {
     // shared ownership keeps an entry alive after a concurrent eviction.
     common::Cache<std::string, CachedDeviceNode> device_node_cache_;
     mutable std::mutex device_node_cache_mu_;
+    // Keyed by the node's start offset in the file.
+    common::Cache<int64_t, CachedIndexNode> index_node_cache_;
+    mutable std::mutex index_node_cache_mu_;
 };
 
 }  // end namespace storage
