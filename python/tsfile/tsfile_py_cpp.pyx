@@ -20,6 +20,7 @@ from datetime import date as date_type
 from .date_utils import parse_date_to_int
 from .tsfile_cpp cimport *
 
+import numbers
 import os
 import pandas as pd
 import numpy as np
@@ -1081,8 +1082,9 @@ cdef _check_bool(value):
         raise TypeError(f"Expected bool, got {type(value)}")
 
 cdef _check_int(value):
-    # bool is an int subclass, but it is not a meaningful thread count.
-    if isinstance(value, bool) or not isinstance(value, int):
+    # Accept integer-like values (numpy integers, IntEnum) but not bool, which
+    # is an int subclass and not a meaningful thread count.
+    if isinstance(value, bool) or not isinstance(value, numbers.Integral):
         raise TypeError(f"Expected int, got {type(value)}")
 
 # Register table and device
