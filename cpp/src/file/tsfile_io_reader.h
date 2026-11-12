@@ -52,7 +52,8 @@ class TsFileIOReader {
           tsfile_meta_(&tsfile_meta_page_arena_),
           tsfile_meta_ready_(false),
           read_file_created_(false),
-          device_node_cache_(DEVICE_NODE_CACHE_CAPACITY, 0) {
+          device_node_cache_(DEVICE_NODE_CACHE_CAPACITY, 0),
+          index_node_cache_(INDEX_NODE_CACHE_CAPACITY, 0) {
         tsfile_meta_page_arena_.init(512, common::MOD_TSFILE_READER);
     }
 
@@ -275,6 +276,13 @@ class TsFileIOReader {
     }
     static size_t TEST_device_node_cache_capacity() {
         return DEVICE_NODE_CACHE_CAPACITY;
+    }
+    size_t TEST_index_node_cache_size() const {
+        std::lock_guard<std::mutex> lk(index_node_cache_mu_);
+        return index_node_cache_.size();
+    }
+    static size_t TEST_index_node_cache_capacity() {
+        return INDEX_NODE_CACHE_CAPACITY;
     }
 #endif
 
