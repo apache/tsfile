@@ -48,6 +48,11 @@ class TimeBetween : public Filter {
 
     std::vector<TimeRange*>* get_time_ranges();
 
+    bool is_unbounded_time_filter() const override {
+        return !not_ && value1_ == std::numeric_limits<int64_t>::min() &&
+               value2_ == std::numeric_limits<int64_t>::max();
+    }
+
     int satisfy_batch_time(const int64_t* times, int count, bool* mask);
 
     FilterType get_filter_type() { return type_; }

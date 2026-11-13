@@ -64,6 +64,9 @@ class Filter {
         return nullptr;
     }
 
+    // True when the predicate accepts every timestamp (e.g. TimeBetween over
+    // the full int64 range). Callers may then skip per-row evaluation.
+    virtual bool is_unbounded_time_filter() const { return false; }
     // True when this time filter selects one contiguous interval: inside a
     // BOUNDARY page's [row_begin, row_end) range every timestamp matches (e.g.
     // TimeBetween, one-sided Gt/Lt), so the range can be bulk-copied. Discrete

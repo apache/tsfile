@@ -36,6 +36,12 @@ using namespace common;
 
 namespace storage {
 
+// Definition for the in-class `static constexpr` used as the write-stream
+// page size.  Before C++17 a static constexpr data member needs an
+// out-of-class definition when it is odr-used (e.g. bound to a reference
+// by a test assertion); without one the link fails.
+constexpr uint32_t TsFileIOWriter::WRITE_STREAM_PAGE_SIZE;
+
 #if 0
 #define OFFSET_DEBUG(msg)                \
     std::cout << "OFFSET_DEBUG: " << msg \

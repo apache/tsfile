@@ -19,6 +19,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
@@ -32,6 +33,12 @@
 #include "file/write_file.h"
 #include "reader/block/single_device_tsblock_reader.h"
 #include "writer/tsfile_table_writer.h"
+
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
 
 namespace {
 using namespace common;
@@ -47,11 +54,19 @@ class MaskedBulkCopyTest : public ::testing::TestWithParam<bool> {
         // Source tuple: time + v + n + s + hidden + empty = 72 bytes/row.
         // Each source TsBlock has 137 rows, crossing two bitmap words.
         g_config_value_.tsblock_max_memory_ = 72 * 137;
+        // Parallel CTest processes can seed from the same clock tick.
+#ifdef _WIN32
+        const auto process_id = static_cast<uint64_t>(_getpid());
+#else
+        const auto process_id = static_cast<uint64_t>(getpid());
+#endif
+        static std::atomic<uint64_t> filename_counter{0};
         filename_ =
             "masked_bulk_copy_" +
             std::to_string(
                 std::chrono::steady_clock::now().time_since_epoch().count()) +
-            ".tsfile";
+            "_" + std::to_string(process_id) + "_" +
+            std::to_string(filename_counter.fetch_add(1)) + ".tsfile";
         const std::vector<ColumnSchema> columns{
             {"v", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},
             {"n", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},

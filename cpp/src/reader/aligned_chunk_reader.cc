@@ -166,12 +166,10 @@ void AlignedChunkReader::destroy() {
         value_decoder_ = nullptr;
     }
     if (time_compressor_ != nullptr) {
-        time_compressor_->~Compressor();
         CompressorFactory::free(time_compressor_);
         time_compressor_ = nullptr;
     }
     if (value_compressor_ != nullptr) {
-        value_compressor_->~Compressor();
         CompressorFactory::free(value_compressor_);
         value_compressor_ = nullptr;
     }
@@ -201,7 +199,6 @@ void AlignedChunkReader::destroy() {
             col->decoder = nullptr;
         }
         if (col->compressor != nullptr) {
-            col->compressor->~Compressor();
             CompressorFactory::free(col->compressor);
             col->compressor = nullptr;
         }
@@ -242,7 +239,6 @@ void AlignedChunkReader::destroy() {
     std::vector<Decoder*>().swap(time_decoder_pool_);
     for (auto* c : time_compressor_pool_) {
         if (c != nullptr) {
-            c->~Compressor();
             CompressorFactory::free(c);
         }
     }
@@ -354,7 +350,7 @@ int AlignedChunkReader::alloc_compressor_and_decoder(
     TSEncoding encoding, TSDataType data_type, CompressionType compression) {
     // Invalid enum bytes indicate corrupted chunk metadata, not an allocator
     // failure.  Reject them before asking the factory for a decoder.
-    if (encoding < common::PLAIN || encoding > common::CAMEL) {
+    if (encoding < common::PLAIN || encoding > common::ALP) {
         return E_TSFILE_CORRUPTED;
     }
     if (decoder != nullptr) {
@@ -1537,6 +1533,10 @@ int AlignedChunkReader::build_page_plan(Filter* filter, int& row_offset) {
     }
 
     const uint32_t num_cols = value_columns_.size();
+    // For single-page chunks the times decoded while classifying the page are
+    // exactly the ones the lazy decode path would decode again; keep them so
+    // each page is read and decoded once.
+    std::vector<int64_t> single_page_times;
     while (IS_SUCC(ret)) {
         if (time_chunk_visit_offset_ - time_chunk_header_.serialized_size_ >=
             time_chunk_header_.data_size_) {
@@ -1554,6 +1554,9 @@ int AlignedChunkReader::build_page_plan(Filter* filter, int& row_offset) {
         }
 
         ChunkPageInfo page_info;
+        // Times decoded below for classification are handed to the lazy
+        // decode path for single-page chunks, so the page is decoded once.
+        std::vector<int64_t> decoded_page_times;
         page_info.time_file_offset = time_chunk_meta_->offset_of_chunk_header_ +
                                      time_chunk_visit_offset_;
         page_info.time_compressed_size = cur_time_page_header_.compressed_size_;
@@ -1625,24 +1628,43 @@ int AlignedChunkReader::build_page_plan(Filter* filter, int& row_offset) {
                 page_info.row_begin = 0;
                 page_info.row_end = stat != nullptr ? stat->count_ : 0;
             } else {
-                std::vector<int64_t> times;
-                if (RET_FAIL(decode_time_page_direct(page_info, times))) {
+                if (RET_FAIL(decode_time_page_direct(page_info,
+                                                     decoded_page_times))) {
                     break;
                 }
                 int32_t first = -1;
                 int32_t last = -1;
-                for (int32_t i = 0; i < static_cast<int32_t>(times.size());
-                     i++) {
-                    if (filter->satisfy_start_end_time(times[i], times[i])) {
-                        // Offset is defined on the filtered row stream. Consume
-                        // matching rows only; holes inside a boundary page do
-                        // not count toward it.
-                        if (field_filter_ == nullptr && row_offset > 0) {
-                            row_offset--;
-                            continue;
+                const int32_t n =
+                    static_cast<int32_t>(decoded_page_times.size());
+                if (filter->is_unbounded_time_filter()) {
+                    // Every timestamp matches, so the per-row predicate can
+                    // be skipped.  Without a FIELD filter the whole page is
+                    // passed and takes the bulk-copy path; the shared
+                    // FULL_PASS handling below consumes OFFSET.  With a FIELD
+                    // filter the exact rows depend on statistics that are not
+                    // available here, so the page stays a boundary page and
+                    // the mask decides (OFFSET is applied after the mask).
+                    if (n > 0) {
+                        first = 0;
+                        last = n - 1;
+                        if (field_filter_ == nullptr) {
+                            page_info.pass_type = PagePassType::FULL_PASS;
                         }
-                        if (first < 0) first = i;
-                        last = i;
+                    }
+                } else {
+                    for (int32_t i = 0; i < n; i++) {
+                        if (filter->satisfy_start_end_time(
+                                decoded_page_times[i], decoded_page_times[i])) {
+                            // Offset is defined on the filtered row stream.
+                            // Consume matching rows only; holes inside a
+                            // boundary page do not count toward it.
+                            if (field_filter_ == nullptr && row_offset > 0) {
+                                row_offset--;
+                                continue;
+                            }
+                            if (first < 0) first = i;
+                            last = i;
+                        }
                     }
                 }
                 if (first >= 0) {
@@ -1656,11 +1678,12 @@ int AlignedChunkReader::build_page_plan(Filter* filter, int& row_offset) {
 
         if (page_info.pass_type != PagePassType::SKIP) {
             if (page_info.row_end == 0) {
-                std::vector<int64_t> times;
-                if (RET_FAIL(decode_time_page_direct(page_info, times))) {
+                if (RET_FAIL(decode_time_page_direct(page_info,
+                                                     decoded_page_times))) {
                     break;
                 }
-                page_info.row_end = static_cast<int32_t>(times.size());
+                page_info.row_end =
+                    static_cast<int32_t>(decoded_page_times.size());
             }
             if (page_info.pass_type == PagePassType::FULL_PASS &&
                 row_offset > 0) {
@@ -1676,6 +1699,9 @@ int AlignedChunkReader::build_page_plan(Filter* filter, int& row_offset) {
             }
             if (page_info.row_begin < page_info.row_end) {
                 chunk_pages_.push_back(std::move(page_info));
+                if (chunk_pages_.size() == 1 && !decoded_page_times.empty()) {
+                    single_page_times = std::move(decoded_page_times);
+                }
             }
         }
 
@@ -1699,6 +1725,9 @@ int AlignedChunkReader::build_page_plan(Filter* filter, int& row_offset) {
             out_row += page.row_end - page.row_begin;
         }
         per_page_times_.assign(chunk_pages_.size(), std::vector<int64_t>{});
+        if (chunk_pages_.size() == 1 && !single_page_times.empty()) {
+            per_page_times_[0] = std::move(single_page_times);
+        }
         for (auto* col : value_columns_) {
             col->per_page_state.clear();
             col->per_page_state.resize(chunk_pages_.size());
@@ -2123,6 +2152,12 @@ int AlignedChunkReader::decode_all_planned_pages() {
                     Compressor* comp = time_compressor_pool_[k];
                     for (size_t p = k; p < chunk_pages_.size();
                          p += time_task_count) {
+                        // The planner may already have decoded this page to
+                        // classify it (single-page plans prefill slot 0);
+                        // decoding it again would undo that reuse.
+                        if (!per_page_times_[p].empty()) {
+                            continue;
+                        }
                         int r = decode_time_page_with(
                             chunk_pages_[p], per_page_times_[p], dec, comp);
                         if (IS_FAIL(r)) {
@@ -2154,7 +2189,11 @@ int AlignedChunkReader::decode_all_planned_pages() {
 // matching row.
 int AlignedChunkReader::decode_page_lazy(size_t page_idx) {
     int ret = E_OK;
-    if (RET_FAIL(decode_time_page_direct(chunk_pages_[page_idx],
+    // build_page_plan() already decoded (and kept) this page's times for
+    // single-page chunks; decoding again would re-read and re-decode the same
+    // page.
+    if (per_page_times_[page_idx].empty() &&
+        RET_FAIL(decode_time_page_direct(chunk_pages_[page_idx],
                                          per_page_times_[page_idx]))) {
         return ret;
     }
@@ -2566,16 +2605,19 @@ int AlignedChunkReader::get_next_page_multi_serial(TsBlock* ret_tsblock,
                 }
             }
             if (IS_FAIL(ret)) break;
+            // get_cur_page_header returns E_OK with a reset header once the
+            // chunk's data has been consumed.  Report the end of the chunk
+            // instead of handing a zero-byte page to the decompressor.
+            if (!has_more_data_multi()) {
+                ret = E_NO_MORE_DATA;
+                break;
+            }
             if (!cur_page_may_satisfy_filter_multi(filter)) {
                 if (RET_FAIL(skip_cur_page_multi())) break;
             } else if (cur_page_fully_satisfies_filter_multi(filter) &&
                        should_skip_page_by_offset_multi(row_offset)) {
                 if (RET_FAIL(skip_cur_page_multi())) break;
             } else {
-                break;
-            }
-            if (!has_more_data()) {
-                ret = E_NO_MORE_DATA;
                 break;
             }
         }
