@@ -292,6 +292,23 @@ TEST(TsBlockTest, ColAppenderFillRepeatedVariableGrows) {
     EXPECT_TRUE(iter.end());
 }
 
+// The size computation multiplies two 32-bit values; without a pre-check it
+// wraps uint64_t and bypasses both the capacity and the 4 GiB limit, after
+// which a huge memcpy runs into a small buffer.
+TEST(TsBlockTest, ByteBufferFillRepeatedRejectsSizeOverflow) {
+    ByteBuffer buffer;
+    buffer.init(64);
+    char payload[4] = {'a', 'b', 'c', 'd'};
+    ASSERT_EQ(buffer.append_variable_value(payload, 4), E_OK);
+    const uint32_t size_before = buffer.get_data_size();
+
+    EXPECT_EQ(buffer.fill_repeated_variable(payload, 0xFFFFFFFDu, 0xFFFFFFFFu),
+              E_OOM);
+    EXPECT_EQ(buffer.get_data_size(), size_before);
+    EXPECT_EQ(buffer.fill_repeated_fixed(payload, 4, 0xFFFFFFFFu), E_OOM);
+    EXPECT_EQ(buffer.get_data_size(), size_before);
+}
+
 TEST(TsBlockTest, ColAppenderFillRepeatedZeroCountIsNoOp) {
     TupleDesc tuple_desc;
     tuple_desc.push_back(ColumnSchema("value", INT32, UNCOMPRESSED, PLAIN));

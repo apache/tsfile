@@ -151,11 +151,19 @@ class ByteBuffer {
         }
         const uint64_t elem_size =
             static_cast<uint64_t>(variable_type_len_) + len;
+        // elem_size * count can overflow uint64_t (both factors are 32-bit),
+        // which would wrap `need` to a small value and bypass the capacity
+        // checks before a huge payload copy. Reject anything that cannot fit
+        // in the 32-bit buffer size first.
+        const uint64_t available =
+            static_cast<uint64_t>(0xFFFFFFFFULL) - real_data_size_;
+        if (count > available / elem_size) {
+            return E_OOM;
+        }
         const uint64_t need =
             static_cast<uint64_t>(real_data_size_) + elem_size * count;
         if (need > reserved_size_) {
-            if (need > 0xFFFFFFFFULL ||
-                extend_memory(static_cast<uint32_t>(need)) != E_OK) {
+            if (extend_memory(static_cast<uint32_t>(need)) != E_OK) {
                 return E_OOM;
             }
         }
@@ -181,11 +189,15 @@ class ByteBuffer {
         if (count == 0) {
             return E_OK;
         }
+        const uint64_t available =
+            static_cast<uint64_t>(0xFFFFFFFFULL) - real_data_size_;
+        if (elem_size != 0 && count > available / elem_size) {
+            return E_OOM;
+        }
         const uint64_t need = static_cast<uint64_t>(real_data_size_) +
                               static_cast<uint64_t>(elem_size) * count;
         if (need > reserved_size_) {
-            if (need > 0xFFFFFFFFULL ||
-                extend_memory(static_cast<uint32_t>(need)) != E_OK) {
+            if (extend_memory(static_cast<uint32_t>(need)) != E_OK) {
                 return E_OOM;
             }
         }
