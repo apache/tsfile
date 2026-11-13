@@ -30,7 +30,7 @@ export const zhNavbar = navbar([
     link: '/zh/Download/',
   },
   {
-    text: '在线预览',
+    text: '可视化工具',
     link: '/zh/preview/',
   },
   {

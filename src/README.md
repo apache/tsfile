@@ -13,7 +13,7 @@ heroText: Open-source File Format for Industrial Time-Series Datasets
 tagline: TsFile is a high-performance columnar storage file format designed for industrial time-series data, featuring multi-language interfaces, high compression ratios, high read/write throughput, and fast random access capabilities. It is ideal for scenarios such as building high-quality datasets, managing data assets, conducting data analytics, and training AI models.
 heroFullScreen: true
 actions:
-  - text: Preview
+  - text: Viewer
     link: ./preview/
     type: primary
 
