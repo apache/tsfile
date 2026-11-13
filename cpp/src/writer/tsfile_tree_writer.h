@@ -48,13 +48,13 @@ class TsFileTreeWriter {
      * data into the specified file, with an optional memory threshold for
      * buffered data.
      *
-     * @param writer_file Target file where the TsFile data will be written.
+     * @param writer_file Target sink where the TsFile data will be written.
      * Must not be null.
      * @param memory_threshold Optional parameter specifying the memory usage
      * threshold for buffered data before automatic flush occurs. Default is
      * 128MB.
      */
-    explicit TsFileTreeWriter(storage::WriteFile* writer_file,
+    explicit TsFileTreeWriter(storage::RandomAccessWriteFile* writer_file,
                               uint64_t memory_threshold = 128 * 1024 * 1024);
 
     /**
