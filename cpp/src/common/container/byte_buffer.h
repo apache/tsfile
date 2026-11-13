@@ -133,6 +133,14 @@ class ByteBuffer {
 
     FORCE_INLINE uint32_t get_data_size() const { return real_data_size_; }
 
+    // Declare bytes that were written directly through get_data() without going
+    // through append_*(). Used when a caller decodes straight into this buffer
+    // at a known offset.
+    FORCE_INLINE void set_data_size(uint32_t size) {
+        ASSERT(size <= reserved_size_);
+        real_data_size_ = size;
+    }
+
    private:
     char* data_;
     uint8_t variable_type_len_;
