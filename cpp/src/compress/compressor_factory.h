@@ -114,7 +114,17 @@ class CompressorFactory {
         }
     }
 
-    static void free(Compressor* c) { common::mem_free(c); }
+    // Compressors are placement-new'd into mem_alloc() storage, so freeing
+    // that storage alone skips ~Compressor().  Any resource a compressor
+    // retains outside its own object (e.g. LZ4's reused decompression
+    // buffer) would leak; run the (virtual) destructor first.
+    static void free(Compressor* c) {
+        if (c == nullptr) {
+            return;
+        }
+        c->~Compressor();
+        common::mem_free(c);
+    }
 };
 
 }  // end namespace storage

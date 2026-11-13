@@ -81,7 +81,6 @@ void ChunkReader::destroy() {
         value_decoder_ = nullptr;
     }
     if (compressor_ != nullptr) {
-        compressor_->~Compressor();
         CompressorFactory::free(compressor_);
         compressor_ = nullptr;
     }
