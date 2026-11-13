@@ -31,7 +31,8 @@ namespace storage {
 namespace {
 const char* kTimeOnlyContextName = "__time_only_aligned_context__";
 
-common::TsBlock* reusable_block_factory(void* ctx, common::TupleDesc& desc,
+common::TsBlock* reusable_block_factory(void* ctx,
+                                        const common::TupleDesc& desc,
                                         uint32_t max_rows) {
     return static_cast<ReusableTsBlock*>(ctx)->acquire(desc, max_rows);
 }

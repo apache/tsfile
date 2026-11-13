@@ -59,8 +59,12 @@ TEST(ReusableTsBlockTest, ReusesTheBlockForTheSameLayout) {
     RowAppender rows(first);
     for (int i = 0; i < 5; i++) {
         ASSERT_TRUE(rows.add_row());
+        // Append every column of the layout: a partially written row would
+        // leave the block in a state the reader never produces.
         int64_t t = i;
+        int64_t value = i * 2;
         rows.append(0, reinterpret_cast<char*>(&t), sizeof(t));
+        rows.append(1, reinterpret_cast<char*>(&value), sizeof(value));
     }
     first->reset();
     EXPECT_EQ(first->get_row_count(), 0u);
@@ -167,7 +171,8 @@ class ReusableTsBlockScanTest : public ::testing::Test {
 
     // Reads every row of the table once, exactly as a device-ordered scan does
     // for one device: the series scan iterator asks @reusable for its output
-    // block.
+    // block, and the shared multi-value context bulk-copies both value columns
+    // into appenders on a destination block.
     std::vector<int64_t> scan(ReusableTsBlock& reusable) {
         PageArena arena;
         arena.init(512, MOD_TSFILE_READER);
@@ -181,22 +186,49 @@ class ReusableTsBlockScanTest : public ::testing::Test {
         EXPECT_EQ(context.init(&task, names, nullptr, positions, arena, nullptr,
                                0, -1, &reusable),
                   common::E_OK);
+
+        TupleDesc tuple;
+        tuple.push_back(ColumnSchema("time", INT64, UNCOMPRESSED, PLAIN));
+        tuple.push_back(ColumnSchema("v", INT64, UNCOMPRESSED, PLAIN));
+        tuple.push_back(ColumnSchema("w", INT64, UNCOMPRESSED, PLAIN));
+        TsBlock output(&tuple, kRows);
+        EXPECT_EQ(output.init(), E_OK);
+        RowAppender rows(&output);
+        std::vector<std::unique_ptr<ColAppender>> owned;
+        std::vector<ColAppender*> appenders;
+        for (uint32_t c = 0; c < tuple.get_column_count(); ++c) {
+            owned.emplace_back(new ColAppender(c, &output));
+            appenders.push_back(owned.back().get());
+        }
+
         std::vector<int64_t> times;
-        while (context.available_rows() > 0) {
-            int64_t time = 0;
-            EXPECT_EQ(context.get_current_time(time), common::E_OK);
-            char* value = nullptr;
-            uint32_t len = 0;
-            EXPECT_EQ(context.get_current_value(value, len), common::E_OK);
-            int64_t v = 0;
-            std::memcpy(&v, value, sizeof(v));
-            EXPECT_EQ(v, time - kBaseTime);
-            times.push_back(time);
-            const int moved = context.move_iter();
-            if (moved == common::E_NO_MORE_DATA) {
-                break;
+        while (true) {
+            const uint32_t available = context.available_rows();
+            if (available == 0) break;
+            output.reset();
+            for (auto* appender : appenders) appender->reset();
+            const int ret = context.bulk_copy_into(appenders, appenders[0],
+                                                   &rows, available);
+            EXPECT_TRUE(ret == E_OK || ret == E_NO_MORE_DATA);
+            RowIterator iter(&output);
+            while (iter.has_next()) {
+                uint32_t len = 0;
+                bool is_null = false;
+                int64_t time = 0;
+                std::memcpy(&time, iter.read(0, &len, &is_null), sizeof(time));
+                EXPECT_FALSE(is_null);
+                int64_t v = 0;
+                std::memcpy(&v, iter.read(1, &len, &is_null), sizeof(v));
+                EXPECT_FALSE(is_null);
+                EXPECT_EQ(v, time - kBaseTime);
+                int64_t w = 0;
+                std::memcpy(&w, iter.read(2, &len, &is_null), sizeof(w));
+                EXPECT_FALSE(is_null);
+                EXPECT_EQ(w, (time - kBaseTime) * 2);
+                times.push_back(time);
+                iter.next();
             }
-            EXPECT_EQ(moved, common::E_OK);
+            if (ret == E_NO_MORE_DATA) break;
         }
         return times;
     }

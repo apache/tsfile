@@ -101,9 +101,9 @@ class TsFileSeriesScanIterator {
     // block plus all its per-column buffers for every device. The factory is
     // handed the exact layout the block must have and may return a matching
     // block that is reused across series; returning nullptr makes the iterator
-    // allocate a new one. The returned block must already be reset().
+    // allocate a new one. The iterator resets a returned block before use.
     using TsBlockFactory = common::TsBlock* (*)(void* ctx,
-                                                common::TupleDesc& desc,
+                                                const common::TupleDesc& desc,
                                                 uint32_t max_block_rows);
     void set_tsblock_factory(TsBlockFactory factory, void* ctx) {
         tsblock_factory_ = factory;
