@@ -60,6 +60,10 @@ typedef enum {
     TS_ENCODING_SPRINTZ = 12,
     TS_ENCODING_RLBE = 13,
     TS_ENCODING_CAMEL = 14,
+    /* C++/Python-only for now: the Java implementation has no ALP decoder.
+     * A file containing an ALP chunk opens in Java, but reading that series
+     * fails. Do not write ALP into files consumed by Java. */
+    TS_ENCODING_ALP = 15,
     TS_ENCODING_INVALID = 255
 } TSEncoding;
 
@@ -358,6 +362,54 @@ ERRNO tsfile_set_file_read_backend(int32_t backend);
 TsFileReadBackend tsfile_get_file_read_backend(void);
 
 /**
+ * @brief Enable/disable the parallel read path.
+ *
+ * The switch is consulted when a query opens its series iterators, so it
+ * applies to every subsequent read, not only to readers opened afterwards.
+ * The flags and the pool are read without synchronization: set them before
+ * starting queries/writes, not while another thread is reading or writing.
+ *
+ * @param enabled Non-zero to enable, zero to disable.
+ * @return RET_OK on success.
+ */
+ERRNO tsfile_set_parallel_read_enabled(int32_t enabled);
+
+/** @return Whether the parallel read path is enabled. */
+int tsfile_get_parallel_read_enabled(void);
+
+/**
+ * @brief Enable/disable the parallel write path.
+ *
+ * Consulted on every write, not only by writers opened afterwards.  Same
+ * concurrency rule as tsfile_set_parallel_read_enabled().
+ *
+ * @param enabled Non-zero to enable, zero to disable.
+ * @return RET_OK on success.
+ */
+ERRNO tsfile_set_parallel_write_enabled(int32_t enabled);
+
+/** @return Whether the parallel write path is enabled. */
+int tsfile_get_parallel_write_enabled(void);
+
+/**
+ * @brief Set the size of the global worker thread pool.
+ *
+ * Takes effect immediately when the library has been initialized (an existing
+ * pool is joined and recreated).  Readers and writers borrow the pool, so this
+ * must not be called while any reader, writer or result set is in use — it is
+ * meant for setup / benchmark reconfiguration.  With ENABLE_THREADS off this
+ * only records the value.
+ *
+ * @param count Number of worker threads, in [1, 64].
+ * @return RET_OK on success, RET_INVALID_ARG for an out-of-range count, or
+ * RET_OOM if the new pool could not be created (the old one is kept).
+ */
+ERRNO tsfile_set_thread_count(int32_t count);
+
+/** @return The configured worker thread count (1..64). */
+int32_t tsfile_get_thread_count(void);
+
+/**
  * @brief Get the encoding type for global time column
  *
  * @return uint8_t Time encoding type enum value (cast to uint8_t)
@@ -418,9 +470,11 @@ int set_global_time_compression(uint8_t compression);
  *        - BOOLEAN: PLAIN only
  *        - INT32/DATE/INT64/TIMESTAMP: PLAIN, TS_2DIFF, GORILLA, ZIGZAG, RLE,
  *          SPRINTZ, CHIMP, RLBE
- *        - FLOAT: PLAIN, TS_2DIFF, GORILLA, SPRINTZ, CHIMP, RLBE
- *        - DOUBLE: PLAIN, TS_2DIFF, GORILLA, SPRINTZ, CHIMP, RLBE, CAMEL
+ *        - FLOAT: PLAIN, TS_2DIFF, GORILLA, SPRINTZ, CHIMP, RLBE, ALP
+ *        - DOUBLE: PLAIN, TS_2DIFF, GORILLA, SPRINTZ, CHIMP, RLBE, CAMEL, ALP
  *        - STRING: PLAIN, DICTIONARY
+ * @warning ALP is C++/Python-only for now. A file written with ALP cannot be
+ *          read by the Java implementation.
  */
 int set_datatype_encoding(uint8_t data_type, uint8_t encoding);
 

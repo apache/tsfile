@@ -1929,6 +1929,10 @@ TEST_F(EncodingCompressionCompatibilityTest, SpecMatchesCppCapabilities) {
     // Only the table model is exercised by the cross-language matrix.
     for (Model model : {Model::TABLE}) {
         for (TSDataType data_type : kMatrixDataTypes) {
+            // The upper bound stops at CAMEL on purpose: ALP (15) is
+            // C++/Python-only and has no matrix rows until the Java
+            // implementation gains an ALP decoder. Extend this bound together
+            // with the Java decoder and the corresponding matrix rows.
             for (int e = PLAIN; e <= CAMEL; e++) {
                 TSEncoding encoding = static_cast<TSEncoding>(e);
                 const bool can_write = EncoderSupported(encoding, data_type);

@@ -91,6 +91,12 @@ from .tsfile_py_cpp import (
     get_file_read_backend,
     get_tsfile_config,
     set_file_read_backend,
+    get_parallel_read_enabled,
+    get_parallel_write_enabled,
+    get_thread_count,
+    set_parallel_read_enabled,
+    set_parallel_write_enabled,
+    set_thread_count,
     set_tsfile_config,
 )
 from .tsfile_table_writer import TsFileTableWriter

@@ -28,8 +28,8 @@
 #include "common/global.h"
 #include "common/schema.h"
 #include "common/tsfile_common.h"
+#include "random_access_write_file.h"
 #include "reader/bloom_filter.h"
-#include "write_file.h"
 
 namespace storage {
 
@@ -56,7 +56,13 @@ class TsFileIOWriter {
     typedef DeviceNodeMap::iterator DeviceNodeMapIterator;
 
    public:
-    static const uint32_t WRITE_STREAM_PAGE_SIZE = 512;  // FIXME
+    // Pending bytes drain to the file one page at a time, so this is both the
+    // write() granularity and the per-flush allocation unit. 512 bytes turned
+    // a chunk flush into dozens of tiny write() syscalls and page allocations;
+    // 64 KiB keeps a chunk's data in one or two pages without wasting much
+    // memory on the trailing page.
+    static constexpr uint32_t WRITE_STREAM_PAGE_SIZE = 64 * 1024;
+
    public:
     TsFileIOWriter()
         : meta_allocator_(),
@@ -85,7 +91,7 @@ class TsFileIOWriter {
         }
     }
     ~TsFileIOWriter() { destroy(); }
-    int init(WriteFile* write_file);
+    int init(RandomAccessWriteFile* write_file);
     void destroy();
 
     void set_generate_table_schema(bool generate_table_schema);
@@ -110,7 +116,7 @@ class TsFileIOWriter {
     int end_flush_chunk_group(bool is_aligned = false);
     int end_file();
 
-    FORCE_INLINE std::string get_file_path() { return file_->get_file_path(); }
+    FORCE_INLINE std::string get_file_path() { return file_->file_path(); }
     FORCE_INLINE std::shared_ptr<Schema> get_schema() { return schema_; }
     int64_t get_meta_size() const;
 
@@ -239,7 +245,7 @@ class TsFileIOWriter {
         chunk_group_meta_index_;
     bool use_prev_alloc_cgm_;  // chunk group meta
     std::shared_ptr<IDeviceID> cur_device_name_;
-    WriteFile* file_;
+    RandomAccessWriteFile* file_;
     bool write_file_created_;
     bool generate_table_schema_;
     std::shared_ptr<Schema> schema_;
