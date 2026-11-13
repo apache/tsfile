@@ -20,7 +20,14 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <chrono>
+
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
 #include <cstdio>
 #include <functional>
 #include <memory>
@@ -164,11 +171,20 @@ class TableFieldFilterTest
         saved_ = g_config_value_;
         g_config_value_.page_writer_max_point_num_ = 3;
         g_config_value_.parallel_read_enabled_ = std::get<0>(GetParam());
+        // CTest runs cases in parallel processes; two can seed from the same
+        // clock tick and one then removes the file the other is opening.
+#ifdef _WIN32
+        const auto process_id = static_cast<uint64_t>(_getpid());
+#else
+        const auto process_id = static_cast<uint64_t>(getpid());
+#endif
+        static std::atomic<uint64_t> filename_counter{0};
         filename_ =
             "table_field_filter_" +
             std::to_string(
                 std::chrono::steady_clock::now().time_since_epoch().count()) +
-            ".tsfile";
+            "_" + std::to_string(process_id) + "_" +
+            std::to_string(filename_counter.fetch_add(1)) + ".tsfile";
         WriteFile file;
         int flags = O_WRONLY | O_CREAT | O_TRUNC;
 #ifdef _WIN32
