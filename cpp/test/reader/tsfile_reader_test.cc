@@ -96,7 +96,8 @@ class TsFileReaderTest : public ::testing::Test {
         flags |= O_BINARY;
 #endif
         mode_t mode = 0666;
-        EXPECT_EQ(tsfile_writer_->open(file_name_, flags, mode), common::E_OK);
+        // Without an open writer the body below crashes instead of reporting.
+        ASSERT_EQ(tsfile_writer_->open(file_name_, flags, mode), common::E_OK);
     }
 
     void TearDown() override {
@@ -110,8 +111,12 @@ class TsFileReaderTest : public ::testing::Test {
 
    public:
     static std::string generate_random_string(int length) {
-        std::mt19937 gen(static_cast<unsigned int>(
-            std::chrono::system_clock::now().time_since_epoch().count()));
+        // Seed from random_device, not the clock: cases of one suite run as
+        // separate processes in a shared directory (ctest --parallel), and a
+        // time-seeded generator can hand two of them the same name, leaving
+        // one open() to fail with E_ALREADY_EXIST.
+        std::random_device rd;
+        std::mt19937 gen(rd());
         std::uniform_int_distribution<> dis(0, 61);
 
         const std::string chars =

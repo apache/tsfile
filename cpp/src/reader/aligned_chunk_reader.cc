@@ -117,6 +117,7 @@ void AlignedChunkReader::reset() {
         col->chunk_meta = nullptr;
         for (auto& pps : col->per_page_state) {
             pps.predecode_pa.destroy();
+            pps.direct_values = nullptr;
         }
         col->per_page_state.clear();
         col->pending_decoded_values.clear();
@@ -129,6 +130,9 @@ void AlignedChunkReader::reset() {
     release_current_page_state();
     chunk_pages_.clear();
     per_page_times_.clear();
+#ifdef ENABLE_TEST
+    bulk_page_count_ = 0;
+#endif
 }
 
 void AlignedChunkReader::destroy() {
@@ -138,6 +142,7 @@ void AlignedChunkReader::destroy() {
     // LeakSanitizer doesn't flag the (rather large) ChunkPageInfo buffers.
     std::vector<ChunkPageInfo>{}.swap(chunk_pages_);
     std::vector<int64_t>{}.swap(page_all_times_);
+    std::vector<size_t>{}.swap(direct_col_off_);
     if (time_uncompressed_buf_ != nullptr && time_compressor_ != nullptr) {
         time_compressor_->after_uncompress(time_uncompressed_buf_);
         time_uncompressed_buf_ = nullptr;
@@ -202,6 +207,7 @@ void AlignedChunkReader::destroy() {
         }
         for (auto& pps : col->per_page_state) {
             pps.predecode_pa.destroy();
+            pps.direct_values = nullptr;
         }
         col->per_page_state.clear();
         col->pending_decoded_values.clear();
@@ -1717,6 +1723,11 @@ int AlignedChunkReader::build_page_plan(Filter* filter, int& row_offset) {
     page_plan_built_ = IS_SUCC(ret);
 
     if (page_plan_built_) {
+        int32_t out_row = 0;
+        for (auto& page : chunk_pages_) {
+            page.out_row_begin = out_row;
+            out_row += page.row_end - page.row_begin;
+        }
         per_page_times_.assign(chunk_pages_.size(), std::vector<int64_t>{});
         if (chunk_pages_.size() == 1 && !single_page_times.empty()) {
             per_page_times_[0] = std::move(single_page_times);
@@ -1734,6 +1745,10 @@ void AlignedChunkReader::release_current_page_state() {
     page_all_times_.clear();
     page_time_count_ = 0;
     page_time_cursor_ = 0;
+    direct_page_end_ = 0;
+    direct_tsblock_ = nullptr;
+    direct_base_row_ = 0;
+    direct_col_off_.clear();
     for (auto* col : value_columns_) {
         if (col->uncompressed_buf != nullptr && col->compressor != nullptr) {
             col->compressor->after_uncompress(col->uncompressed_buf);
@@ -1744,6 +1759,7 @@ void AlignedChunkReader::release_current_page_state() {
         col->in.reset();
         for (auto& pps : col->per_page_state) {
             pps.predecode_pa.destroy();
+            pps.direct_values = nullptr;
         }
         col->per_page_state.clear();
         col->pending_decoded_values.clear();
@@ -1767,6 +1783,7 @@ int AlignedChunkReader::decode_value_page_for_slot(uint32_t col_idx,
     pps.predecoded_strings.clear();
     pps.predecoded_read_pos = 0;
     pps.predecoded_count = 0;
+    pps.direct_values = nullptr;
     pps.predecode_pa.destroy();
 
     if (page_info.value_compressed_sizes[col_idx] == 0) {
@@ -1881,11 +1898,28 @@ int AlignedChunkReader::decode_value_page_for_slot(uint32_t col_idx,
     }
 
     uint32_t elem_size = common::get_data_type_size(dt);
-    pps.predecoded_values.resize(static_cast<size_t>(nonnull_total) *
-                                 elem_size);
+    char* values_dst = nullptr;
+    // Direct decode: prepare_direct_decode() reserved this page's output rows
+    // in the destination Vector before decoding started, and a page without
+    // nulls maps one decoded value to one row, so the value stream can be
+    // written in place. Pages that carry nulls, or whose retained range is only
+    // part of the page, keep their own staging buffer (the row/scatter code
+    // copies those).
+    if (page_idx < direct_page_end_ && page_info.row_begin == 0 &&
+        page_info.row_end == static_cast<int32_t>(data_num) &&
+        nonnull_total == static_cast<int32_t>(data_num)) {
+        common::Vector* vec = direct_tsblock_->get_vector(col_idx + 1);
+        values_dst =
+            vec->get_value_data().get_data() + direct_col_off_[col_idx];
+        pps.direct_values = values_dst;
+    } else {
+        pps.predecoded_values.resize(static_cast<size_t>(nonnull_total) *
+                                     elem_size);
+        values_dst = pps.predecoded_values.data();
+    }
     switch (dt) {
         case common::BOOLEAN: {
-            bool* out = reinterpret_cast<bool*>(pps.predecoded_values.data());
+            bool* out = reinterpret_cast<bool*>(values_dst);
             for (int i = 0; i < nonnull_total; i++) {
                 if (RET_FAIL(col->decoder->read_boolean(out[i], in))) {
                     cleanup();
@@ -1897,8 +1931,8 @@ int AlignedChunkReader::decode_value_page_for_slot(uint32_t col_idx,
         case common::INT32:
         case common::DATE:
             if (RET_FAIL(col->decoder->read_exact_int32(
-                    reinterpret_cast<int32_t*>(pps.predecoded_values.data()),
-                    nonnull_total, in))) {
+                    reinterpret_cast<int32_t*>(values_dst), nonnull_total,
+                    in))) {
                 cleanup();
                 return ret;
             }
@@ -1906,24 +1940,23 @@ int AlignedChunkReader::decode_value_page_for_slot(uint32_t col_idx,
         case common::INT64:
         case common::TIMESTAMP:
             if (RET_FAIL(col->decoder->read_exact_int64(
-                    reinterpret_cast<int64_t*>(pps.predecoded_values.data()),
-                    nonnull_total, in))) {
+                    reinterpret_cast<int64_t*>(values_dst), nonnull_total,
+                    in))) {
                 cleanup();
                 return ret;
             }
             break;
         case common::FLOAT:
             if (RET_FAIL(col->decoder->read_exact_float(
-                    reinterpret_cast<float*>(pps.predecoded_values.data()),
-                    nonnull_total, in))) {
+                    reinterpret_cast<float*>(values_dst), nonnull_total, in))) {
                 cleanup();
                 return ret;
             }
             break;
         case common::DOUBLE:
             if (RET_FAIL(col->decoder->read_exact_double(
-                    reinterpret_cast<double*>(pps.predecoded_values.data()),
-                    nonnull_total, in))) {
+                    reinterpret_cast<double*>(values_dst), nonnull_total,
+                    in))) {
                 cleanup();
                 return ret;
             }
@@ -1933,8 +1966,119 @@ int AlignedChunkReader::decode_value_page_for_slot(uint32_t col_idx,
             return E_NOT_SUPPORT;
     }
     pps.predecoded_count = nonnull_total;
+    if (page_idx < direct_page_end_) {
+        // Reserve in the destination column exactly the values the scatter
+        // will emit for this page: the non-null ones in [row_begin, row_end).
+        // A page that could not be written in place (nulls, or a retained
+        // range shorter than the page) is appended from its staging buffer
+        // instead, so advancing by the whole page's non-null count would push
+        // the offsets of the following pages too far ahead.
+        int values_in_range = nonnull_total;
+        if (pps.direct_values == nullptr) {
+            const int up_to_end =
+                count_non_null_prefix(pps.notnull_bitmap, page_info.row_end);
+            const int up_to_begin =
+                count_non_null_prefix(pps.notnull_bitmap, page_info.row_begin);
+            if (up_to_end < 0 || up_to_begin < 0) {
+                cleanup();
+                return E_TSFILE_CORRUPTED;
+            }
+            values_in_range = up_to_end - up_to_begin;
+        }
+        direct_col_off_[col_idx] +=
+            static_cast<size_t>(values_in_range) * elem_size;
+    }
     cleanup();
     return E_OK;
+}
+
+// Decide how many leading pages of the plan can be decoded straight into the
+// destination TsBlock's column buffers. The destination address of a row must
+// be fixed before decode starts, because parallel decode runs ahead of the
+// scatter loop, so the pages written in place must all be scattered within the
+// same call — that is exactly the prefix of pages whose output rows still fit
+// in the rows available in the current TsBlock (the scatter consumes pages in
+// order and only swaps blocks once the budget is exhausted).
+//   - no FIELD filter: a page-level mask can drop rows and shift the output;
+//   - a contiguous time filter: a page's retained rows stay one contiguous run;
+//   - FULL_PASS pages starting at row 0. A page whose decoded stream starts
+//     before its output slice (partial range / offset pushdown) would write
+//     before the destination base, so the direct prefix stops there;
+//   - fixed-length columns whose type matches the destination Vector.
+// In lazy (single-thread) mode pages are decoded during the scatter itself, so
+// a partial prefix cannot be used: the block may be swapped between pages
+// before they are decoded. There, the whole plan must fit.
+bool AlignedChunkReader::prepare_direct_decode(TsBlock* tsblock,
+                                               Filter* filter) {
+    direct_page_end_ = 0;
+    direct_tsblock_ = nullptr;
+    direct_base_row_ = 0;
+    direct_col_off_.clear();
+    if (field_filter_ != nullptr || tsblock == nullptr ||
+        chunk_pages_.empty()) {
+        return false;
+    }
+    if (filter != nullptr && !filter->is_contiguous_time_filter()) {
+        return false;
+    }
+    if (has_variable_length_value_column()) {
+        return false;
+    }
+    const uint32_t num_cols = value_columns_.size();
+    if (num_cols == 0 || tsblock->get_column_count() < num_cols + 1) {
+        return false;
+    }
+    for (uint32_t c = 0; c < num_cols; c++) {
+        if (value_columns_[c]->chunk_header.data_type_ !=
+            tsblock->get_vector(c + 1)->get_vector_type()) {
+            return false;
+        }
+    }
+    const int64_t base_row = static_cast<int64_t>(tsblock->get_row_count());
+    const int64_t available =
+        static_cast<int64_t>(tsblock->get_max_row_count()) - base_row;
+    size_t end = 0;
+    for (size_t i = 0; i < chunk_pages_.size(); i++) {
+        const auto& page = chunk_pages_[i];
+        // A page whose retained range starts at row 0 and covers the whole page
+        // (checked again after decode, once the row count is known) writes its
+        // values in order. That includes conservatively classified BOUNDARY
+        // pages: when the time predicate is contiguous, [row_begin, row_end)
+        // holds exactly the matching rows, so an all-covering range is
+        // equivalent to FULL_PASS even without page statistics.
+        if (page.row_begin != 0) {
+            break;
+        }
+        const int64_t page_end =
+            static_cast<int64_t>(page.out_row_begin) + page.row_end;
+        if (page_end > available) {
+            break;
+        }
+        end = i + 1;
+    }
+    if (end == 0) {
+        return false;
+    }
+    // decode_all_planned_pages() keeps a partial prefix only when it decodes
+    // every page up front; mirror that decision here.
+#ifdef ENABLE_THREADS
+    const bool eager_decode =
+        decode_pool_ != nullptr && value_columns_.size() > 1;
+#else
+    const bool eager_decode = false;
+#endif
+    if (!eager_decode && end != chunk_pages_.size()) {
+        return false;
+    }
+    direct_page_end_ = end;
+    direct_base_row_ = static_cast<int32_t>(base_row);
+    direct_tsblock_ = tsblock;
+    direct_col_off_.assign(num_cols, 0);
+    for (uint32_t c = 0; c < num_cols; c++) {
+        direct_col_off_[c] =
+            tsblock->get_vector(c + 1)->get_value_data().get_data_size();
+    }
+    return true;
 }
 
 // Multi-thread path: one task per value column, each decoding all non-SKIP
@@ -2104,6 +2248,7 @@ void AlignedChunkReader::release_page_slot(size_t page_idx) {
         pps.predecode_pa.destroy();
         pps.predecoded_count = 0;
         pps.predecoded_read_pos = 0;
+        pps.direct_values = nullptr;
     }
 }
 
@@ -2176,6 +2321,7 @@ int AlignedChunkReader::get_next_page_multi_impl(TsBlock* ret_tsblock,
         if (RET_FAIL(build_page_plan(filter, row_offset))) {
             return ret;
         }
+        prepare_direct_decode(ret_tsblock, filter);
         if (RET_FAIL(decode_all_planned_pages())) {
             return ret;
         }
@@ -2237,12 +2383,25 @@ int AlignedChunkReader::get_next_page_multi_impl(TsBlock* ret_tsblock,
         int32_t remaining_in_page = page_time_count_ - page_time_cursor_;
         uint32_t budget = row_appender.remaining();
 
-        // Fast path: FULL_PASS page, no nulls in any value column, types
-        // match destination, budget > 0.  Bulk-memcpys up to
+        // Fast path: FULL_PASS page, or a BOUNDARY page under a contiguous
+        // time filter (e.g. TimeBetween) whose whole [row_begin, row_end]
+        // range matches — no nulls in any value column, types match
+        // destination, budget > 0.  Bulk-memcpys up to
         // min(budget, remaining_in_page) rows from page_time_cursor_; tail
         // pages of an SSI tsblock still take the memcpy path instead of
-        // falling into the row-by-row scatter loop.
-        bool can_bulk = page_info.pass_type == PagePassType::FULL_PASS &&
+        // falling into the row-by-row scatter loop.  Discrete filters (TimeIn,
+        // NOT BETWEEN) keep the slow path because the compressed range can
+        // still contain unmatched timestamps.
+        // A BOUNDARY page may be bounded by the time filter or by a FIELD
+        // predicate mask. Only the former keeps every row of
+        // [row_begin, row_end): a field mask can still reject rows inside that
+        // range, so those pages must stay on the row-by-row path.
+        const bool boundary_contiguous =
+            page_info.pass_type == PagePassType::BOUNDARY &&
+            field_filter_ == nullptr &&
+            (filter == nullptr || filter->is_contiguous_time_filter());
+        bool can_bulk = (page_info.pass_type == PagePassType::FULL_PASS ||
+                         boundary_contiguous) &&
                         remaining_in_page > 0 && budget > 0;
         if (can_bulk) {
             for (uint32_t c = 0; c < num_cols; c++) {
@@ -2252,7 +2411,14 @@ int AlignedChunkReader::get_next_page_multi_impl(TsBlock* ret_tsblock,
                 if (dt == common::STRING || dt == common::TEXT ||
                     dt == common::BLOB ||
                     ret_tsblock->get_vector(c + 1)->get_vector_type() != dt ||
-                    pps.predecoded_count != page_time_count_) {
+                    pps.predecoded_count != pps.row_count ||
+                    // The decoded buffer must cover every row about to be
+                    // copied. A column without a value page for this page (a
+                    // missing aligned measurement) decodes to an empty slot
+                    // with row_count == 0 while the plan still expects rows;
+                    // those rows are all null and the row-by-row path marks
+                    // them as such.
+                    pps.row_count < static_cast<uint32_t>(remaining_in_page)) {
                     can_bulk = false;
                     break;
                 }
@@ -2281,13 +2447,30 @@ int AlignedChunkReader::get_next_page_multi_impl(TsBlock* ret_tsblock,
                 uint32_t elem_size =
                     common::get_data_type_size(col->chunk_header.data_type_);
                 common::Vector* vec = ret_tsblock->get_vector(c + 1);
-                vec->get_value_data().append_fixed_value(
-                    pps.predecoded_values.data() +
-                        static_cast<size_t>(page_time_cursor_) * elem_size,
-                    bulk_count * elem_size);
+                // A directly decoded page already sits in the destination
+                // buffer; only declare its bytes. Everything else is appended,
+                // which also keeps the column's compact layout (null rows take
+                // no space) in sync.
+                if (pps.direct_values == nullptr) {
+                    vec->get_value_data().append_fixed_value(
+                        pps.values() +
+                            static_cast<size_t>(page_time_cursor_) * elem_size,
+                        static_cast<uint32_t>(bulk_count) * elem_size);
+                } else {
+                    vec->get_value_data().set_data_size(
+                        vec->get_value_data().get_data_size() +
+                        static_cast<uint32_t>(bulk_count) * elem_size);
+                }
                 vec->add_row_nums(bulk_count);
             }
             row_appender.add_rows(bulk_count);
+#ifdef ENABLE_TEST
+            // One count per page, not per bulk operation: a page is copied in
+            // several operations when the destination block fills up first.
+            if (page_time_cursor_ == page_info.row_begin) {
+                ++bulk_page_count_;
+            }
+#endif
             page_time_cursor_ += bulk_count;
             if (page_time_cursor_ >= page_time_count_) {
                 if (single_thread_lazy) {
@@ -2367,12 +2550,22 @@ int AlignedChunkReader::get_next_page_multi_impl(TsBlock* ret_tsblock,
                 } else {
                     uint32_t elem_size = common::get_data_type_size(
                         col->chunk_header.data_type_);
-                    row_appender.append(
-                        c + 1,
-                        pps.predecoded_values.data() +
-                            static_cast<size_t>(pps.predecoded_read_pos++) *
-                                elem_size,
-                        elem_size);
+                    if (pps.direct_values != nullptr) {
+                        // Decode already placed this value in the destination
+                        // buffer; only declare it, do not copy bytes onto
+                        // themselves.
+                        common::Vector* vec = ret_tsblock->get_vector(c + 1);
+                        vec->get_value_data().set_data_size(
+                            vec->get_value_data().get_data_size() + elem_size);
+                        pps.predecoded_read_pos++;
+                    } else {
+                        row_appender.append(
+                            c + 1,
+                            pps.values() +
+                                static_cast<size_t>(pps.predecoded_read_pos++) *
+                                    elem_size,
+                            elem_size);
+                    }
                 }
             }
             page_time_cursor_++;

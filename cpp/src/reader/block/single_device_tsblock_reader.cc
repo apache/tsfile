@@ -30,7 +30,13 @@ namespace storage {
 
 namespace {
 const char* kTimeOnlyContextName = "__time_only_aligned_context__";
+
+common::TsBlock* reusable_block_factory(void* ctx,
+                                        const common::TupleDesc& desc,
+                                        uint32_t max_rows) {
+    return static_cast<ReusableTsBlock*>(ctx)->acquire(desc, max_rows);
 }
+}  // namespace
 
 SingleDeviceTsBlockReader::SingleDeviceTsBlockReader(
     DeviceQueryTask* device_query_task, uint32_t block_size,
@@ -283,9 +289,9 @@ int SingleDeviceTsBlockReader::init_internal(DeviceQueryTask* device_query_task,
                  dense_row_count_ >= 0)
                     ? remaining_offset_
                     : 0;
-            int ctx_ret =
-                ctx->init(device_query_task_, meas_names, time_filter, pos_list,
-                          pa_, aligned_field_filter_, ssi_offset, -1);
+            int ctx_ret = ctx->init(device_query_task_, meas_names, time_filter,
+                                    pos_list, pa_, aligned_field_filter_,
+                                    ssi_offset, -1, reusable_block_);
             if (ctx_ret == common::E_OK) {
                 if (ssi_offset > 0) {
                     row_offset_pushed_to_ssi_ = true;
@@ -1209,7 +1215,8 @@ int VectorMeasurementColumnContext::init(
     DeviceQueryTask* device_query_task,
     const std::vector<std::string>& measurement_names, Filter* time_filter,
     std::vector<std::vector<int32_t>>& pos_in_result, common::PageArena& pa,
-    AlignedFieldFilter* field_filter, int ssi_offset, int ssi_limit) {
+    AlignedFieldFilter* field_filter, int ssi_offset, int ssi_limit,
+    ReusableTsBlock* reusable_block) {
     int ret = common::E_OK;
     pos_in_result_ = pos_in_result;
     column_names_ = measurement_names;
@@ -1217,6 +1224,9 @@ int VectorMeasurementColumnContext::init(
             device_query_task->get_device_id(), measurement_names, ssi_, pa,
             time_filter, field_filter))) {
         return ret;
+    }
+    if (reusable_block != nullptr) {
+        ssi_->set_tsblock_factory(reusable_block_factory, reusable_block);
     }
     ssi_->set_row_range(ssi_offset, ssi_limit);
     if (RET_FAIL(get_next_tsblock(true))) {

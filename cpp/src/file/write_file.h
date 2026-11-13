@@ -22,12 +22,19 @@
 
 #include <string>
 
+#include "file/random_access_write_file.h"
 #include "utils/storage_utils.h"
 #include "utils/util_define.h"
 
 namespace storage {
 
-class WriteFile {
+/**
+ * The local-file backend: RandomAccessWriteFile implemented over a POSIX
+ * file descriptor.  create() opens the path; every other operation is the
+ * fd-based implementation below.  See RandomAccessWriteFile for the method
+ * contracts.
+ */
+class WriteFile : public RandomAccessWriteFile {
    public:
     WriteFile() : path_(), fd_(-1) {}
     // Release the OS file handle on destruction.  Without this, a writer left
@@ -35,21 +42,24 @@ class WriteFile {
     // the fd — harmless on POSIX (unlink works on open files) but on Windows it
     // keeps the file locked so a subsequent remove() fails.  close() is
     // idempotent, so this is a no-op when the file was already closed normally.
-    ~WriteFile() { close(); }
+    ~WriteFile() override { close(); }
     int create(const std::string& file_name, int flags, mode_t mode);
-    bool file_opened() const { return fd_ > 0; }
-    int write(const char* buf, uint32_t len);
+    /** Kept for source compatibility; use is_opened(). */
+    bool file_opened() const { return is_opened(); }
+    bool is_opened() const override { return fd_ >= 0; }
+    int write(const char* buf, uint32_t len) override;
     FORCE_INLINE int get_fd() const { return fd_; }
-    int sync();
-    int close();
+    int sync() override;
+    int close() override;
     /** Truncate file to the given size (bytes). File must be open. */
-    int truncate(int64_t size);
+    int truncate(int64_t size) override;
     /** Seek to end of file. Used after open to position for append. */
-    int seek_to_end();
+    int seek_to_end() override;
     FORCE_INLINE const std::string& get_file_path() const { return path_; }
+    FORCE_INLINE const std::string& file_path() const override { return path_; }
     /** Current file offset. After seek_to_end(), equals file size (for
      * recovery). */
-    int64_t get_position();
+    int64_t get_position() override;
 
    private:
     int do_create(int flags, mode_t mode);

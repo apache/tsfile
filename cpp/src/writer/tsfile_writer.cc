@@ -117,10 +117,10 @@ void TsFileWriter::destroy() {
     record_count_since_last_flush_ = 0;
 }
 
-int TsFileWriter::init(WriteFile* write_file) {
+int TsFileWriter::init(RandomAccessWriteFile* write_file) {
     if (write_file == nullptr) {
         return E_INVALID_ARG;
-    } else if (!write_file->file_opened()) {
+    } else if (!write_file->is_opened()) {
         return E_INVALID_ARG;
     }
     write_file_ = write_file;

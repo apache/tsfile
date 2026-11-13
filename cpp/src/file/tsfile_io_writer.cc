@@ -48,7 +48,7 @@ int64_t TsFileIOWriter::get_meta_size() const {
     return meta_allocator_.get_total_used_bytes();
 }
 
-int TsFileIOWriter::init(WriteFile* write_file) {
+int TsFileIOWriter::init(RandomAccessWriteFile* write_file) {
     int ret = E_OK;
     const uint32_t page_size = 1024;
     meta_allocator_.init(page_size, MOD_TSFILE_WRITER_META);
@@ -119,7 +119,7 @@ void TsFileIOWriter::destroy() {
 int TsFileIOWriter::add_tsfile_property(const std::string& key,
                                         const uint8_t* value,
                                         uint32_t value_len) {
-    if (file_ == nullptr || file_->get_fd() < 0) {
+    if (file_ == nullptr || !file_->is_opened()) {
         return common::E_FILE_WRITE_ERR;
     }
     if (value_len > 0 && value == nullptr) {
@@ -136,7 +136,7 @@ int TsFileIOWriter::add_tsfile_property(const std::string& key,
 
 int TsFileIOWriter::add_tsfile_property(const std::string& key,
                                         const std::vector<uint8_t>& value) {
-    if (file_ == nullptr || file_->get_fd() < 0) {
+    if (file_ == nullptr || !file_->is_opened()) {
         return common::E_FILE_WRITE_ERR;
     }
     if (key.size() > static_cast<size_t>(std::numeric_limits<int32_t>::max()) ||
@@ -308,7 +308,7 @@ int TsFileIOWriter::end_flush_chunk_group(bool is_aligned) {
 
 int TsFileIOWriter::end_file() {
     int ret = E_OK;
-    if (file_->get_fd() == -1) {
+    if (file_ == nullptr || !file_->is_opened()) {
         return E_OK;
     }
     OFFSET_DEBUG("before end file");
