@@ -472,11 +472,19 @@ if (BUILD_BENCHMARK)
             ${PROJECT_SRC_DIR})
     target_link_libraries(read_backend_benchmark PRIVATE
             tsfile Threads::Threads)
+
     add_executable(write_backend_benchmark
             bench_mark/bench_mark_src/write_backend_benchmark.cc)
     target_include_directories(write_backend_benchmark PRIVATE
             ${PROJECT_SRC_DIR})
     target_link_libraries(write_backend_benchmark PRIVATE
+            tsfile Threads::Threads)
+
+    add_executable(alp_vs_gorilla_benchmark
+            bench_mark/alp_vs_gorilla_benchmark.cc)
+    target_include_directories(alp_vs_gorilla_benchmark PRIVATE
+            ${PROJECT_SRC_DIR})
+    target_link_libraries(alp_vs_gorilla_benchmark PRIVATE
             tsfile Threads::Threads)
 endif ()
 if (BUILD_TOOLS)
