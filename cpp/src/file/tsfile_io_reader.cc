@@ -1060,14 +1060,20 @@ int TsFileIOReader::get_cached_index_node(int64_t start_offset,
     CachedIndexNode entry;
     entry.arena = arena;
     entry.node = node;
+    {
+        std::lock_guard<std::mutex> lk(index_node_cache_mu_);
 #ifdef ENABLE_TEST
-    {
-        std::lock_guard<std::mutex> lk(index_node_cache_mu_);
         ++index_node_cache_misses_;
-    }
 #endif
-    {
-        std::lock_guard<std::mutex> lk(index_node_cache_mu_);
+        // Re-check under the lock: another query may have loaded the same
+        // node while we were reading it outside the lock.  Replacing an
+        // existing entry would move-assign over it, and the old entry must
+        // be released through its own assignment (node before arena).
+        CachedIndexNode existing;
+        if (index_node_cache_.tryGetCopy(start_offset, existing)) {
+            out = std::move(existing);
+            return E_OK;
+        }
         index_node_cache_.insert(start_offset, entry);
     }
     out = std::move(entry);
