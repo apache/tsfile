@@ -33,7 +33,6 @@ import org.apache.tsfile.utils.Accountable;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BitMap;
 import org.apache.tsfile.utils.BytesUtils;
-import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
@@ -42,6 +41,7 @@ import org.apache.tsfile.write.schema.MeasurementSchema;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -601,11 +601,29 @@ public class Tablet implements Accountable {
 
   /** Serialize {@link Tablet} */
   public ByteBuffer serialize() throws IOException {
-    final int serializedSize = serializedSize();
-    try (PublicBAOS byteArrayOutputStream = new PublicBAOS(serializedSize);
-        DataOutputStream outputStream = new DataOutputStream(byteArrayOutputStream)) {
-      serialize(outputStream);
-      return ByteBuffer.wrap(byteArrayOutputStream.getBuf(), 0, byteArrayOutputStream.size());
+    final ByteBuffer buffer = ByteBuffer.allocate(serializedSize());
+    serialize(buffer);
+    buffer.flip();
+    return buffer;
+  }
+
+  /**
+   * Serialize this tablet at the buffer's current position using the same big-endian format as
+   * {@link #serialize(DataOutputStream)}. The buffer's position advances and its byte order is
+   * preserved. The caller must provide at least {@link #serializedSize()} remaining bytes.
+   */
+  public void serialize(ByteBuffer buffer) {
+    final ByteOrder previousOrder = buffer.order();
+    buffer.order(ByteOrder.BIG_ENDIAN);
+    try {
+      ReadWriteIOUtils.write(insertTargetName, buffer);
+      ReadWriteIOUtils.write(rowSize, buffer);
+      writeMeasurementSchemas(buffer);
+      writeTimes(buffer);
+      writeBitMaps(buffer);
+      writeValues(buffer);
+    } finally {
+      buffer.order(previousOrder);
     }
   }
 
@@ -713,11 +731,35 @@ public class Tablet implements Accountable {
     }
   }
 
+  private void writeMeasurementSchemas(ByteBuffer buffer) {
+    ReadWriteIOUtils.write(BytesUtils.boolToByte(schemas != null), buffer);
+    if (schemas != null) {
+      ReadWriteIOUtils.write(schemas.size(), buffer);
+      for (int i = 0; i < schemas.size(); i++) {
+        IMeasurementSchema schema = schemas.get(i);
+        ReadWriteIOUtils.write(BytesUtils.boolToByte(schema != null), buffer);
+        if (schema != null) {
+          schema.serializeTo(buffer);
+          ReadWriteIOUtils.write((byte) columnCategories.get(i).ordinal(), buffer);
+        }
+      }
+    }
+  }
+
   private void writeTimes(DataOutputStream stream) throws IOException {
     ReadWriteIOUtils.write(BytesUtils.boolToByte(timestamps != null), stream);
     if (timestamps != null) {
       for (int i = 0; i < rowSize; i++) {
         ReadWriteIOUtils.write(timestamps[i], stream);
+      }
+    }
+  }
+
+  private void writeTimes(ByteBuffer buffer) {
+    ReadWriteIOUtils.write(BytesUtils.boolToByte(timestamps != null), buffer);
+    if (timestamps != null) {
+      for (int i = 0; i < rowSize; i++) {
+        buffer.putLong(timestamps[i]);
       }
     }
   }
@@ -739,6 +781,23 @@ public class Tablet implements Accountable {
     }
   }
 
+  private void writeBitMaps(ByteBuffer buffer) {
+    ReadWriteIOUtils.write(BytesUtils.boolToByte(bitMaps != null), buffer);
+    if (bitMaps != null) {
+      int size = schemas == null ? 0 : schemas.size();
+      for (int i = 0; i < size; i++) {
+        final boolean hasNull = bitMaps[i] != null && !bitMaps[i].isAllUnmarked(rowSize);
+        ReadWriteIOUtils.write(BytesUtils.boolToByte(hasNull), buffer);
+        if (hasNull) {
+          ReadWriteIOUtils.write(rowSize, buffer);
+          final byte[] bytes = bitMaps[i].getTruncatedByteArray(rowSize);
+          ReadWriteIOUtils.write(bytes.length, buffer);
+          buffer.put(bytes);
+        }
+      }
+    }
+  }
+
   /** Serialize values */
   private void writeValues(DataOutputStream stream) throws IOException {
     ReadWriteIOUtils.write(BytesUtils.boolToByte(values != null), stream);
@@ -746,6 +805,20 @@ public class Tablet implements Accountable {
       int size = (schemas == null ? 0 : schemas.size());
       for (int i = 0; i < size; i++) {
         serializeColumn(Type.fromTsDataType(schemas.get(i).getType()), values[i], stream);
+      }
+    }
+  }
+
+  private void writeValues(ByteBuffer buffer) {
+    ReadWriteIOUtils.write(BytesUtils.boolToByte(values != null), buffer);
+    if (values != null) {
+      int size = schemas == null ? 0 : schemas.size();
+      for (int i = 0; i < size; i++) {
+        final Object column = values[i];
+        ReadWriteIOUtils.write(BytesUtils.boolToByte(column != null), buffer);
+        if (column != null) {
+          Type.fromTsDataType(schemas.get(i).getType()).serializeArray(column, rowSize, buffer);
+        }
       }
     }
   }
