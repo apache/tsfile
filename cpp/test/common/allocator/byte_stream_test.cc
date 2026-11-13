@@ -434,4 +434,53 @@ TEST(OptionalAtomicStorageTest, BackingStorageIsRealAtomic) {
     EXPECT_EQ(oa.load(), 51u);
 }
 
+// The write path drains a ByteStream page by page via Consumer::get_next_buf().
+// Its exact-multiple branch (a stream whose total size is a multiple of the
+// page size) decides whether the last page is full, and had no coverage; a
+// regression there would silently truncate or over-read the final page.
+TEST(ByteStreamConsumerTest, DrainsExactPageMultiplesAndPartialTails) {
+    constexpr uint32_t kPageSize = 1024;
+    struct Case {
+        uint32_t total;
+        std::vector<uint32_t> expected_lens;
+    };
+    const std::vector<Case> cases = {
+        {0, {}},
+        {1, {1}},
+        {kPageSize - 1, {kPageSize - 1}},
+        {kPageSize, {kPageSize}},
+        {kPageSize + 1, {kPageSize, 1}},
+        {2 * kPageSize, {kPageSize, kPageSize}},
+        {3 * kPageSize, {kPageSize, kPageSize, kPageSize}},
+        {3 * kPageSize + 17, {kPageSize, kPageSize, kPageSize, 17}},
+    };
+
+    for (const auto& test_case : cases) {
+        SCOPED_TRACE(::testing::Message() << "total=" << test_case.total);
+        ByteStream stream(kPageSize, MOD_DEFAULT,
+                          /*enable_atomic=*/true);
+        std::vector<uint8_t> payload(test_case.total);
+        for (uint32_t i = 0; i < test_case.total; i++) {
+            payload[i] = static_cast<uint8_t>((i * 13 + 5) & 0xff);
+        }
+        if (test_case.total > 0) {
+            ASSERT_EQ(stream.write_buf(payload.data(), test_case.total), E_OK);
+        }
+
+        ByteStream::Consumer consumer(stream);
+        std::vector<uint32_t> lens;
+        std::vector<uint8_t> drained;
+        while (true) {
+            ByteStream::Buffer buf = consumer.get_next_buf(stream);
+            if (buf.buf_ == nullptr) {
+                break;
+            }
+            lens.push_back(buf.len_);
+            drained.insert(drained.end(), buf.buf_, buf.buf_ + buf.len_);
+        }
+        EXPECT_EQ(lens, test_case.expected_lens);
+        EXPECT_EQ(drained, payload);
+    }
+}
+
 }  // namespace common
