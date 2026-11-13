@@ -79,6 +79,11 @@ class TupleDesc {
         return column_list_[index];
     }
 
+    FORCE_INLINE const ColumnSchema& operator[](uint32_t index) const {
+        ASSERT(index < column_list_.size());
+        return column_list_[index];
+    }
+
     FORCE_INLINE ColumnSchema& get_column_schema(uint32_t index) {
         ASSERT(index < column_list_.size());
         return column_list_[index];

@@ -42,7 +42,7 @@ using namespace common;
 namespace storage {
 
 int WriteFile::create(const std::string& file_path, int flags, mode_t mode) {
-    if (fd_ > 0) {
+    if (is_opened()) {
         // log_err("file already opened, fd=%d", fd_);
         ASSERT(false);
         return E_ALREADY_EXIST;
@@ -70,7 +70,9 @@ int WriteFile::do_create(int flags, mode_t mode) {
 }
 
 int WriteFile::write(const char* buf, uint32_t len) {
-    ASSERT(fd_ > 0);
+    if (fd_ < 0) {
+        return E_FILE_WRITE_ERR;
+    }
 
 #if 0  // DEBUG_SE
     struct stat statbuf;
@@ -104,7 +106,9 @@ int WriteFile::write(const char* buf, uint32_t len) {
 }
 
 int WriteFile::sync() {
-    ASSERT(fd_ > 0);
+    if (fd_ < 0) {
+        return E_FILE_WRITE_ERR;
+    }
     if (::fsync(fd_) < 0) {
         // log_err("file fsync error, path=%s, errno=%d", path_.c_str(), errno);
         return E_FILE_SYNC_ERR;
@@ -136,7 +140,9 @@ int WriteFile::close() {
 }
 
 int WriteFile::truncate(int64_t size) {
-    ASSERT(fd_ > 0);
+    if (fd_ < 0) {
+        return E_FILE_WRITE_ERR;
+    }
 #ifdef _WIN32
     if (_chsize_s(fd_, size) != 0) {
         return E_FILE_WRITE_ERR;
@@ -150,7 +156,9 @@ int WriteFile::truncate(int64_t size) {
 }
 
 int WriteFile::seek_to_end() {
-    ASSERT(fd_ > 0);
+    if (fd_ < 0) {
+        return E_FILE_WRITE_ERR;
+    }
 #ifdef _WIN32
     if (_lseeki64(fd_, 0, SEEK_END) < 0) {
         return E_FILE_READ_ERR;
