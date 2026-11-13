@@ -20,6 +20,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
@@ -41,6 +42,12 @@
 #include "writer/tsfile_table_writer.h"
 #ifdef ENABLE_THREADS
 #include "common/thread_pool.h"
+
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
 #endif
 
 using namespace common;
@@ -93,6 +100,17 @@ class AlignedBulkCopyTest : public ::testing::Test {
             "_" +
             std::to_string(
                 std::chrono::steady_clock::now().time_since_epoch().count()) +
+            "_" + std::to_string([] {
+#ifdef _WIN32
+                return static_cast<uint64_t>(_getpid());
+#else
+                return static_cast<uint64_t>(getpid());
+#endif
+            }()) +
+            "_" + std::to_string([] {
+                static std::atomic<uint64_t> counter{0};
+                return counter.fetch_add(1);
+            }()) +
             ".tsfile";
         std::remove(path_.c_str());
         {
