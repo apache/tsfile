@@ -25,11 +25,17 @@
 #include <utils/db_utils.h>
 
 #include <cstring>
+#include <limits>
+#include <string>
+#include <vector>
 
+#include "common/global.h"
 #include "common/row_record.h"
 #include "cwrapper/tsfile_cwrapper.h"
+#include "file/write_file.h"
 #include "reader/result_set.h"
 #include "reader/tsfile_reader.h"
+#include "writer/tsfile_table_writer.h"
 #include "writer/tsfile_writer.h"
 
 namespace storage {
@@ -64,6 +70,180 @@ TEST_F(CWrapperTest, FileReadBackendConfigurationRoundTripsAndValidates) {
     EXPECT_EQ(tsfile_get_file_read_backend(), TSFILE_READ_BACKEND_PREAD);
 
     EXPECT_EQ(tsfile_set_file_read_backend(original), RET_OK);
+}
+
+TEST_F(CWrapperTest, ParallelTogglesAndThreadCountValidate) {
+    const bool read_enabled = common::get_parallel_read_enabled();
+    const bool write_enabled = common::get_parallel_write_enabled();
+    const int32_t thread_count = common::g_config_value_.thread_count_;
+
+    EXPECT_EQ(tsfile_set_parallel_read_enabled(0), RET_OK);
+    EXPECT_FALSE(common::get_parallel_read_enabled());
+    EXPECT_EQ(0, tsfile_get_parallel_read_enabled());
+    EXPECT_EQ(tsfile_set_parallel_read_enabled(1), RET_OK);
+    EXPECT_TRUE(common::get_parallel_read_enabled());
+    EXPECT_EQ(1, tsfile_get_parallel_read_enabled());
+    // Any non-zero value enables the path, matching the bool parameter.
+    EXPECT_EQ(tsfile_set_parallel_read_enabled(42), RET_OK);
+    EXPECT_TRUE(common::get_parallel_read_enabled());
+
+    EXPECT_EQ(tsfile_set_parallel_write_enabled(0), RET_OK);
+    EXPECT_FALSE(common::get_parallel_write_enabled());
+    EXPECT_EQ(0, tsfile_get_parallel_write_enabled());
+    EXPECT_EQ(tsfile_set_parallel_write_enabled(1), RET_OK);
+    EXPECT_TRUE(common::get_parallel_write_enabled());
+    EXPECT_EQ(1, tsfile_get_parallel_write_enabled());
+
+    // Out-of-range counts are rejected and leave the configured size alone.
+    for (int32_t invalid : {0, -1, 65, 1000}) {
+        EXPECT_EQ(tsfile_set_thread_count(invalid), RET_INVALID_ARG) << invalid;
+        EXPECT_EQ(common::g_config_value_.thread_count_, thread_count)
+            << invalid;
+        EXPECT_EQ(tsfile_get_thread_count(), thread_count) << invalid;
+    }
+    for (int32_t valid : {1, 32, 64}) {
+        EXPECT_EQ(tsfile_set_thread_count(valid), RET_OK) << valid;
+        EXPECT_EQ(common::g_config_value_.thread_count_, valid) << valid;
+        EXPECT_EQ(tsfile_get_thread_count(), valid) << valid;
+    }
+
+    EXPECT_EQ(tsfile_set_thread_count(thread_count), RET_OK);
+    EXPECT_EQ(tsfile_set_parallel_read_enabled(read_enabled), RET_OK);
+    EXPECT_EQ(tsfile_set_parallel_write_enabled(write_enabled), RET_OK);
+}
+
+// The switches are read by the library's lazy initialization.  Setting them
+// before the first reader/writer used to be undone: init_config_value()
+// assigned both flags true, silently re-enabling the parallel paths.
+TEST_F(CWrapperTest, ParallelTogglesSurviveLazyInitialization) {
+    storage::libtsfile_destroy();
+    const std::string path = "cwrapper_toggles_before_init.tsfile";
+    remove(path.c_str());
+
+    ASSERT_EQ(tsfile_set_parallel_read_enabled(0), RET_OK);
+    ASSERT_EQ(tsfile_set_parallel_write_enabled(0), RET_OK);
+
+    ERRNO code = RET_OK;
+    WriteFile file = write_file_new(path.c_str(), &code);
+    ASSERT_EQ(RET_OK, code);
+    ASSERT_NE(nullptr, file);
+
+    EXPECT_EQ(0, tsfile_get_parallel_read_enabled());
+    EXPECT_EQ(0, tsfile_get_parallel_write_enabled());
+
+    free_write_file(&file);
+    EXPECT_EQ(tsfile_set_parallel_read_enabled(1), RET_OK);
+    EXPECT_EQ(tsfile_set_parallel_write_enabled(1), RET_OK);
+    remove(path.c_str());
+}
+
+// Flipping the parallel read switch must not change what a query returns; it
+// only selects whether the aligned multi-column read uses the worker pool.
+TEST_F(CWrapperTest, ParallelReadToggleReturnsIdenticalRows) {
+    storage::libtsfile_init();
+    const std::string path = "cwrapper_parallel_read_toggle.tsfile";
+    remove(path.c_str());
+    constexpr int kDevices = 2;
+    constexpr int kRowsPerDevice = 500;
+    constexpr int kFields = 5;
+    {
+        storage::WriteFile file;
+        int flags = O_WRONLY | O_CREAT | O_TRUNC;
+#ifdef _WIN32
+        flags |= O_BINARY;
+#endif
+        ASSERT_EQ(file.create(path, flags, 0666), common::E_OK);
+        std::vector<common::ColumnSchema> columns;
+        columns.emplace_back("device", common::STRING, common::UNCOMPRESSED,
+                             common::PLAIN, common::ColumnCategory::TAG);
+        for (int c = 0; c < kFields; ++c) {
+            columns.emplace_back("s" + std::to_string(c), common::INT64,
+                                 common::UNCOMPRESSED, common::PLAIN,
+                                 common::ColumnCategory::FIELD);
+        }
+        storage::TableSchema schema("t", columns);
+        storage::TsFileTableWriter writer(&file, &schema);
+        storage::Tablet tablet(
+            "t", schema.get_measurement_names(), schema.get_data_types(),
+            schema.get_column_categories(), kDevices * kRowsPerDevice);
+        int index = 0;
+        for (int device = 0; device < kDevices; ++device) {
+            const std::string tag = "d" + std::to_string(device);
+            for (int row = 0; row < kRowsPerDevice; ++row, ++index) {
+                ASSERT_EQ(tablet.add_timestamp(index, row), common::E_OK);
+                ASSERT_EQ(tablet.add_value(index, "device", tag.c_str()),
+                          common::E_OK);
+                for (int c = 0; c < kFields; ++c) {
+                    const std::string name = "s" + std::to_string(c);
+                    ASSERT_EQ(
+                        tablet.add_value(index, name, int64_t(row) * 10 + c),
+                        common::E_OK);
+                }
+            }
+        }
+        ASSERT_EQ(writer.get_error(), common::E_OK);
+        ASSERT_EQ(writer.write_table(tablet), common::E_OK);
+        ASSERT_EQ(writer.flush(), common::E_OK);
+        ASSERT_EQ(writer.close(), common::E_OK);
+    }
+
+    std::vector<std::string> names{"device", "s0", "s1", "s2", "s3", "s4"};
+    std::vector<char*> name_ptrs;
+    for (auto& name : names) name_ptrs.push_back(&name[0]);
+    auto read_all = [&]() {
+        ERRNO code = RET_OK;
+        TsFileReader reader = tsfile_reader_new(path.c_str(), &code);
+        EXPECT_EQ(RET_OK, code);
+        if (reader == nullptr) {
+            return std::vector<std::string>();
+        }
+        ResultSet result_set =
+            tsfile_query_table(reader, "t", name_ptrs.data(),
+                               static_cast<uint32_t>(name_ptrs.size()), 0,
+                               std::numeric_limits<int64_t>::max(), &code);
+        EXPECT_EQ(RET_OK, code);
+        std::vector<std::string> rows;
+        if (result_set == nullptr) {
+            tsfile_reader_close(reader);
+            return rows;
+        }
+        while (tsfile_result_set_next(result_set, &code) && code == RET_OK) {
+            char* tag = tsfile_result_set_get_value_by_name_string(result_set,
+                                                                   "device");
+            std::string line =
+                tag == nullptr ? std::string() : std::string(tag);
+            free(tag);
+            line += ":" +
+                    std::to_string(tsfile_result_set_get_value_by_name_int64_t(
+                        result_set, "time"));
+            for (int c = 0; c < kFields; ++c) {
+                const std::string name = "s" + std::to_string(c);
+                line += ":" + std::to_string(
+                                  tsfile_result_set_get_value_by_name_int64_t(
+                                      result_set, name.c_str()));
+            }
+            rows.push_back(line);
+        }
+        EXPECT_EQ(RET_OK, code);
+        tsfile_reader_close(reader);
+        free_tsfile_result_set(&result_set);
+        return rows;
+    };
+
+    const bool saved = common::get_parallel_read_enabled();
+    EXPECT_EQ(tsfile_set_parallel_read_enabled(0), RET_OK);
+    const std::vector<std::string> serial_rows = read_all();
+    EXPECT_EQ(tsfile_set_parallel_read_enabled(1), RET_OK);
+    const std::vector<std::string> parallel_rows = read_all();
+    EXPECT_EQ(tsfile_set_parallel_read_enabled(saved), RET_OK);
+
+    ASSERT_EQ(static_cast<size_t>(kDevices * kRowsPerDevice),
+              serial_rows.size());
+    EXPECT_EQ(serial_rows, parallel_rows);
+    EXPECT_EQ("d0:0:0:1:2:3:4", serial_rows.front());
+    EXPECT_EQ("d1:499:4990:4991:4992:4993:4994", serial_rows.back());
+    remove(path.c_str());
+    storage::libtsfile_destroy();
 }
 
 TEST_F(CWrapperTest, CodecAndCompressionConfigIncludesJavaIds) {

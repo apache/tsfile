@@ -200,6 +200,10 @@ class TSEncoding(IntEnum):
     SPRINTZ = 12
     RLBE = 13
     CAMEL = 14
+    # C++/Python-only for now: the Java implementation has no ALP decoder.
+    # A file containing an ALP column opens in Java, but querying that
+    # series fails. Do not use ALP for files shared with Java.
+    ALP = 15
 
 
 @unique

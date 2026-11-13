@@ -42,7 +42,7 @@ class TsFileTableWriter {
      * TsFileTableWriter is used to write table data into a target file with the
      * given schema, optionally limiting the memory usage.
      *
-     * @param writer_file Target file where the table data will be written. Must
+     * @param writer_file Target sink where the table data will be written. Must
      * not be null.
      * @param table_schema Used to construct table structures. Defines the
      * schema of the table being written.
@@ -51,7 +51,8 @@ class TsFileTableWriter {
      * disk. Default value is 128MB.
      */
     template <typename T>
-    explicit TsFileTableWriter(storage::WriteFile* writer_file, T* table_schema,
+    explicit TsFileTableWriter(storage::RandomAccessWriteFile* writer_file,
+                               T* table_schema,
                                uint64_t memory_threshold = 128 * 1024 * 1024) {
         static_assert(!std::is_same<T, std::nullptr_t>::value,
                       "table_schema cannot be nullptr");
