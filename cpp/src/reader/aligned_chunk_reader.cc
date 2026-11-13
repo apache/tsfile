@@ -166,12 +166,10 @@ void AlignedChunkReader::destroy() {
         value_decoder_ = nullptr;
     }
     if (time_compressor_ != nullptr) {
-        time_compressor_->~Compressor();
         CompressorFactory::free(time_compressor_);
         time_compressor_ = nullptr;
     }
     if (value_compressor_ != nullptr) {
-        value_compressor_->~Compressor();
         CompressorFactory::free(value_compressor_);
         value_compressor_ = nullptr;
     }
@@ -201,7 +199,6 @@ void AlignedChunkReader::destroy() {
             col->decoder = nullptr;
         }
         if (col->compressor != nullptr) {
-            col->compressor->~Compressor();
             CompressorFactory::free(col->compressor);
             col->compressor = nullptr;
         }
@@ -242,7 +239,6 @@ void AlignedChunkReader::destroy() {
     std::vector<Decoder*>().swap(time_decoder_pool_);
     for (auto* c : time_compressor_pool_) {
         if (c != nullptr) {
-            c->~Compressor();
             CompressorFactory::free(c);
         }
     }
@@ -354,7 +350,7 @@ int AlignedChunkReader::alloc_compressor_and_decoder(
     TSEncoding encoding, TSDataType data_type, CompressionType compression) {
     // Invalid enum bytes indicate corrupted chunk metadata, not an allocator
     // failure.  Reject them before asking the factory for a decoder.
-    if (encoding < common::PLAIN || encoding > common::CAMEL) {
+    if (encoding < common::PLAIN || encoding > common::ALP) {
         return E_TSFILE_CORRUPTED;
     }
     if (decoder != nullptr) {
@@ -2609,16 +2605,19 @@ int AlignedChunkReader::get_next_page_multi_serial(TsBlock* ret_tsblock,
                 }
             }
             if (IS_FAIL(ret)) break;
+            // get_cur_page_header returns E_OK with a reset header once the
+            // chunk's data has been consumed.  Report the end of the chunk
+            // instead of handing a zero-byte page to the decompressor.
+            if (!has_more_data_multi()) {
+                ret = E_NO_MORE_DATA;
+                break;
+            }
             if (!cur_page_may_satisfy_filter_multi(filter)) {
                 if (RET_FAIL(skip_cur_page_multi())) break;
             } else if (cur_page_fully_satisfies_filter_multi(filter) &&
                        should_skip_page_by_offset_multi(row_offset)) {
                 if (RET_FAIL(skip_cur_page_multi())) break;
             } else {
-                break;
-            }
-            if (!has_more_data()) {
-                ret = E_NO_MORE_DATA;
                 break;
             }
         }

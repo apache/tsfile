@@ -52,6 +52,10 @@
 #     when one block spans INT_MIN and INT_MAX, so SPRINTZ rows use the
 #     'sprintz' profile (values within +/-1e9). Streaming numeric extremes are
 #     covered under PLAIN, RLE, TS_2DIFF, GORILLA, CHIMP and RLBE.
+#   - ALP (encoding id 15): C++/Python-only for now. The Java implementation
+#     has no ALP decoder, so this matrix declares no ALP rows and the C++
+#     completeness sweep stops at CAMEL. Add ALP rows and extend that bound
+#     only together with the Java decoder.
 
 id,model,dataType,encoding,compressions,rowCount,pageRows,chunks,devices,valueProfile,nullPatterns,javaWrite,cppWrite,javaRead,cppRead,gapReason,timestampProfile
 table_int32_plain_r10,table,INT32,PLAIN,ALL,10,4,1,1,default,NONE,yes,yes,yes,yes,
