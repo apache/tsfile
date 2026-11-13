@@ -1,5 +1,5 @@
 ---
-title: Preview
+title: Viewer
 sidebar: false
 ---
 
@@ -29,5 +29,5 @@ and never leaves your machine.
 <iframe
   class="tsfile-preview-frame"
   src="/preview-app/index.html"
-  title="TsFile Web Preview"
+  title="TsFile Viewer"
 ></iframe>

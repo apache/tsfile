@@ -202,7 +202,7 @@
 
   function applyStrings() {
     document.documentElement.lang = LANG === "zh" ? "zh-CN" : "en";
-    document.title = LANG === "zh" ? "TsFile 在线预览" : "TsFile Preview";
+    document.title = LANG === "zh" ? "TsFile 可视化工具" : "TsFile Viewer";
     var notice = document.querySelector(".notice");
     if (notice) {
       notice.innerHTML = t("notice");

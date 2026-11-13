@@ -1,5 +1,5 @@
 ---
-title: 在线预览
+title: 可视化工具
 sidebar: false
 ---
 
@@ -28,5 +28,5 @@ WebAssembly 的 TsFile 读取器在浏览器内解码，不会上传到任何服
 <iframe
   class="tsfile-preview-frame"
   src="/preview-app/index.html"
-  title="TsFile 在线预览"
+  title="TsFile 可视化工具"
 ></iframe>

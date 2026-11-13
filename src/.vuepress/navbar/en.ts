@@ -30,7 +30,7 @@ export const enNavbar = navbar([
     link: '/Download/',
   },
   {
-    text: 'Preview',
+    text: 'Viewer',
     link: '/preview/',
   },
   // {
