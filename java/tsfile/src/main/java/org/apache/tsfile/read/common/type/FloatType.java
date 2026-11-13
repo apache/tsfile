@@ -447,7 +447,8 @@ public class FloatType extends AbstractType {
   public void serializeArray(Object array, int length, ByteBuffer buffer) {
     float[] values = (float[]) array;
     for (int i = 0; i < length; i++) {
-      buffer.putFloat(values[i]);
+      // Match the canonical NaN representation of the stream serialization.
+      buffer.putInt(Float.floatToIntBits(values[i]));
     }
   }
 

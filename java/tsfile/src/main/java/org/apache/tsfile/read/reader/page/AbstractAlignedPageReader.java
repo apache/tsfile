@@ -129,7 +129,10 @@ public abstract class AbstractAlignedPageReader implements IPageReader {
   public BatchData getAllSatisfiedPageData(boolean ascending) throws IOException {
     BatchData pageData = BatchDataFactory.createBatchData(TSDataType.VECTOR, ascending, false);
     int timeIndex = -1;
-    Object[] rowValues = new Object[valueCount];
+    // Without record filters, only the presence of each value is needed. Avoid boxing every
+    // primitive just to check whether the row is all null.
+    Object[] rowValues =
+        globalTimeFilter == null && pushDownFilter == null ? null : new Object[valueCount];
     while (timePageReader.hasNextTime()) {
       long timestamp = timePageReader.nextTime();
       timeIndex++;
@@ -141,13 +144,14 @@ public abstract class AbstractAlignedPageReader implements IPageReader {
         ValuePageReader pageReader = valuePageReaderList.get(i);
         if (pageReader != null) {
           v[i] = pageReader.nextValue(timestamp, timeIndex);
-          rowValues[i] = (v[i] == null) ? null : v[i].getValue();
         } else {
           v[i] = null;
-          rowValues[i] = null;
         }
-        if (rowValues[i] != null) {
-          hasNotNullValues = true;
+        if (rowValues == null) {
+          hasNotNullValues |= v[i] != null;
+        } else {
+          rowValues[i] = v[i] == null ? null : v[i].getValue();
+          hasNotNullValues |= rowValues[i] != null;
         }
       }
 

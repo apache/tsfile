@@ -48,6 +48,63 @@ public class ReadWriteIOUtilsTest {
   protected static final int DEFAULT_BUFFER_SIZE = 4096;
 
   @Test
+  public void testDataOutputStreamWritesMatchOutputStreamFormat() throws IOException {
+    ByteArrayOutputStream reference = new ByteArrayOutputStream();
+    ByteArrayOutputStream actual = new ByteArrayOutputStream();
+    try (DataOutputStream stream = new DataOutputStream(actual)) {
+      for (byte value : new byte[] {Byte.MIN_VALUE, -1, 0, Byte.MAX_VALUE}) {
+        ReadWriteIOUtils.write(value, reference);
+        Assert.assertEquals(Byte.BYTES, ReadWriteIOUtils.write(value, stream));
+      }
+      for (short value : new short[] {Short.MIN_VALUE, -1, 0, Short.MAX_VALUE}) {
+        ReadWriteIOUtils.write(value, reference);
+        Assert.assertEquals(Short.BYTES, ReadWriteIOUtils.write(value, stream));
+      }
+      for (int value : new int[] {Integer.MIN_VALUE, -1, 0, Integer.MAX_VALUE}) {
+        ReadWriteIOUtils.write(value, reference);
+        Assert.assertEquals(Integer.BYTES, ReadWriteIOUtils.write(value, stream));
+      }
+      for (long value : new long[] {Long.MIN_VALUE, -1, 0, Long.MAX_VALUE}) {
+        ReadWriteIOUtils.write(value, reference);
+        Assert.assertEquals(Long.BYTES, ReadWriteIOUtils.write(value, stream));
+      }
+      for (float value :
+          new float[] {
+            -0.0f,
+            0.0f,
+            Float.MIN_VALUE,
+            Float.MAX_VALUE,
+            Float.NEGATIVE_INFINITY,
+            Float.POSITIVE_INFINITY,
+            Float.intBitsToFloat(0x7fa12345)
+          }) {
+        ReadWriteIOUtils.write(value, reference);
+        Assert.assertEquals(Float.BYTES, ReadWriteIOUtils.write(value, stream));
+      }
+      for (double value :
+          new double[] {
+            -0.0,
+            0.0,
+            Double.MIN_VALUE,
+            Double.MAX_VALUE,
+            Double.NEGATIVE_INFINITY,
+            Double.POSITIVE_INFINITY,
+            Double.longBitsToDouble(0x7ff123456789abcdL)
+          }) {
+        ReadWriteIOUtils.write(value, reference);
+        Assert.assertEquals(Double.BYTES, ReadWriteIOUtils.write(value, stream));
+      }
+      for (Binary value : new Binary[] {Binary.EMPTY_VALUE, new Binary(new byte[] {0, -1, 1, 0})}) {
+        ReadWriteIOUtils.write(value, reference);
+        Assert.assertEquals(
+            Integer.BYTES + value.getLength(), ReadWriteIOUtils.write(value, stream));
+      }
+      Assert.assertEquals(reference.size(), stream.size());
+    }
+    Assert.assertArrayEquals(reference.toByteArray(), actual.toByteArray());
+  }
+
+  @Test
   public void testReadLongFromFragmentedStream() throws IOException {
     long expected = 0x8123456789ABCDEFL;
     byte[] encoded = ByteBuffer.allocate(Long.BYTES).putLong(expected).array();
