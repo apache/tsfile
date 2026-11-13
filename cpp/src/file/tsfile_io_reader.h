@@ -233,11 +233,36 @@ class TsFileIOReader {
         common::PageArena& pa);
 
     struct CachedDeviceNode {
-        // Declared before top_node so top_node is destroyed first.
-        // MetaIndexNode and its children live in this arena.
+        // The node and its children live in this arena, so the node must be
+        // released before the arena. Destruction already does that (reverse
+        // declaration order); assignment is explicit because the implicit
+        // member-wise form would release the arena first.
         std::shared_ptr<common::PageArena> arena;
         std::shared_ptr<MetaIndexNode> top_node;
         bool is_aligned = false;
+
+        CachedDeviceNode() = default;
+        CachedDeviceNode(const CachedDeviceNode&) = default;
+        CachedDeviceNode& operator=(const CachedDeviceNode& other) {
+            if (this != &other) {
+                top_node = other.top_node;
+                arena = other.arena;
+                is_aligned = other.is_aligned;
+            }
+            return *this;
+        }
+        CachedDeviceNode(CachedDeviceNode&& other) noexcept
+            : arena(std::move(other.arena)),
+              top_node(std::move(other.top_node)),
+              is_aligned(other.is_aligned) {}
+        CachedDeviceNode& operator=(CachedDeviceNode&& other) noexcept {
+            if (this != &other) {
+                top_node = std::move(other.top_node);
+                arena = std::move(other.arena);
+                is_aligned = other.is_aligned;
+            }
+            return *this;
+        }
     };
 
     static constexpr size_t DEVICE_NODE_CACHE_CAPACITY = 64;
@@ -248,6 +273,27 @@ class TsFileIOReader {
     struct CachedIndexNode {
         std::shared_ptr<common::PageArena> arena;
         std::shared_ptr<MetaIndexNode> node;
+
+        CachedIndexNode() = default;
+        CachedIndexNode(const CachedIndexNode&) = default;
+        // node must be released before the arena it was allocated in; the
+        // implicit member-wise assignment would release the arena first.
+        CachedIndexNode& operator=(const CachedIndexNode& other) {
+            if (this != &other) {
+                node = other.node;
+                arena = other.arena;
+            }
+            return *this;
+        }
+        CachedIndexNode(CachedIndexNode&& other) noexcept
+            : arena(std::move(other.arena)), node(std::move(other.node)) {}
+        CachedIndexNode& operator=(CachedIndexNode&& other) noexcept {
+            if (this != &other) {
+                node = std::move(other.node);
+                arena = std::move(other.arena);
+            }
+            return *this;
+        }
     };
 
     // One leaf of the device index holds up to max_degree_of_index_node
