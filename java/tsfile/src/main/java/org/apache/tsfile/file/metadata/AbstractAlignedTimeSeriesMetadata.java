@@ -148,25 +148,51 @@ public abstract class AbstractAlignedTimeSeriesMetadata implements ITimeSeriesMe
   private List<AbstractAlignedChunkMetadata> getAlignedChunkMetadata(
       List<IChunkMetadata> timeChunkMetadata, List<List<IChunkMetadata>> valueChunkMetadataList) {
     List<AbstractAlignedChunkMetadata> res = new ArrayList<>();
-    for (int i = 0; i < timeChunkMetadata.size(); i++) {
-      // only need time column
-      if (valueTimeseriesMetadataList.isEmpty()) {
-        res.add(new AlignedChunkMetadata(timeChunkMetadata.get(i), Collections.emptyList()));
-      } else {
-        List<IChunkMetadata> chunkMetadataList = new ArrayList<>();
-        // only at least one sensor exits, we add the AlignedChunkMetadata to the list
-        boolean exits = false;
-        for (List<IChunkMetadata> chunkMetadata : valueChunkMetadataList) {
-          IChunkMetadata v =
-              chunkMetadata == null
-                      || chunkMetadata.get(i).getStatistics().getCount() == 0 // empty chunk
-                  ? null
-                  : chunkMetadata.get(i);
-          exits = (exits || v != null);
-          chunkMetadataList.add(v);
-        }
-        constructAlignedChunkMetadata(res, timeChunkMetadata.get(i), chunkMetadataList, exits);
+    if (valueTimeseriesMetadataList.isEmpty()) {
+      for (IChunkMetadata timeChunk : timeChunkMetadata) {
+        res.add(new AlignedChunkMetadata(timeChunk, Collections.emptyList()));
       }
+      return res;
+    }
+
+    // A value column written only in some chunk groups (a column added or renamed later) has fewer
+    // chunks than the time column, so the value chunks cannot be aligned positionally. Chunks are
+    // laid out in file order (the time chunk of a group is written first, then its value chunks),
+    // so a value chunk belongs to the time chunk whose file offset immediately precedes it and is
+    // followed by the next time chunk's offset. This forward cursor keeps the alignment correct for
+    // both uniform and uneven column histories.
+    final int columnCount = valueChunkMetadataList.size();
+    final int[] cursors = new int[columnCount];
+    for (int i = 0; i < timeChunkMetadata.size(); i++) {
+      final IChunkMetadata timeChunk = timeChunkMetadata.get(i);
+      final long groupStartOffset = timeChunk.getOffsetOfChunkHeader();
+      final long groupEndOffset =
+          i + 1 < timeChunkMetadata.size()
+              ? timeChunkMetadata.get(i + 1).getOffsetOfChunkHeader()
+              : Long.MAX_VALUE;
+      final List<IChunkMetadata> chunkMetadataList = new ArrayList<>(columnCount);
+      boolean exits = false;
+      for (int c = 0; c < columnCount; c++) {
+        final List<IChunkMetadata> chunks = valueChunkMetadataList.get(c);
+        IChunkMetadata value = null;
+        if (chunks != null) {
+          while (cursors[c] < chunks.size()
+              && chunks.get(cursors[c]).getOffsetOfChunkHeader() < groupStartOffset) {
+            cursors[c]++;
+          }
+          if (cursors[c] < chunks.size()
+              && chunks.get(cursors[c]).getOffsetOfChunkHeader() < groupEndOffset) {
+            value = chunks.get(cursors[c]);
+          }
+        }
+        if (value != null && value.getStatistics().getCount() != 0) {
+          exits = true;
+        } else {
+          value = null;
+        }
+        chunkMetadataList.add(value);
+      }
+      constructAlignedChunkMetadata(res, timeChunk, chunkMetadataList, exits);
     }
     return res;
   }

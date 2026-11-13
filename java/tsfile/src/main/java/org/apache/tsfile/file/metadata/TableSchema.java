@@ -24,6 +24,8 @@ import org.apache.tsfile.common.constant.TsFileConstant;
 import org.apache.tsfile.compatibility.DeserializeConfig;
 import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.metadata.enums.CompressionType;
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
@@ -35,10 +37,13 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class TableSchema {
@@ -55,6 +60,16 @@ public class TableSchema {
   // columnName -> pos in all id columns
   private Map<String, Integer> idColumnOrder;
   private int tagColumnCnt = -1;
+
+  // Schema-evolution state. Serialized separately from the column list (see
+  // TableSchemaEvolution) so that the on-disk column format stays backward compatible.
+
+  // historical column name -> current column name (a rename chain is flattened: a->b then b->c is
+  // stored as a->c and b->c)
+  private Map<String, String> columnAliases;
+  // names of dropped columns, retained as tombstones so a re-added column can reuse the name with
+  // a different type while a rename cannot silently resurrect a dropped name
+  private Set<String> tombstones;
 
   public TableSchema(String tableName) {
     this.tableName = tableName.toLowerCase();
@@ -180,6 +195,15 @@ public class TableSchema {
       IMeasurementSchema currentColumnSchema = measurementSchemas.get(i);
       columnPosIndex.putIfAbsent(currentColumnSchema.getMeasurementName(), i);
     }
+    // historical aliases resolve to the index of their current column
+    if (columnAliases != null) {
+      for (Map.Entry<String, String> alias : columnAliases.entrySet()) {
+        final Integer currentIndex = columnPosIndex.get(alias.getValue());
+        if (currentIndex != null) {
+          columnPosIndex.putIfAbsent(alias.getKey(), currentIndex);
+        }
+      }
+    }
     return columnPosIndex;
   }
 
@@ -191,21 +215,37 @@ public class TableSchema {
   }
 
   /**
-   * @return i if the given column is the i-th column, -1 if the column is not in the schema
+   * @return i if the given column is the i-th column, -1 if the column is not in the schema. A
+   *     historical alias of a renamed column resolves to the index of its current column.
    */
   public int findColumnIndex(String columnName) {
-    final String lowerCaseColumnName = columnName.toLowerCase();
+    final String lowerCaseColumnName = resolveColumnName(columnName);
     return getColumnPosIndex()
         .computeIfAbsent(
             lowerCaseColumnName,
             colName -> {
               for (int i = 0; i < measurementSchemas.size(); i++) {
-                if (measurementSchemas.get(i).getMeasurementName().equals(lowerCaseColumnName)) {
+                if (measurementSchemas.get(i).getMeasurementName().equals(colName)) {
                   return i;
                 }
               }
               return -1;
             });
+  }
+
+  /**
+   * Resolve a column name to its current name: a historical alias of a renamed column maps to the
+   * current name, any other name is returned lowercased unchanged.
+   */
+  public String resolveColumnName(String columnName) {
+    final String lowerCaseColumnName = columnName.toLowerCase();
+    if (columnAliases != null) {
+      final String currentName = columnAliases.get(lowerCaseColumnName);
+      if (currentName != null) {
+        return currentName;
+      }
+    }
+    return lowerCaseColumnName;
   }
 
   /**
@@ -360,5 +400,181 @@ public class TableSchema {
 
   public void setUpdatable(boolean updatable) {
     this.updatable = updatable;
+  }
+
+  /**
+   * @return historical column name -> current column name (flattened rename chain). Never null.
+   */
+  public Map<String, String> getColumnAliases() {
+    if (columnAliases == null) {
+      columnAliases = new HashMap<>();
+    }
+    return columnAliases;
+  }
+
+  public void setColumnAliases(Map<String, String> columnAliases) {
+    this.columnAliases = columnAliases;
+  }
+
+  /**
+   * @return names of dropped columns. Never null.
+   */
+  public Set<String> getTombstones() {
+    if (tombstones == null) {
+      tombstones = new HashSet<>();
+    }
+    return tombstones;
+  }
+
+  public void setTombstones(Set<String> tombstones) {
+    this.tombstones = tombstones;
+  }
+
+  /**
+   * @return true if this table has undergone at least one add/drop/rename.
+   */
+  public boolean hasSchemaEvolution() {
+    return (columnAliases != null && !columnAliases.isEmpty())
+        || (tombstones != null && !tombstones.isEmpty());
+  }
+
+  /** Add a new FIELD column (or re-add a dropped column with a possibly different type). */
+  public void addColumn(String columnName, TSDataType dataType) {
+    addColumn(new MeasurementSchema(columnName.toLowerCase(), dataType));
+  }
+
+  /** Add a new FIELD column with explicit encoding and compression. */
+  public void addColumn(
+      String columnName, TSDataType dataType, TSEncoding encoding, CompressionType compression) {
+    addColumn(new MeasurementSchema(columnName.toLowerCase(), dataType, encoding, compression));
+  }
+
+  private void addColumn(MeasurementSchema measurementSchema) {
+    final String name = measurementSchema.getMeasurementName();
+    if (getTombstones().contains(name)) {
+      // re-add of a dropped column: the new type wins
+      getTombstones().remove(name);
+    } else {
+      if (getColumnAliases().containsKey(name)) {
+        throw new IllegalArgumentException(
+            Messages.format("error.file.table_schema_column_name_used", name, tableName));
+      }
+      if (findColumnIndex(name) >= 0) {
+        throw new IllegalArgumentException(
+            Messages.format("error.file.table_schema_column_already_exists", name, tableName));
+      }
+    }
+    measurementSchemas.add(measurementSchema);
+    columnCategories.add(ColumnCategory.FIELD);
+    getColumnPosIndex().put(name, measurementSchemas.size() - 1);
+  }
+
+  /** Drop a FIELD column. The data stays on disk; the column is hidden from results. */
+  public void dropColumn(String columnName) {
+    final String name = resolveColumnName(columnName);
+    final int columnIndex = findColumnIndex(name);
+    if (columnIndex < 0) {
+      throw new IllegalArgumentException(
+          Messages.format("error.file.table_schema_column_not_found", name, tableName));
+    }
+    if (columnCategories.get(columnIndex) != ColumnCategory.FIELD) {
+      throw new IllegalArgumentException(
+          Messages.format("error.file.table_schema_column_not_field", name));
+    }
+    measurementSchemas.remove(columnIndex);
+    columnCategories.remove(columnIndex);
+    getTombstones().add(name);
+    // aliases that pointed at the dropped column are dropped with it, so a later re-add of the
+    // name is a fresh column rather than resurrecting a historical alias
+    if (columnAliases != null) {
+      columnAliases.entrySet().removeIf(alias -> name.equals(alias.getValue()));
+    }
+    rebuildColumnPosIndex();
+  }
+
+  /** Rename a FIELD column. Historical data written under the old name reads back under the new. */
+  public void renameColumn(String oldName, String newName) {
+    final String currentName = resolveColumnName(oldName);
+    final int columnIndex = findColumnIndex(currentName);
+    if (columnIndex < 0) {
+      throw new IllegalArgumentException(
+          Messages.format("error.file.table_schema_column_not_found", currentName, tableName));
+    }
+    if (columnCategories.get(columnIndex) != ColumnCategory.FIELD) {
+      throw new IllegalArgumentException(
+          Messages.format("error.file.table_schema_column_not_field", currentName));
+    }
+    final String renamedName = newName.toLowerCase();
+    if (renamedName.equals(currentName)) {
+      return;
+    }
+    if (getTombstones().contains(renamedName)
+        || getColumnAliases().containsKey(renamedName)
+        || findColumnIndex(renamedName) >= 0) {
+      throw new IllegalArgumentException(
+          Messages.format("error.file.table_schema_column_name_used", renamedName, tableName));
+    }
+    ((MeasurementSchema) measurementSchemas.get(columnIndex)).setMeasurementName(renamedName);
+    // the renamed name becomes an alias of the current name, and any alias that pointed at the old
+    // current name is re-pointed at the new one (flattening the chain)
+    getColumnAliases().put(currentName, renamedName);
+    for (Map.Entry<String, String> alias : getColumnAliases().entrySet()) {
+      if (currentName.equals(alias.getValue()) && !currentName.equals(alias.getKey())) {
+        alias.setValue(renamedName);
+      }
+    }
+    rebuildColumnPosIndex();
+  }
+
+  private void rebuildColumnPosIndex() {
+    if (columnPosIndex == null) {
+      columnPosIndex = new HashMap<>();
+    } else {
+      columnPosIndex.clear();
+    }
+    for (int i = 0; i < measurementSchemas.size(); i++) {
+      columnPosIndex.put(measurementSchemas.get(i).getMeasurementName(), i);
+    }
+  }
+
+  /**
+   * Serialize only the schema-evolution state (aliases + tombstones), not the column list. Used by
+   * {@link TableSchemaEvolution} to store history in a file property. Byte format is
+   * language-neutral.
+   */
+  public int serializeEvolution(OutputStream out) throws IOException {
+    int cnt = 0;
+    final List<String> aliases = new ArrayList<>(getColumnAliases().keySet());
+    Collections.sort(aliases);
+    cnt += ReadWriteForEncodingUtils.writeUnsignedVarInt(aliases.size(), out);
+    for (String historical : aliases) {
+      cnt += ReadWriteIOUtils.writeVar(historical, out);
+      cnt += ReadWriteIOUtils.writeVar(getColumnAliases().get(historical), out);
+    }
+    final List<String> dropped = new ArrayList<>(getTombstones());
+    Collections.sort(dropped);
+    cnt += ReadWriteForEncodingUtils.writeUnsignedVarInt(dropped.size(), out);
+    for (String name : dropped) {
+      cnt += ReadWriteIOUtils.writeVar(name, out);
+    }
+    return cnt;
+  }
+
+  /** Read the schema-evolution state serialized by {@link #serializeEvolution(OutputStream)}. */
+  public static void deserializeEvolution(TableSchema schema, ByteBuffer buffer) {
+    final int aliasCount = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
+    final Map<String, String> aliases = new HashMap<>(aliasCount);
+    for (int i = 0; i < aliasCount; i++) {
+      final String historical = ReadWriteIOUtils.readVarIntString(buffer);
+      final String current = ReadWriteIOUtils.readVarIntString(buffer);
+      aliases.put(historical, current);
+    }
+    final int tombstoneCount = ReadWriteForEncodingUtils.readUnsignedVarInt(buffer);
+    final Set<String> tombstones = new HashSet<>(tombstoneCount);
+    for (int i = 0; i < tombstoneCount; i++) {
+      tombstones.add(ReadWriteIOUtils.readVarIntString(buffer));
+    }
+    schema.setColumnAliases(aliases);
+    schema.setTombstones(tombstones);
   }
 }
