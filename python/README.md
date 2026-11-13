@@ -178,6 +178,28 @@ set_tsfile_config({"file_read_backend_": FileReadBackend.AUTO})
 The setting only affects readers opened afterward. Do not modify or truncate a
 file while it is open through the memory-mapped backend.
 
+## Parallel read, write and worker pool
+
+```python
+from tsfile import (
+    get_parallel_read_enabled,
+    set_parallel_read_enabled,
+    set_parallel_write_enabled,
+    set_thread_count,
+)
+
+set_parallel_read_enabled(False)   # applies to subsequent reads
+set_parallel_write_enabled(True)
+set_thread_count(4)                # 1..64; applies immediately
+print(get_parallel_read_enabled())
+```
+
+The switches and the worker pool are read without synchronization, so set them
+before starting queries or writes. `set_thread_count()` must not be called while
+a reader, writer or result set is in use. All three values are also available
+through `get_tsfile_config()` / `set_tsfile_config()` as
+`parallel_read_enabled_`, `parallel_write_enabled_` and `thread_count_`.
+
 ## Seekable binary file objects
 
 `TsFileReader` also accepts a seekable binary file object. This allows remote

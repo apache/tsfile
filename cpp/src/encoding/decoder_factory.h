@@ -20,6 +20,7 @@
 #ifndef ENCODING_DECODER_FACTORY_H
 #define ENCODING_DECODER_FACTORY_H
 
+#include "alp/alp_decoder.h"
 #include "camel_decoder.h"
 #include "chimp_decoder.h"
 #include "common/global.h"
@@ -205,6 +206,16 @@ class DecoderFactory {
                         ALLOC_AND_RETURN_DECODER(FloatGorillaV1Decoder);
                     case DOUBLE:
                         ALLOC_AND_RETURN_DECODER(DoubleGorillaV1Decoder);
+                    default:
+                        return nullptr;
+                }
+
+            case ALP:
+                switch (data_type) {
+                    case FLOAT:
+                        ALLOC_AND_RETURN_DECODER(FloatAlpDecoder);
+                    case DOUBLE:
+                        ALLOC_AND_RETURN_DECODER(DoubleAlpDecoder);
                     default:
                         return nullptr;
                 }

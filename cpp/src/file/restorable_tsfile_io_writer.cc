@@ -879,7 +879,7 @@ TsFileIOWriter* RestorableTsFileIOWriter::get_tsfile_io_writer() {
     return can_write_ ? this : nullptr;
 }
 
-WriteFile* RestorableTsFileIOWriter::get_write_file() {
+RandomAccessWriteFile* RestorableTsFileIOWriter::get_write_file() {
     return can_write_ ? write_file_ : nullptr;
 }
 
