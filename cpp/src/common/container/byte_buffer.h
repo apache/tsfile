@@ -151,6 +151,9 @@ class ByteBuffer {
         }
         const uint64_t elem_size =
             static_cast<uint64_t>(variable_type_len_) + len;
+        if (elem_size == 0) {
+            return E_INVALID_ARG;
+        }
         // elem_size * count can overflow uint64_t (both factors are 32-bit),
         // which would wrap `need` to a small value and bypass the capacity
         // checks before a huge payload copy. Reject anything that cannot fit
