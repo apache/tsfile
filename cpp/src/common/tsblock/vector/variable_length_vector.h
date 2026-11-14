@@ -66,8 +66,9 @@ class VariableLengthVector : public Vector {
         if (count == 0) {
             return common::E_OK;
         }
-        if (values_.fill_repeated_variable(value, len, count) != common::E_OK) {
-            return common::E_OOM;
+        const int ret = values_.fill_repeated_variable(value, len, count);
+        if (ret != common::E_OK) {
+            return ret;
         }
         add_row_nums(count);
         return common::E_OK;
