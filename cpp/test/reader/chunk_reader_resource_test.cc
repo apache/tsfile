@@ -29,6 +29,12 @@
 #include <string>
 #include <vector>
 
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
+
 #include "common/allocator/alloc_base.h"
 #include "common/config/config.h"
 #include "common/tablet.h"
@@ -41,12 +47,6 @@
 #include "writer/tsfile_table_writer.h"
 #ifdef ENABLE_THREADS
 #include "common/thread_pool.h"
-
-#ifdef _WIN32
-#include <process.h>
-#else
-#include <unistd.h>
-#endif
 #endif
 
 namespace storage {
