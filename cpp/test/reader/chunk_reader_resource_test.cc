@@ -29,6 +29,12 @@
 #include <string>
 #include <vector>
 
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
+
 #include "common/allocator/alloc_base.h"
 #include "common/config/config.h"
 #include "common/tablet.h"
@@ -180,6 +186,17 @@ class AlignedReaderFailureTest : public ::testing::Test {
             "_" +
             std::to_string(
                 std::chrono::steady_clock::now().time_since_epoch().count()) +
+            "_" + std::to_string([] {
+#ifdef _WIN32
+                return static_cast<uint64_t>(_getpid());
+#else
+                return static_cast<uint64_t>(getpid());
+#endif
+            }()) +
+            "_" + std::to_string([] {
+                static std::atomic<uint64_t> counter{0};
+                return counter.fetch_add(1);
+            }()) +
             ".tsfile";
         WriteFile file;
         int flags = O_WRONLY | O_CREAT | O_TRUNC;
