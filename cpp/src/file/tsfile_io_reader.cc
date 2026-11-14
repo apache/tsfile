@@ -1080,23 +1080,29 @@ int TsFileIOReader::get_cached_index_node(int64_t start_offset,
     auto arena = std::make_shared<common::PageArena>();
     arena->init(512, common::MOD_TSFILE_READER);
     void* node_buf = arena->alloc(sizeof(MetaIndexNode));
-    char* data_buf = static_cast<char*>(arena->alloc(read_size));
-    if (IS_NULL(node_buf) || IS_NULL(data_buf)) {
+    if (IS_NULL(node_buf)) {
+        return E_OOM;
+    }
+    // The read buffer is only needed while deserializing; keeping it in the
+    // cached arena would pin read_size bytes per cached node until eviction.
+    std::unique_ptr<char[]> data_buf(new (std::nothrow) char[read_size]);
+    if (data_buf == nullptr) {
         return E_OOM;
     }
     auto* node_ptr = new (node_buf) MetaIndexNode(arena.get());
     std::shared_ptr<MetaIndexNode> node(node_ptr, MetaIndexNode::self_deleter);
     int32_t ret_read_len = 0;
-    int ret = read_file_->read(start_offset, data_buf, read_size, ret_read_len);
+    int ret =
+        read_file_->read(start_offset, data_buf.get(), read_size, ret_read_len);
     if (RET_FAIL(ret)) {
         return ret;
     } else if (ret_read_len != read_size) {
         return E_FILE_READ_ERR;
     }
     if (is_device) {
-        ret = node->device_deserialize_from(data_buf, read_size);
+        ret = node->device_deserialize_from(data_buf.get(), read_size);
     } else {
-        ret = node->deserialize_from(data_buf, read_size);
+        ret = node->deserialize_from(data_buf.get(), read_size);
     }
     if (ret != E_OK) {
         return ret;

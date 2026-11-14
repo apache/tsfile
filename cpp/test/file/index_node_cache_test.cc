@@ -20,6 +20,7 @@
 #include <fcntl.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <memory>
@@ -32,6 +33,12 @@
 #include "file/write_file.h"
 #include "writer/tsfile_table_writer.h"
 #include "writer/tsfile_writer.h"
+
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
 
 namespace storage {
 
@@ -50,11 +57,19 @@ class IndexNodeCacheTest : public ::testing::Test {
         // A small degree forces several index-node levels for kDevices devices,
         // so the walk in search_from_internal_node() actually reads nodes.
         ASSERT_EQ(storage::set_max_degree_of_index_node(2), common::E_OK);
+        // Parallel CTest processes can seed from the same clock tick.
+#ifdef _WIN32
+        const auto process_id = static_cast<uint64_t>(_getpid());
+#else
+        const auto process_id = static_cast<uint64_t>(getpid());
+#endif
+        static std::atomic<uint64_t> filename_counter{0};
         file_name_ =
             "index_node_cache_" +
             std::to_string(
                 std::chrono::steady_clock::now().time_since_epoch().count()) +
-            ".tsfile";
+            "_" + std::to_string(process_id) + "_" +
+            std::to_string(filename_counter.fetch_add(1)) + ".tsfile";
         ASSERT_NO_FATAL_FAILURE(WriteFile_());
     }
 
