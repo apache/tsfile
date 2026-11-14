@@ -61,10 +61,26 @@ void TsFileIOReader::reset() {
             delete read_file_;
         }
         read_file_ = nullptr;
+        // Drop everything that lives inside tsfile_meta_page_arena_ before
+        // the arena is released: the index graph and the bloom filter are
+        // both allocated there, and touching them afterwards is a
+        // use-after-free (traps under MSVC debug heap and ASan).  Destroying
+        // the bloom filter first releases its separately allocated bit set;
+        // tsfile_meta_'s destructor would otherwise dereference the freed
+        // BloomFilter object.
+        if (tsfile_meta_.bloom_filter_ != nullptr) {
+            tsfile_meta_.bloom_filter_->destroy();
+            tsfile_meta_.bloom_filter_ = nullptr;
+        }
+        tsfile_meta_.table_metadata_index_node_map_.clear();
         tsfile_meta_page_arena_.destroy();
         {
             std::lock_guard<std::mutex> lk(device_node_cache_mu_);
             device_node_cache_.clear();
+        }
+        {
+            std::lock_guard<std::mutex> lk(index_node_cache_mu_);
+            index_node_cache_.clear();
         }
         tsfile_meta_ready_ = false;
     }
@@ -1043,6 +1059,78 @@ int TsFileIOReader::search_from_leaf_node(
     return ret;
 }
 
+int TsFileIOReader::get_cached_index_node(int64_t start_offset,
+                                          int64_t end_offset, bool is_device,
+                                          CachedIndexNode& out) {
+    {
+        std::lock_guard<std::mutex> lk(index_node_cache_mu_);
+        if (index_node_cache_.tryGetCopy(start_offset, out)) {
+            return E_OK;
+        }
+    }
+
+    if (start_offset >= end_offset) {
+        return E_TSFILE_CORRUPTED;
+    }
+    const int64_t read_size_i64 = end_offset - start_offset;
+    if (read_size_i64 > INT32_MAX) {
+        return E_OVERFLOW;
+    }
+    const int32_t read_size = static_cast<int32_t>(read_size_i64);
+    auto arena = std::make_shared<common::PageArena>();
+    arena->init(512, common::MOD_TSFILE_READER);
+    void* node_buf = arena->alloc(sizeof(MetaIndexNode));
+    if (IS_NULL(node_buf)) {
+        return E_OOM;
+    }
+    // The read buffer is only needed while deserializing; keeping it in the
+    // cached arena would pin read_size bytes per cached node until eviction.
+    std::unique_ptr<char[]> data_buf(new (std::nothrow) char[read_size]);
+    if (data_buf == nullptr) {
+        return E_OOM;
+    }
+    auto* node_ptr = new (node_buf) MetaIndexNode(arena.get());
+    std::shared_ptr<MetaIndexNode> node(node_ptr, MetaIndexNode::self_deleter);
+    int32_t ret_read_len = 0;
+    int ret =
+        read_file_->read(start_offset, data_buf.get(), read_size, ret_read_len);
+    if (RET_FAIL(ret)) {
+        return ret;
+    } else if (ret_read_len != read_size) {
+        return E_FILE_READ_ERR;
+    }
+    if (is_device) {
+        ret = node->device_deserialize_from(data_buf.get(), read_size);
+    } else {
+        ret = node->deserialize_from(data_buf.get(), read_size);
+    }
+    if (ret != E_OK) {
+        return ret;
+    }
+
+    CachedIndexNode entry;
+    entry.arena = arena;
+    entry.node = node;
+    {
+        std::lock_guard<std::mutex> lk(index_node_cache_mu_);
+#ifdef ENABLE_TEST
+        ++index_node_cache_misses_;
+#endif
+        // Re-check under the lock: another query may have loaded the same
+        // node while we were reading it outside the lock.  Replacing an
+        // existing entry would move-assign over it, and the old entry must
+        // be released through its own assignment (node before arena).
+        CachedIndexNode existing;
+        if (index_node_cache_.tryGetCopy(start_offset, existing)) {
+            out = std::move(existing);
+            return E_OK;
+        }
+        index_node_cache_.insert(start_offset, entry);
+    }
+    out = std::move(entry);
+    return E_OK;
+}
+
 int TsFileIOReader::search_from_internal_node(
     std::shared_ptr<IComparable> target_name, bool is_device,
     std::shared_ptr<MetaIndexNode> index_node,
@@ -1063,54 +1151,36 @@ int TsFileIOReader::search_from_internal_node(
 
     while (IS_SUCC(ret)) {
         // reader next level index node
-        const int read_size = end_offset - index_entry->get_offset();
+        const int64_t read_size = end_offset - index_entry->get_offset();
 #if DEBUG_SE
         std::cout << "search_from_internal_node, end_offset=" << end_offset
                   << ", index_entry.offset_=" << index_entry.get_offset()
                   << std::endl;
 #endif
         ASSERT(read_size > 0 && read_size < (1 << 30));
-        PageArena cur_level_index_node_pa;
-        void* buf = cur_level_index_node_pa.alloc(sizeof(MetaIndexNode));
-        char* data_buf = (char*)cur_level_index_node_pa.alloc(read_size);
-        if (IS_NULL(buf) || IS_NULL(data_buf)) {
-            return E_OOM;
-        }
-        MetaIndexNode* cur_level_index_node =
-            new (buf) MetaIndexNode(&cur_level_index_node_pa);
-        int32_t ret_read_len = 0;
-        if (RET_FAIL(read_file_->read(index_entry->get_offset(), data_buf,
-                                      read_size, ret_read_len))) {
-            return ret;
-        } else if (read_size != ret_read_len) {
-            return E_FILE_READ_ERR;
-        }
-        if (!is_device) {
-            ret = cur_level_index_node->deserialize_from(data_buf, read_size);
-        } else {
-            ret = cur_level_index_node->device_deserialize_from(data_buf,
-                                                                read_size);
-        }
-        if (ret != E_OK) {
+        // Served from the index-node cache when it is the same node as a
+        // previous lookup: one leaf covers up to max_degree_of_index_node
+        // devices, so an uncached walk would re-read and re-deserialize the
+        // same node for every device in it.
+        // Keep the arena alive for as long as the node is used: the cache
+        // may evict this entry (and release its arena) concurrently.
+        CachedIndexNode cur_level;
+        if (RET_FAIL(get_cached_index_node(index_entry->get_offset(),
+                                           end_offset, is_device, cur_level))) {
             return ret;
         }
-        if (cur_level_index_node->node_type_ == LEAF_DEVICE) {
-            ret = cur_level_index_node->binary_search_children(
+        if (cur_level.node->node_type_ == LEAF_DEVICE) {
+            return cur_level.node->binary_search_children(
                 target_name, /*exact=*/true, ret_index_entry, ret_end_offset,
                 output_pa);
-            cur_level_index_node->destroy();
-            return ret;  //// FIXME
-        } else if (cur_level_index_node->node_type_ == LEAF_MEASUREMENT) {
-            ret = cur_level_index_node->binary_search_children(
+        } else if (cur_level.node->node_type_ == LEAF_MEASUREMENT) {
+            return cur_level.node->binary_search_children(
                 target_name, /*exact=*/false, ret_index_entry, ret_end_offset,
                 output_pa);
-            cur_level_index_node->destroy();
-            return ret;  //// FIXME
         } else {
-            ret = cur_level_index_node->binary_search_children(
+            ret = cur_level.node->binary_search_children(
                 target_name, /*exact=*/false, index_entry, end_offset,
                 output_pa);
-            cur_level_index_node->destroy();
         }
     }
     return ret;
