@@ -54,6 +54,25 @@ class FixedLengthVector : public Vector {
         add_row_nums(count);
     }
 
+    int fill_repeated(const char* value, uint32_t len,
+                      uint32_t count) OVERRIDE {
+        if (count == 0) {
+            return common::E_OK;
+        }
+        // Readers always advance by type_len_, so the fill must use the same
+        // stride. A mismatch is a caller error and, in a release build, would
+        // read past a shorter value buffer.
+        if (len != type_len_) {
+            return common::E_INVALID_ARG;
+        }
+        if (values_.fill_repeated_fixed(value, type_len_, count) !=
+            common::E_OK) {
+            return common::E_OOM;
+        }
+        add_row_nums(count);
+        return common::E_OK;
+    }
+
     FORCE_INLINE uint32_t get_type_len() const { return type_len_; }
 
     // cppcheck-suppress missingOverride

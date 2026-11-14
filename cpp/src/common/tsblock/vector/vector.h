@@ -47,6 +47,17 @@ class Vector {
     // len == 0 is '' or ""
     virtual void append(const char* value, uint32_t len) = 0;
 
+    // Append @p count copies of the same value and bump the row count. The
+    // default is a plain loop; vectors whose layout allows it override this
+    // with a bulk fill (a block's TAG column repeats one value on every row).
+    virtual int fill_repeated(const char* value, uint32_t len, uint32_t count) {
+        for (uint32_t i = 0; i < count; i++) {
+            append(value, len);
+        }
+        add_row_nums(count);
+        return E_OK;
+    }
+
     virtual char* read(uint32_t* __restrict len, bool* __restrict null,
                        uint32_t rowid) = 0;
 

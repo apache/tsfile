@@ -23,6 +23,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <algorithm>
+#include <cstring>
+
 #include "common/allocator/alloc_base.h"
 #include "common/global.h"
 #include "utils/util_define.h"
@@ -132,6 +135,87 @@ class ByteBuffer {
     FORCE_INLINE char* get_data() { return data_; }
 
     FORCE_INLINE uint32_t get_data_size() const { return real_data_size_; }
+
+    // Append @p count copies of one variable-length value. A block's TAG column
+    // repeats the same value on every row; writing the pattern once and then
+    // doubling the filled region beats @p count individual append calls.
+    FORCE_INLINE int fill_repeated_variable(const char* value, uint32_t len,
+                                            uint32_t count) {
+        if (count == 0) {
+            return E_OK;
+        }
+        // The stored length prefix is copied from a uint32_t, so the width
+        // must not exceed it (the constructor fixes it to sizeof(uint32_t)).
+        if (variable_type_len_ > sizeof(uint32_t)) {
+            return E_INVALID_ARG;
+        }
+        const uint64_t elem_size =
+            static_cast<uint64_t>(variable_type_len_) + len;
+        if (elem_size == 0) {
+            return E_INVALID_ARG;
+        }
+        // elem_size * count can overflow uint64_t (both factors are 32-bit),
+        // which would wrap `need` to a small value and bypass the capacity
+        // checks before a huge payload copy. Reject anything that cannot fit
+        // in the 32-bit buffer size first.
+        const uint64_t available =
+            static_cast<uint64_t>(0xFFFFFFFFULL) - real_data_size_;
+        if (count > available / elem_size) {
+            return E_OOM;
+        }
+        const uint64_t need =
+            static_cast<uint64_t>(real_data_size_) + elem_size * count;
+        if (need > reserved_size_) {
+            if (extend_memory(static_cast<uint32_t>(need)) != E_OK) {
+                return E_OOM;
+            }
+        }
+        char* dst = data_ + real_data_size_;
+        std::memcpy(dst, &len, variable_type_len_);
+        if (len > 0) {
+            std::memcpy(dst + variable_type_len_, value, len);
+        }
+        uint32_t filled = 1;
+        while (filled < count) {
+            const uint32_t copy = std::min(filled, count - filled);
+            std::memcpy(dst + static_cast<size_t>(filled) * elem_size, dst,
+                        static_cast<size_t>(copy) * elem_size);
+            filled += copy;
+        }
+        real_data_size_ = static_cast<uint32_t>(need);
+        return E_OK;
+    }
+
+    // Fixed-width counterpart of fill_repeated_variable().
+    FORCE_INLINE int fill_repeated_fixed(const char* value, uint32_t elem_size,
+                                         uint32_t count) {
+        if (count == 0) {
+            return E_OK;
+        }
+        const uint64_t available =
+            static_cast<uint64_t>(0xFFFFFFFFULL) - real_data_size_;
+        if (elem_size != 0 && count > available / elem_size) {
+            return E_OOM;
+        }
+        const uint64_t need = static_cast<uint64_t>(real_data_size_) +
+                              static_cast<uint64_t>(elem_size) * count;
+        if (need > reserved_size_) {
+            if (extend_memory(static_cast<uint32_t>(need)) != E_OK) {
+                return E_OOM;
+            }
+        }
+        char* dst = data_ + real_data_size_;
+        std::memcpy(dst, value, elem_size);
+        uint32_t filled = 1;
+        while (filled < count) {
+            const uint32_t copy = std::min(filled, count - filled);
+            std::memcpy(dst + static_cast<size_t>(filled) * elem_size, dst,
+                        static_cast<size_t>(copy) * elem_size);
+            filled += copy;
+        }
+        real_data_size_ = static_cast<uint32_t>(need);
+        return E_OK;
+    }
 
     // Declare bytes that were written directly through get_data() without going
     // through append_*(). Used when a caller decodes straight into this buffer
