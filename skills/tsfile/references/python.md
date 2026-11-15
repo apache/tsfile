@@ -73,6 +73,20 @@ with TsFileReader("data.tsfile") as reader:
 
 ## Guidance
 
+- Writers accept `allow_non_decreasing_timestamps=False`; this is process-wide.
+  See `advanced-apis.md` for opt-in semantics.
+- For persistent dataset indexes and bounded caches, see `dataframe-arrow.md`.
+- Parallel controls: `set_parallel_read_enabled`, `set_parallel_write_enabled`,
+  `set_thread_count` and matching `get_*` functions. Flags default to `True`,
+  pool size to 6; counts outside `1..64` raise `InvalidArgumentError`.
+  Configure before operations and never resize an in-use pool. Equivalent
+  config keys: `parallel_read_enabled_`, `parallel_write_enabled_`, `thread_count_`.
+- `TsFileReader` also accepts binary objects with `seek`, `tell`, and `read(size)`
+  (e.g. fsspec streams); it retains the object, preserves its cursor, and does
+  not close it. The caller owns the source.
+- For local paths, `set_file_read_backend(FileReadBackend.MMAP)`
+  affects subsequently opened files; PREAD is default. See `advanced-apis.md`
+  for backend semantics. File objects do not use this setting.
 - Current bindings expose `query_table` and `query_table_by_row`; do not reuse
   older `get_table_names` or `read_table` examples without checking the target
   version.

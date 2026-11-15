@@ -40,6 +40,10 @@ The Java table point-count metadata is a reserved use of file properties. Use
 `references/java-tools.md` for inspection or backfill instead of editing those
 keys directly.
 
+Writers with duplicate timestamps enabled record `allowNonDecreasingTimestamps`
+as UTF-8 `true`. Configure the writer policy in `advanced-apis.md`; setting
+the property manually does not enable it.
+
 ## Table TAG Filters
 
 Build TAG predicates against a `TableSchema`, apply them only to Table-model

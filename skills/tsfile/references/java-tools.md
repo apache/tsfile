@@ -74,9 +74,10 @@ resolve the exact input path, ensure the containing directory is writable and
 has room for a complete temporary copy, and preserve a backup when the data is
 not otherwise recoverable. Missing and incomplete files must remain errors.
 
-Do not use C++ `tsfile-cli count` as a substitute. That command reads
-per-series statistics and prints counts; it neither validates nor writes the
-table-level point-count property.
+Do not use C++ `tsfile-cli count` as a substitute. That command reports
+per-column logical counts, scans rows in the Table model, and may also scan
+when metadata is insufficient. It neither validates nor writes the table-level
+point-count property.
 
 ## Source Anchors
 

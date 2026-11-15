@@ -31,6 +31,18 @@ the listed current source.
   accept `tag_filter` and `batch_size`.
 - Treat `limit < 0` as unlimited and reject negative offsets. Close or destroy
   every result set through the binding that created it.
+- Table `TsFileReader::query` also has an overload combining start/end times,
+  offset/limit, a TAG filter, and batch size; `queryByRow` has no time bounds.
+
+## Timestamp Ordering
+
+Strict order is default; equal timestamps can be preserved as separate rows.
+Before writer creation, use Java config `setAllowNonDecreasingTimestamps(true)`,
+C++ `common::set_allow_non_decreasing_timestamps(true)` (C: without `common::`),
+or Python writer argument `allow_non_decreasing_timestamps=True` (default `False`).
+This is process-wide, including Python constructor defaults; avoid conflicting
+writers. Decreases remain invalid. See `properties-filters.md` for the persisted
+policy; CLI `write` has no opt-in.
 
 ## Timeseries Metadata
 
@@ -57,13 +69,21 @@ the current `TableSchema`; do not infer constructor positions from memory.
 - Use `Tablet.serializedSize()` to allocate or validate the serialized Tablet
   payload. Do not replace it with a RAM-size estimate.
 
-## Custom and Buffered Java Input
+## Custom and Buffered Input
 
 `TsFileSequenceReader` accepts a `TsFileInput`, enabling custom storage/input
 implementations. For local buffered reads, construct `BufferedTsFileInput(Path,
 bufferSize)` and pass it to the reader. Buffer size must be positive, and the
 reader owns and closes the supplied input if initialization fails or when the
 reader is closed.
+
+C++ `TsFileReader::open(unique_ptr<RandomAccessReadFile>)` owns its source;
+custom sources must handle short/concurrent reads. Writers borrow an open
+`RandomAccessWriteFile*` through closure. For in-memory readback, move the closed
+`MemoryRandomAccessWriteFile::release_data()` into `MemoryRandomAccessReadFile`.
+`common::set_file_read_backend(common::FileReadBackend::MMAP)` affects new local
+opens: PREAD is default, MMAP requires mapping, AUTO allows PREAD fallback.
+Do not mutate mapped files; Python file objects (`python.md`) bypass this setting.
 
 ## C++ Recovery and Append
 
@@ -95,5 +115,8 @@ tests. Ranges are `(start, length)`, not `(start, end)`; empty ranges return
   `java/tsfile/src/main/java/org/apache/tsfile/read/reader/`
 - Recovery: `cpp/src/file/restorable_tsfile_io_writer.h` and the current C++
   Tree/Table writer headers and recovery tests
+- Timestamp/backend config: `cpp/src/common/global.h`, Java `TSFileConfig.java`,
+  and the Python writer bindings
+- Random access: `cpp/src/file/random_access_*_file.h` and `memory_random_access_*_file.h`
 - BitMap: `java/common/src/main/java/org/apache/tsfile/utils/BitMap.java` and
   `java/tsfile/src/test/java/org/apache/tsfile/utils/BitMapTest.java`
