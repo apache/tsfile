@@ -23,8 +23,8 @@ Exit status is the only success signal.
 
 - `0`: complete success.
 - `1`: usage or parameter error, including unknown commands, invalid options, missing scope, invalid projection, offset errors, or mismatched model/scope.
-- `2`: input problem, including missing or unreadable TsFile input, damaged TsFile input, invalid CSV syntax or data during `write`, or unsupported source file type for `write -i`.
-- `3`: runtime or target problem, including query/write failures, output target conflicts, output creation failure, or atomic commit failure.
+- `2`: input problem, including missing or unreadable TsFile input, query setup or decode/read failures in row commands, invalid CSV syntax or data during `write`, or unsupported source file type for `write -i`.
+- `3`: runtime or target problem, including output stream failures, write failures, output target conflicts, output creation failure, or atomic commit failure.
 
 Rules for callers:
 

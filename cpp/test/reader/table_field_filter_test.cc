@@ -22,12 +22,6 @@
 
 #include <atomic>
 #include <chrono>
-
-#ifdef _WIN32
-#include <process.h>
-#else
-#include <unistd.h>
-#endif
 #include <cstdio>
 #include <functional>
 #include <memory>
@@ -42,6 +36,12 @@
 #include "reader/filter/time_operator.h"
 #include "reader/table_query_executor.h"
 #include "writer/tsfile_table_writer.h"
+
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
 
 namespace {
 using namespace common;
@@ -171,8 +171,7 @@ class TableFieldFilterTest
         saved_ = g_config_value_;
         g_config_value_.page_writer_max_point_num_ = 3;
         g_config_value_.parallel_read_enabled_ = std::get<0>(GetParam());
-        // CTest runs cases in parallel processes; two can seed from the same
-        // clock tick and one then removes the file the other is opening.
+        // Parallel CTest processes can seed from the same clock tick.
 #ifdef _WIN32
         const auto process_id = static_cast<uint64_t>(_getpid());
 #else

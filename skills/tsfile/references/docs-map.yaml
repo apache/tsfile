@@ -16,7 +16,7 @@
 # under the License.
 
 schema_version: 1
-last_verified: "2026-08-17"
+last_verified: "2026-11-15"
 policy_reference: references/source-policy.md
 path_bases:
   policy_reference: skill_root
@@ -25,6 +25,7 @@ path_bases:
 skill_baseline:
   scope: current-source
   source_ref: develop
+  source_commit: "b16df6b087d8a68f5921a3bcd3714abe3cf00a1e"
   maven_project_version: "2.5.1-SNAPSHOT"
   java_release: "17"
   cpp_sdk_version: "2.5.1.dev"
@@ -115,11 +116,14 @@ dataframe:
   local_authorities:
     - python/tsfile/utils.py
     - python/tsfile/dataset/
+    - python/tsfile/dataset/_config.py
+    - python/tsfile/dataset/runtime.py
     - python/tsfile/tsfile_reader.pyx
     - python/tsfile/tsfile_writer.pyx
     - python/tsfile/tsfile_table_writer.py
     - python/tests/test_dataframe.py
     - python/tests/test_tsfile_dataset.py
+    - python/tests/test_dataset_read_options.py
     - python/tests/test_batch_arrow.py
     - python/tests/test_write_arrow.py
     - skills/tsfile/references/dataframe-arrow.md
@@ -134,6 +138,8 @@ current_capabilities:
       - cpp/src/reader/tsfile_reader.h
       - cpp/src/writer/tsfile_writer.h
       - cpp/src/writer/tsfile_table_writer.h
+      - cpp/src/common/constant/tsfile_constant.h
+      - java/tsfile/src/main/java/org/apache/tsfile/common/conf/TSFileConfig.java
       - cpp/src/cwrapper/tsfile_cwrapper.h
       - python/tsfile/tag_filter.py
       - python/tsfile/tsfile_reader.pyx
@@ -149,6 +155,9 @@ current_capabilities:
       - cpp/src/common/global.cc
       - cpp/src/common/config/config.h
       - cpp/src/writer/tsfile_writer.cc
+      - cpp/src/cwrapper/tsfile_cwrapper.h
+      - python/tsfile/tsfile_py_cpp.pyx
+      - packaging/README.md
       - skills/tsfile/references/cpp-build-write.md
   encoding_and_compression_factories:
     local_authorities:
@@ -176,6 +185,11 @@ current_capabilities:
       - java/tsfile/src/main/java/org/apache/tsfile/read/reader/TsFileInput.java
       - java/tsfile/src/main/java/org/apache/tsfile/read/reader/BufferedTsFileInput.java
       - cpp/src/file/restorable_tsfile_io_writer.h
+      - cpp/src/file/random_access_read_file.h
+      - cpp/src/file/random_access_write_file.h
+      - cpp/src/file/memory_random_access_read_file.h
+      - cpp/src/file/memory_random_access_write_file.h
+      - cpp/src/common/global.h
       - cpp/src/writer/tsfile_tree_writer.h
       - cpp/src/writer/tsfile_table_writer.h
       - java/common/src/main/java/org/apache/tsfile/utils/BitMap.java

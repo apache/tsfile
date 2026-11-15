@@ -33,7 +33,7 @@ description: >-
 Use this skill for SDK code, Java import and point-count tools, Tree/Table model
 decisions, schema design, compatibility, and cross-language integration. Use
 the sibling `../tsfile-cli/SKILL.md` for the C++ `tsfile-cli` binary: file
-inspection, preview, export, sampling, and its explicit single-table CSV
+inspection, preview, export, and its explicit single-table CSV
 `write` operation.
 
 ## Operating Rules
@@ -66,18 +66,23 @@ Read only the files required by the current task:
 - Java SDK code and API guardrails: `references/java.md`
 - Java CSV/Parquet/Arrow import and table point-count tools:
   `references/java-tools.md`
-- Python DataFrame datasets, pandas conversion, and Arrow batch I/O:
+- Python DataFrame datasets, persistent indexes, resource limits, pandas
+  conversion, and Arrow batch I/O:
   `references/dataframe-arrow.md`
-- File-level properties and Table-model TAG filters across bindings:
+- File-level properties, timestamp-policy metadata, and Table-model TAG
+  filters across bindings:
   `references/properties-filters.md`
-- C++ static/shared linking and parallel write configuration:
+- C++ static/shared and installed SDK linking, plus parallel read/write
+  configuration:
   `references/cpp-build-write.md`
 - Current Java and C++ encoding/compression factory matrices:
   `references/encoding-compression.md`
-- Query-by-row, timeseries metadata, C++ incomplete-file recovery and append,
-  Java TsBlock writes, custom/buffered input, and Tablet object/size APIs:
+- Query-by-row, timestamp ordering, timeseries metadata, C++ random-access
+  sources/sinks and incomplete-file recovery, Java TsBlock writes,
+  custom/buffered input, and Tablet object/size APIs:
   `references/advanced-apis.md`
-- Python SDK code and binding-specific behavior: `references/python.md`
+- Python SDK code, seekable sources, local read backends, and parallel controls:
+  `references/python.md`
 - C++ SDK code and resource management: `references/cpp.md`
 - C wrapper entry points and lifecycle: `references/c.md`
 - Version resolution, build requirements, and cross-version checks:
@@ -104,10 +109,11 @@ or language bindings.
 ## Current Baseline Routing
 
 - Use `references/dataframe-arrow.md` for `TsFileDataFrame`, pandas conversion,
-  PyArrow `Table`/`RecordBatch`, or Arrow C Data batch paths.
+  persistent indexes and resource limits, PyArrow `Table`/`RecordBatch`, or
+  Arrow C Data batch paths.
 - Use `references/properties-filters.md` for binary file properties or
   Table-model TAG predicate construction and composition.
-- Use `references/cpp-build-write.md` for C++ library linkage or write
+- Use `references/cpp-build-write.md` for C++ library linkage or read/write
   concurrency. Configure the current source APIs; do not emit legacy aliases.
 - Use `references/encoding-compression.md` before naming a factory or claiming
   that an encoding/type or compressor combination is constructible.
