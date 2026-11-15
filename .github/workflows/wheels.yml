@@ -1,0 +1,159 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+name: Build Python development wheels
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Python development version, e.g. 2.5.1.dev0 or 2.5.1.dev2"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build development wheels on ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: manylinux_2_28-x86_64
+            os: ubuntu-22.04
+            arch: x86_64
+          - name: manylinux_2_28-aarch64
+            os: ubuntu-22.04-arm
+            arch: aarch64
+          - name: macos12-x86_64
+            os: macos-15-intel
+            arch: x86_64
+          - name: macos12-arm64
+            os: macos-latest
+            arch: arm64
+          - name: windows-msvc-x86_64
+            os: windows-2022
+            arch: AMD64
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Set the requested development version
+        id: version
+        env:
+          PYTHON_DEV_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          python packaging/scripts/prepare_python_dev_version.py \
+            --version "$PYTHON_DEV_VERSION" --github-output "$GITHUB_OUTPUT"
+
+      - name: Set up Java 17
+        if: runner.os != 'Linux'
+        uses: actions/setup-java@v6.1.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install macOS build prerequisites
+        if: runner.os == 'macOS'
+        run: |
+          command -v cmake > /dev/null || brew install cmake
+          command -v pkg-config > /dev/null || brew install pkgconf
+
+      - name: Configure the MSVC environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build the Windows Python SDK
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $projectInclude = (Resolve-Path packaging/cmake/PythonSDK.cmake).Path
+          python packaging/scripts/run_maven_with_retry.py -Pwith-cpp package `
+            "-Dcpp.toolchain=msvc" `
+            "-Dbuild.type=Release" `
+            "-Dbuild.test=OFF" `
+            "-DskipTests" `
+            "-Dspotless.skip=true" `
+            "-Dtsfile.dependency.source=BUNDLED" `
+            "-Dtsfile.msvc.static.runtime=ON" `
+            "-Denable.lzma2=ON" `
+            "-Dtsfile.project.include=$projectInclude" `
+            "-Dtsfile.version.sync.skip=true"
+          $sdkRoot = Join-Path $PWD 'python-sdk'
+          cmake --install cpp/target/build --config Release --prefix $sdkRoot
+          python packaging/scripts/verify_windows_runtime.py "$sdkRoot"
+          # setup.py consumes DLLs and import libraries together under lib/.
+          Copy-Item "$sdkRoot/bin/*.dll" "$sdkRoot/lib/"
+          if (-not (Test-Path "$sdkRoot/lib/tsfile.lib")) { throw 'Missing MSVC import library' }
+          if (-not (Test-Path "$sdkRoot/lib/tsfile.dll")) { throw 'Missing TsFile DLL' }
+
+      - name: Install wheel build tools
+        run: python -m pip install cibuildwheel==3.4.1
+
+      - name: Build and smoke-test development wheels
+        env:
+          CIBW_ARCHS: ${{ matrix.arch }}
+          CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
+          CIBW_SKIP: "pp* *-musllinux*"
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
+          CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
+          CIBW_BEFORE_ALL_LINUX: >-
+            bash packaging/scripts/build_python_sdk.sh
+            ${{ matrix.name }} ${{ steps.version.outputs.python_version }}
+          CIBW_BEFORE_ALL_MACOS: >-
+            bash packaging/scripts/build_python_sdk.sh
+            ${{ matrix.name }} ${{ steps.version.outputs.python_version }}
+          CIBW_ENVIRONMENT_LINUX: TSFILE_CPP_BUILD=/project/python-sdk
+          CIBW_ENVIRONMENT_MACOS: >-
+            TSFILE_CPP_BUILD="${{ github.workspace }}/python-sdk"
+            MACOSX_DEPLOYMENT_TARGET=12.0
+          CIBW_ENVIRONMENT_WINDOWS: >-
+            TSFILE_CPP_BUILD="${{ github.workspace }}/python-sdk"
+          MACOSX_DEPLOYMENT_TARGET: "12.0"
+          CIBW_TEST_COMMAND: python "{project}/packaging/tests/python_wheel_smoke.py"
+          CIBW_BUILD_VERBOSITY: "1"
+        run: python -m cibuildwheel --output-dir wheelhouse python
+
+      - name: Check wheel contents and development version
+        env:
+          PYTHON_DEV_VERSION: ${{ steps.version.outputs.python_version }}
+        shell: bash
+        run: |
+          python packaging/scripts/check_python_wheel.py \
+            --wheelhouse wheelhouse --expected-version "$PYTHON_DEV_VERSION"
+
+      - name: Upload development wheels
+        uses: actions/upload-artifact@v7
+        with:
+          name: tsfile-wheels-${{ steps.version.outputs.python_version }}-${{ matrix.name }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+          retention-days: 14

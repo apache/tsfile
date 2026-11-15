@@ -51,6 +51,42 @@ class WheelContentsTest(unittest.TestCase):
             }
         )
 
+    def test_development_wheel_filename_and_metadata_must_match_requested_version(self):
+        for expected in ("2.5.1.dev0", "2.5.1.dev2"):
+            for filename_version, directory_version, metadata_version in (
+                (expected, expected, expected),
+                ("2.5.1", expected, expected),
+                (expected, "2.5.1", expected),
+                (expected, expected, "2.5.1"),
+                (expected, expected, "2.5.1.dev1"),
+            ):
+                with self.subTest(
+                    expected=expected,
+                    filename=filename_version,
+                    directory=directory_version,
+                    metadata=metadata_version,
+                ), tempfile.TemporaryDirectory() as temporary:
+                    path = (
+                        Path(temporary)
+                        / f"tsfile-{filename_version}-cp311-cp311-manylinux_2_28_x86_64.whl"
+                    )
+                    with ZipFile(path, "w") as wheel:
+                        wheel.writestr("tsfile/libtsfile.so.1", b"native")
+                        wheel.writestr(
+                            f"tsfile-{directory_version}.dist-info/METADATA",
+                            f"Metadata-Version: 2.1\nName: tsfile\nVersion: {metadata_version}\n",
+                        )
+                    if (
+                        filename_version
+                        == directory_version
+                        == metadata_version
+                        == expected
+                    ):
+                        checker.check_wheel(path, expected)
+                    else:
+                        with self.assertRaisesRegex(ValueError, "version"):
+                            checker.check_wheel(path, expected)
+
     def test_sdk_headers_and_import_libraries_are_rejected(self):
         for name in [
             "tsfile/include/tsfile/cwrapper/tsfile_cwrapper.h",
