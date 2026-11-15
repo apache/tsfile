@@ -70,6 +70,15 @@ subset view to close shared readers. Boolean dataset selection is positional:
 build the mask from `ds[...]`, as above; use `list_timeseries_metadata()` for
 named inspection rather than as the mask source.
 
+`use_index=True` builds/reuses an index (default `False`). Indexed mode assumes
+immutable sources (`trust_index=True`); use `False` for generation checks and
+stale-index rebuilds. It also accepts `max_prepared_series`, `descriptor_cache_size`,
+`max_open_files`, `query_workers`, and `query_parallel_min_rows`; explicit values
+override `TSFILE_DATAFRAME_<UPPERCASE_OPTION>` then defaults. Subsets share limits;
+cache limits allow zero, others must be positive. Active queries may pin cache
+entries above these entry-count limits. `query_workers=1` serializes dataset
+groups, independently of the native pool. See `python/README.md` for details.
+
 ## Arrow Batch I/O
 
 ```python
@@ -97,4 +106,5 @@ possible so it resolves the time-column index from the schema.
   reader/writer bindings
 - `python/tsfile/tsfile_table_writer.py`
 - `python/tests/test_dataframe.py`, `python/tests/test_tsfile_dataset.py`,
-  `python/tests/test_batch_arrow.py`, and `python/tests/test_write_arrow.py`
+  `python/tests/test_dataset_read_options.py`, `python/tests/test_batch_arrow.py`,
+  and `python/tests/test_write_arrow.py`

@@ -54,19 +54,25 @@ Current time factories accept `PLAIN` or `TS_2DIFF`.
 |---|---|
 | `PLAIN` | all types handled by `PlainEncoder`/`PlainDecoder` |
 | `DICTIONARY` | `STRING`, `TEXT` |
-| `RLE` | `INT32`, `DATE`, `INT64`, `TIMESTAMP` |
-| `TS_2DIFF`, `GORILLA` | `INT32`, `DATE`, `INT64`, `TIMESTAMP`, `FLOAT`, `DOUBLE` |
-| `ZIGZAG` | `INT32`, `INT64` |
-| `SPRINTZ` | `INT32`, `INT64`, `FLOAT`, `DOUBLE` |
+| `RLE` | `BOOLEAN`, `INT32`, `DATE`, `INT64`, `TIMESTAMP`, `FLOAT`, `DOUBLE` |
+| `TS_2DIFF`, `GORILLA`, `CHIMP`, `SPRINTZ`, `RLBE` | `INT32`, `DATE`, `INT64`, `TIMESTAMP`, `FLOAT`, `DOUBLE` |
+| `ZIGZAG` | `INT32`, `DATE`, `INT64`, `TIMESTAMP` |
+| `GORILLA_V1`, `ALP` | `FLOAT`, `DOUBLE` |
+| `CAMEL` | `DOUBLE` |
 
 `CompressorFactory::alloc_compressor` always supports `UNCOMPRESSED`; `SNAPPY`,
-`GZIP`, `LZO`, and `LZ4` require their corresponding compile definitions.
+`GZIP`, `LZO`, `LZ4`, `ZSTD`, and `LZMA2` require their corresponding compile
+definitions. LZMA2 is opt-in (`ENABLE_LZMA2=ON`); check the target build rather
+than assuming every enum is enabled.
 `SDT`, `PAA`, and `PLA` are enum values but the current compressor factory
 returns no implementation for them. Check for `nullptr` and release successful
 allocations with `CompressorFactory::free`.
 
 Python exposes schema encoding/compression enums through the native binding but
 does not expose these Java/C++ low-level factories as an equivalent Python API.
+
+ALP is C++/Python-only; Java cannot query ALP series. CLI write support is
+narrower than this SDK matrix; use the `tsfile-cli` skill for its restrictions.
 
 ## Source Anchors
 

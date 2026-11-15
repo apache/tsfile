@@ -43,4 +43,7 @@ summarizes the same supported surface for agents.
 
 `write` creates one new table-model TsFile from strict CSV. The CSV header must
 contain `time` and exactly the declared TAG/FIELD names. Rows are mapped by
-header name. The target must not exist.
+header name. The target must not exist. Unquoted `\N` is NULL; empty STRING/TEXT
+cells are empty strings and quoted `"\N"` is literal text. CSV STRING/TEXT with
+a leading backslash needs one extra (`\\path` imports as `\path`, quoted too).
+CSV output uses the same rule; headers and non-text columns are unaffected.

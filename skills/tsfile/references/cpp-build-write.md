@@ -17,7 +17,7 @@
     under the License.
 -->
 
-# C++ Build and Parallel Write
+# C++ Build and Parallel I/O
 
 ## Shared or Static libtsfile
 
@@ -42,11 +42,17 @@ consumer of the static archive must define `TSFILE_STATIC`; consumers of the
 exported CMake target inherit the required definition. Verify the artifact in
 `cpp/target/build/lib` for Maven or the selected CMake build tree.
 
+Installed SDKs export `TsFile::tsfile` via `find_package(TsFile CONFIG REQUIRED)`;
+set `CMAKE_PREFIX_PATH` to the prefix. Unix consumers can use
+`pkg-config --cflags --libs libtsfile` (`--static` for static linkage).
+Match architecture/MSVC runtime and retain required system codec packages;
+see `packaging/README.md`. `build.sh` installs only with explicit `install`.
+
 `ENABLE_SIMD` also defaults to `ON` in the current CMake and Maven builds. Set
 it explicitly only for portability diagnosis or controlled benchmarking; it
 is independent of static/shared selection and thread support.
 
-## Parallel Write
+## Parallel Read and Write
 
 Compile thread support with `ENABLE_THREADS=ON` (the default). `OFF` strips the
 threaded paths. Configure the current global worker pool through
@@ -55,20 +61,17 @@ threaded paths. Configure the current global worker pool through
 ```cpp
 #include "common/global.h"
 
+common::set_parallel_read_enabled(false);
 common::set_parallel_write_enabled(true);
 int status = common::set_thread_count(4);  // valid range: 1..64
 ```
 
-The current baseline uses `common::set_parallel_write_enabled` and
-`common::set_thread_count`; use those exact names and namespace. The pool is
-shared by parallel read and write paths. Configure it before creating active
-readers/writers. Changing the count after initialization rebuilds the pool and
-must never race with an operation using it.
-
-Current source initializes parallel writing as enabled and the pool size as 6.
-Do not substitute a hardware-concurrency default from older prose. Parallel
-work is used only when the compiled path and runtime conditions qualify; keep
-the tablet/batch write contract correct when it falls back to serial work.
+Both flags default to enabled, have matching `get_parallel_*_enabled()` getters,
+and apply to subsequent operations. Configure before queries/writes; never
+resize the shared pool while a reader, writer, or result set is in use.
+The pool defaults to 6 threads, not hardware concurrency. Check setter return
+codes; failed replacement preserves the old pool. Parallel execution still
+depends on the compiled path and workload; preserve serial-path correctness.
 
 Always check write return codes. If a multi-column batch fails partway, stop
 using that writer rather than attempting to flush a potentially misaligned
@@ -78,6 +81,8 @@ partial batch.
 
 - Link selection: `cpp/CMakeLists.txt`, `cpp/src/CMakeLists.txt`,
   `cpp/build.sh`, `cpp/pom.xml`, and `cpp/README.md`
+- Installed SDK: `cpp/cmake/TsFileConfig.cmake.in`,
+  `cpp/cmake/libtsfile.pc.in`, and `packaging/README.md`
 - Runtime API and defaults: `cpp/src/common/global.h`,
   `cpp/src/common/global.cc`, and `cpp/src/common/config/config.h`
 - Write behavior: `cpp/src/writer/tsfile_writer.cc` and current writer tests
