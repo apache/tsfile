@@ -433,12 +433,14 @@ TEST_F(RestorableTsFileAppendTest, TableAppendKeepsOldRowsAndAddsNew) {
 // be there afterwards.
 TEST_F(RestorableTsFileAppendTest, AppendRefusesBadMetadataLength) {
     WriteCompleteTreeFile(4);
-    const std::string bytes_before = ReadWholeFile(file_name_);
     const int64_t size = GetFileSize(file_name_);
 
     // The i32 length of the metadata body sits directly before the tail magic.
     std::vector<char> garbage(4, static_cast<char>(0x7f));
     PokeFile(file_name_, size - MAGIC_STRING_TSFILE_LEN - 4, garbage);
+
+    // Snapshot of the damaged file: what the refusal has to leave in place.
+    const std::string bytes_before = ReadWholeFile(file_name_);
 
     RestorableTsFileIOWriter writer;
     EXPECT_NE(writer.open_for_append(file_name_), E_OK);
@@ -526,9 +528,15 @@ TEST_F(RestorableTsFileAppendTest, AppendToEmptyAndHeaderOnlyFile) {
     writer.close();
 
     // And it really does append: the header stays a header, the rows arrive.
+    // The recovered schema is empty here, so the measurement has to be
+    // registered before any record can be written.
     RestorableTsFileIOWriter rw2;
     ASSERT_EQ(rw2.open_for_append(file_name_), E_OK);
     TsFileTreeWriter tree_writer(&rw2);
+    std::string device_id = "d1";
+    MeasurementSchema schema("s1", FLOAT, GORILLA,
+                             CompressionType::UNCOMPRESSED);
+    ASSERT_EQ(tree_writer.register_timeseries(device_id, &schema), E_OK);
     TsRecord record(1, "d1");
     record.add_point("s1", 1.0f);
     ASSERT_EQ(tree_writer.write(record), E_OK);

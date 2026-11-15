@@ -742,10 +742,14 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted,
             return E_OK;
         }
 
-        // Appending: the footer says how long the metadata body is, so the tail
-        // to discard starts one byte before it, at the separator the writer
-        // put down. Like Java's append helper, the byte there is not inspected
-        // — only its offset is used as the cut.
+        // Appending: the cut goes at the separator byte the writer put down
+        // ahead of the metadata tail. Its offset is not derivable from the
+        // footer's length field, because the timeseries index entries written
+        // between the separator and the metadata body are not counted by that
+        // length — the separator's position is only recorded as
+        // TsFileMeta::meta_offset_ inside the body itself, so the body is read
+        // back to get it. Deserializing the body doubles as the check that
+        // this footer really is one this class can append behind.
         const int64_t tail_len = MAGIC_STRING_TSFILE_LEN + 4;  // magic + i32
         char size_buf[4];
         ret = reader.read(static_cast<int32_t>(file_size - tail_len), size_buf,
@@ -757,15 +761,42 @@ int RestorableTsFileIOWriter::self_check(bool truncate_corrupted,
         }
         const uint32_t meta_size =
             common::SerializationUtil::read_ui32(size_buf);
-        if (meta_size == 0 || static_cast<int64_t>(meta_size) + tail_len + 1 >
-                                  static_cast<int64_t>(file_size)) {
+        const int64_t meta_body_start =
+            static_cast<int64_t>(file_size) - tail_len - meta_size;
+        if (meta_size == 0 || meta_body_start < HEADER_LEN) {
             reader.close();
             truncated_size_ = TSFILE_CHECK_INCOMPATIBLE;
             return E_TSFILE_CORRUPTED;
         }
-        metadata_start =
-            static_cast<int64_t>(file_size) - tail_len - meta_size - 1;
-        if (metadata_start < HEADER_LEN) {
+        std::vector<char> meta_body(static_cast<size_t>(meta_size));
+        ret =
+            reader.read(static_cast<int32_t>(meta_body_start), meta_body.data(),
+                        static_cast<int32_t>(meta_size), read_len);
+        if (ret != E_OK || read_len != static_cast<int32_t>(meta_size)) {
+            reader.close();
+            truncated_size_ = TSFILE_CHECK_INCOMPATIBLE;
+            return E_TSFILE_CORRUPTED;
+        }
+        TsFileMeta tsfile_meta(&self_check_arena_);
+        common::ByteStream meta_body_stream;
+        meta_body_stream.wrap_from(meta_body.data(),
+                                   static_cast<int32_t>(meta_size));
+        if (tsfile_meta.deserialize_from(meta_body_stream) != E_OK ||
+            tsfile_meta.meta_offset_ < HEADER_LEN ||
+            tsfile_meta.meta_offset_ >= meta_body_start) {
+            reader.close();
+            truncated_size_ = TSFILE_CHECK_INCOMPATIBLE;
+            return E_TSFILE_CORRUPTED;
+        }
+        metadata_start = tsfile_meta.meta_offset_;
+        // The byte at the cut is the separator the footer points at. Checking
+        // it keeps a bogus meta_offset_ from aiming the trim at live chunk
+        // data instead of at the metadata tail.
+        char separator_byte = 0;
+        ret = reader.read(static_cast<int32_t>(metadata_start), &separator_byte,
+                          1, read_len);
+        if (ret != E_OK || read_len != 1 ||
+            separator_byte != SEPARATOR_MARKER) {
             reader.close();
             truncated_size_ = TSFILE_CHECK_INCOMPATIBLE;
             return E_TSFILE_CORRUPTED;
