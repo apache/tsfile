@@ -19,6 +19,7 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <random>
@@ -30,6 +31,12 @@
 #include "common/schema.h"
 #include "reader/tsfile_reader.h"
 #include "writer/tsfile_writer.h"
+
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
 
 namespace storage {
 
@@ -77,6 +84,16 @@ class TimeseriesSchemaCodecTest : public ::testing::Test {
         for (int i = 0; i < length; ++i) {
             s += chars[static_cast<size_t>(dis(gen))];
         }
+        // CTest runs cases in parallel processes; two can seed from the same
+        // clock tick and then collide on the file name.
+#ifdef _WIN32
+        const auto process_id = static_cast<uint64_t>(_getpid());
+#else
+        const auto process_id = static_cast<uint64_t>(getpid());
+#endif
+        static std::atomic<uint64_t> filename_counter{0};
+        s += "_" + std::to_string(process_id) + "_" +
+             std::to_string(filename_counter.fetch_add(1));
         return s;
     }
 
