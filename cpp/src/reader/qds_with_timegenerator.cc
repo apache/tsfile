@@ -56,12 +56,12 @@ int64_t SeriesScanStream::front() {
     } else {
         if (col_iter_->end()) {
             int ret = E_OK;  // cppcheck-suppress unreadVariable
+            delete col_iter_;
+            col_iter_ = nullptr;
+            tsblock_->reset();
             if (RET_FAIL(ssi_->get_next(tsblock_, false))) {
-                delete col_iter_;
-                col_iter_ = nullptr;
                 return INVALID_NEXT_TIMESTAMP;
             } else {
-                delete col_iter_;
                 col_iter_ = new ColIterator(0, tsblock_);
                 ASSERT(!col_iter_->end());
             }
@@ -136,15 +136,23 @@ void* ValueAt::at(int64_t target_timestamp) {
             }
         }
         tf_->reset_value(target_timestamp);
-        if (RET_FAIL(ssi_->get_next(tsblock_, (tsblock_ == nullptr), tf_))) {
+        delete time_col_iter_;
+        time_col_iter_ = nullptr;
+        delete value_col_iter_;
+        value_col_iter_ = nullptr;
+        // The iterators above only exist after the first lookup allocated
+        // tsblock_; keep the original allocate-if-null contract and only reset
+        // an already materialized block before it is reused.
+        const bool alloc_tsblock = (tsblock_ == nullptr);
+        if (tsblock_ != nullptr) {
+            tsblock_->reset();
+        }
+        if (RET_FAIL(ssi_->get_next(tsblock_, alloc_tsblock, tf_))) {
             cur_time_ = INT64_MAX;
             return nullptr;
-        } else {
-            delete time_col_iter_;
-            delete value_col_iter_;
-            time_col_iter_ = new ColIterator(0, tsblock_);
-            value_col_iter_ = new ColIterator(1, tsblock_);
         }
+        time_col_iter_ = new ColIterator(0, tsblock_);
+        value_col_iter_ = new ColIterator(1, tsblock_);
     }
 }
 
@@ -306,7 +314,7 @@ int QDSWithTimeGenerator::init(TsFileIOReader* io_reader, QueryExpression* qe) {
             return ret;
         } else {
             va.io_reader_ = io_reader_;
-            data_types.push_back(va.value_col_iter_->get_data_type());
+            data_types.push_back(va.ssi_->get_data_type());
             value_at_vec_.push_back(va);
         }
     }
@@ -412,16 +420,27 @@ int QDSWithTimeGenerator::construct_node_tree(Expression* expr, Node*& node) {
         if (RET_FAIL(construct_node_tree(expr->left_, node->left_))) {
         } else if (RET_FAIL(construct_node_tree(expr->right_, node->right_))) {
         }
+        if (ret != E_OK) {
+            destroy_node(node);
+            node = nullptr;
+        }
     } else if (expr->type_ == SERIES_EXPR) {
         Node* leaf = new Node(LEAF_NODE);
         Path& path = expr->series_path_;
-        int ret = io_reader_->alloc_ssi(path.device_id_, path.measurement_,
-                                        leaf->sss_.ssi_, pa_, expr->filter_);
+        ret = io_reader_->alloc_ssi(path.device_id_, path.measurement_,
+                                    leaf->sss_.ssi_, pa_, expr->filter_);
         if (E_OK == ret) {
             leaf->sss_.init();
+        } else if (ret == E_NO_MORE_DATA) {
+            // The filter pruned every chunk of this series. Keep the leaf so
+            // parent AND/OR nodes still have a child; its stream reports
+            // INVALID_NEXT_TIMESTAMP for every lookup.
+            ret = E_OK;
+        }
+        if (ret == E_OK) {
             node = leaf;
         } else {
-            // do nothing, this leaf node will return no data at all.
+            delete leaf;
         }
     }
     return ret;

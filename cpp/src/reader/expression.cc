@@ -178,23 +178,17 @@ Expression* QueryExpression::optimize(Expression* expression,
             if (regular_left == nullptr || regular_right == nullptr) {
                 return nullptr;
             }
-            Expression* mid_ret = nullptr;
-            if (type == AND_EXPR) {
-                mid_ret = new Expression(AND_EXPR, regular_left, regular_right);
-                my_exprs_.push_back(mid_ret);
-            } else if (type == OR_EXPR) {
-                mid_ret = new Expression(OR_EXPR, regular_left, regular_right);
-                my_exprs_.push_back(mid_ret);
-            } else {
-                std::cout << "unsupported Expression type:" << type
-                          << std::endl;
-            }
+            // Reuse the node being optimized instead of allocating a second
+            // node wrapping the same children: the result becomes
+            // QueryExpression::expression_ and must be owned exactly once.
+            expression->left_ = regular_left;
+            expression->right_ = regular_right;
 
-            if (mid_ret->left_->type_ == GLOBALTIME_EXPR ||
-                mid_ret->right_->type_ == GLOBALTIME_EXPR) {
-                return optimize(mid_ret, series_paths);
+            if (regular_left->type_ == GLOBALTIME_EXPR ||
+                regular_right->type_ == GLOBALTIME_EXPR) {
+                return optimize(expression, series_paths);
             } else {
-                return mid_ret;
+                return expression;
             }
         }
     } else {
