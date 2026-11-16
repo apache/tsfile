@@ -263,3 +263,10 @@ def test_explicit_flush_keeps_writing():
             assert result.next()
         finally:
             result.close()
+
+
+def test_text_mode_file_is_rejected(tmp_path):
+    path = tmp_path / "text_mode.tsfile"
+    with open(path, "w", encoding="utf-8") as target:
+        with pytest.raises(ValueError, match="binary"):
+            TsFileWriter(target)

@@ -19,6 +19,7 @@
 
 #include "python_random_access_write_file.h"
 
+#include <cstring>
 #include <memory>
 #include <new>
 #include <string>
@@ -310,6 +311,28 @@ void* create_tsfile_writer_from_python_file(PyObject* target,
     *error_code = storage::libtsfile_init();
     if (*error_code != common::E_OK) {
         return nullptr;
+    }
+
+    // A text-mode stream would reject the first bytes with a TypeError; fail
+    // early with a message that says what is actually wrong.
+    PyObject* mode = PyObject_GetAttrString(target, "mode");
+    if (mode == nullptr) {
+        PyErr_Clear();
+    } else {
+        if (PyUnicode_Check(mode)) {
+            const char* text = PyUnicode_AsUTF8(mode);
+            if (text != nullptr && std::strchr(text, 'b') == nullptr) {
+                Py_DECREF(mode);
+                *error_code = common::E_INVALID_ARG;
+                PyErr_SetString(PyExc_ValueError,
+                                "target must be opened in binary mode");
+                return nullptr;
+            }
+            if (text == nullptr) {
+                PyErr_Clear();
+            }
+        }
+        Py_DECREF(mode);
     }
 
     // The file must start empty: a header written at a nonzero cursor is not
