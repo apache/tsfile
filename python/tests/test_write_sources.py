@@ -225,3 +225,41 @@ def test_seekable_target_without_truncate_must_be_empty():
     with TsFileWriter(target) as writer:
         _write_table(writer)
     assert len(target.getvalue()) > 0
+
+
+def test_tree_model_write_to_file_object():
+    from tsfile import Field, RowRecord, TimeseriesSchema
+
+    buf = io.BytesIO()
+    with TsFileWriter(buf) as writer:
+        writer.register_timeseries(
+            "root.device", TimeseriesSchema("temperature", TSDataType.DOUBLE)
+        )
+        for second in range(5):
+            fields = [Field("temperature", second * 0.5, TSDataType.DOUBLE)]
+            writer.write_row_record(RowRecord("root.device", second, fields))
+
+    with TsFileReader(io.BytesIO(buf.getvalue())) as reader:
+        with reader.query_timeseries("root.device", ["temperature"], 0, 4) as result:
+            seen = []
+            while result.next():
+                seen.append(result.get_value_by_index(2))
+            assert seen == [second * 0.5 for second in range(5)]
+
+
+def test_explicit_flush_keeps_writing():
+    buf = io.BytesIO()
+    writer = TsFileWriter(buf)
+    try:
+        _write_table(writer)
+        writer.flush()
+        assert len(buf.getvalue()) > 0
+    finally:
+        writer.close()
+
+    with TsFileReader(io.BytesIO(buf.getvalue())) as reader:
+        result = reader.query_table("test_table", ["item_id", "value"])
+        try:
+            assert result.next()
+        finally:
+            result.close()

@@ -155,6 +155,10 @@ int TsFileWriter::init(std::unique_ptr<RandomAccessWriteFile> write_file) {
     if (!write_file || !write_file->is_opened()) {
         return E_INVALID_ARG;
     }
+    // A previously adopted sink would be overwritten by init(); release it
+    // once the new one is in place (a writer can be re-initialized).
+    RandomAccessWriteFile* previous =
+        write_file_created_ ? write_file_ : nullptr;
     // Keep the unique_ptr owning the sink until init() succeeds; if it throws
     // (e.g. while allocating TsFileIOWriter) the sink is still released.
     RandomAccessWriteFile* raw = write_file.get();
@@ -163,6 +167,9 @@ int TsFileWriter::init(std::unique_ptr<RandomAccessWriteFile> write_file) {
         return ret;
     }
     write_file.release();
+    if (previous != nullptr && previous != raw) {
+        delete previous;
+    }
     // init(raw) stored the pointer without taking ownership; transfer it now
     // so destroy() deletes it exactly once.
     write_file_created_ = true;
