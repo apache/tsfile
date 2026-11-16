@@ -25,6 +25,7 @@
 #include <stdint.h>
 
 void* create_tsfile_writer_from_python_file(PyObject* target,
+                                            uint64_t memory_threshold,
                                             int32_t* error_code);
 
 #endif  // PYTHON_TSFILE_PYTHON_RANDOM_ACCESS_WRITE_FILE_H

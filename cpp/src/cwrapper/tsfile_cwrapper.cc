@@ -260,6 +260,9 @@ ERRNO write_file_get_buffer(WriteFile write_file, uint8_t** buffer,
     if (data.empty()) {
         return common::E_OK;
     }
+    if (data.size() > 0xFFFFFFFFULL) {
+        return common::E_OVERFLOW;
+    }
     void* copy = malloc(data.size());
     if (copy == nullptr) {
         return common::E_OOM;

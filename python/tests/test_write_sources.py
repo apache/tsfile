@@ -84,3 +84,45 @@ def test_path_and_file_object_produce_same_bytes(tmp_path):
         _write_table(writer)
 
     assert buf.getvalue() == path_bytes
+
+
+def test_pathname_keyword_and_bytes_path(tmp_path):
+    keyword_path = tmp_path / "keyword.tsfile"
+    with TsFileWriter(pathname=str(keyword_path)) as writer:
+        _write_table(writer)
+    keyword_bytes = keyword_path.read_bytes()
+    assert len(keyword_bytes) > 0
+
+    bytes_path = str(tmp_path / "bytes.tsfile").encode()
+    with TsFileWriter(bytes_path) as writer:
+        _write_table(writer)
+    assert (tmp_path / "bytes.tsfile").read_bytes() == keyword_bytes
+
+
+def test_file_object_with_existing_content_is_reset():
+    buf = io.BytesIO(b"stale trailing bytes" * 100)
+    buf.seek(1000)
+    with TsFileWriter(buf) as writer:
+        _write_table(writer)
+
+    data = buf.getvalue()
+    with TsFileReader(io.BytesIO(data)) as reader:
+        result = reader.query_table("test_table", ["item_id", "value"])
+        try:
+            seen = []
+            while result.next():
+                seen.append(result.get_value_by_name("item_id"))
+            assert seen == [f"id{i}" for i in range(10)]
+        finally:
+            result.close()
+
+
+def test_flush_failure_is_reported():
+    class FailingFlush(io.BytesIO):
+        def flush(self):
+            raise OSError("disk full")
+
+    target = FailingFlush()
+    with pytest.raises(Exception):
+        with TsFileWriter(target) as writer:
+            _write_table(writer)

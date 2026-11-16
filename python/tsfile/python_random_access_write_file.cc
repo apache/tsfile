@@ -26,6 +26,7 @@
 #include <string>
 #include <utility>
 
+#include "common/global.h"
 #include "file/random_access_write_file.h"
 #include "utils/errno_define.h"
 #include "writer/tsfile_writer.h"
@@ -173,11 +174,15 @@ class PythonRandomAccessWriteFile : public storage::RandomAccessWriteFile {
         if (target_ == nullptr) {
             return common::E_FILE_WRITE_ERR;
         }
-        // flush() is optional for a non-durable sink; ignore a missing method.
+        // flush() is optional for a non-durable sink, but if the target has
+        // one, a failure means the data may not be committed.
+        if (!has_callable_attribute(target_, "flush")) {
+            return common::E_OK;
+        }
         PyObject* result = PyObject_CallMethod(target_, "flush", nullptr);
         if (result == nullptr) {
             PyErr_Clear();
-            return common::E_OK;
+            return common::E_FILE_SYNC_ERR;
         }
         Py_DECREF(result);
         return common::E_OK;
@@ -221,7 +226,7 @@ class PythonRandomAccessWriteFile : public storage::RandomAccessWriteFile {
         int64_t position = 0;
         if (!tell_position(target_, position)) {
             PyErr_Clear();
-            return 0;
+            return -1;
         }
         return position;
     }
@@ -245,6 +250,7 @@ class PythonRandomAccessWriteFile : public storage::RandomAccessWriteFile {
 }  // namespace
 
 void* create_tsfile_writer_from_python_file(PyObject* target,
+                                            uint64_t memory_threshold,
                                             int32_t* error_code) {
     if (error_code == nullptr) {
         PyErr_SetString(PyExc_ValueError, "error_code must not be null");
@@ -259,11 +265,46 @@ void* create_tsfile_writer_from_python_file(PyObject* target,
         return nullptr;
     }
 
+    // The file must start empty: a header written at a nonzero cursor is not
+    // a standalone TsFile, and bytes left over from a longer previous file
+    // would trail the new one.
+    int64_t initial_position = 0;
+    if (!tell_position(target, initial_position)) {
+        PyErr_Clear();
+        *error_code = common::E_INVALID_ARG;
+        PyErr_SetString(PyExc_TypeError, "target must support tell()");
+        return nullptr;
+    }
+    if (has_callable_attribute(target, "seek")) {
+        if (!seek_to(target, 0, SEEK_SET)) {
+            PyErr_Clear();
+            *error_code = common::E_INVALID_ARG;
+            PyErr_SetString(PyExc_ValueError, "target must be seekable");
+            return nullptr;
+        }
+    } else if (initial_position != 0) {
+        *error_code = common::E_INVALID_ARG;
+        PyErr_SetString(PyExc_ValueError,
+                        "target must be positioned at 0 before writing");
+        return nullptr;
+    }
+    if (has_callable_attribute(target, "truncate")) {
+        PyObject* truncated = PyObject_CallMethod(target, "truncate", "i", 0);
+        if (truncated == nullptr) {
+            PyErr_Clear();
+            *error_code = common::E_INVALID_ARG;
+            PyErr_SetString(PyExc_ValueError, "target could not be truncated");
+            return nullptr;
+        }
+        Py_DECREF(truncated);
+    }
+
     try {
         *error_code = storage::libtsfile_init();
         if (*error_code != common::E_OK) {
             return nullptr;
         }
+        common::g_config_value_.chunk_group_size_threshold_ = memory_threshold;
         std::unique_ptr<storage::RandomAccessWriteFile> write_file(
             new PythonRandomAccessWriteFile(target, target_name(target)));
         std::unique_ptr<storage::TsFileWriter> writer(

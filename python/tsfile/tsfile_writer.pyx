@@ -33,29 +33,31 @@ from .tsfile_py_cpp cimport *
 
 cdef extern from "python_random_access_write_file.h":
     TsFileWriter create_tsfile_writer_from_python_file(
-        PyObject* target, int32_t* error_code) except? NULL
+        PyObject* target, uint64_t memory_threshold,
+        int32_t* error_code) except? NULL
 
 #cython: language_level=3
 
 cdef class TsFileWriterPy:
     cdef TsFileWriter writer
 
-    def __init__(self, target, memory_threshold: int = 128 * 1024 * 1024,
+    def __init__(self, pathname, memory_threshold: int = 128 * 1024 * 1024,
                  allow_non_decreasing_timestamps: bool = False):
         """
         Initialize from a str/bytes/PathLike path, or a writable binary file
-        object (must have write/tell; seek/flush/truncate are used when
-        present) so fsspec-style remote targets work.
+        object for fsspec-style remote targets. File objects must support
+        write/tell; seek (when present) and truncate (when present) are used
+        to start from an empty file.
         """
         self.writer = NULL
         set_allow_non_decreasing_timestamps(
             <bint> allow_non_decreasing_timestamps)
         cdef ErrorCode error_code = 0
-        if isinstance(target, (str, bytes, os.PathLike)):
-            self.writer = tsfile_writer_new_c(os.fspath(target), memory_threshold)
+        if isinstance(pathname, (str, bytes, os.PathLike)):
+            self.writer = tsfile_writer_new_c(pathname, memory_threshold)
             return
         self.writer = create_tsfile_writer_from_python_file(
-            <PyObject*> target, &error_code)
+            <PyObject*> pathname, memory_threshold, &error_code)
         check_error(error_code)
 
     def register_timeseries(self, device_name : str, timeseries_schema : TimeseriesSchemaPy):
