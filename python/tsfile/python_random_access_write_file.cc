@@ -297,12 +297,22 @@ void* create_tsfile_writer_from_python_file(PyObject* target,
         PyObject* truncated = PyObject_CallMethod(target, "truncate", "i", 0);
         if (truncated == nullptr) {
             PyErr_Clear();
-            // At position 0 there may be nothing stale to clear; a target
-            // that started with content must support truncate.
-            if (initial_position != 0) {
+            // Truncation is unsupported: tolerate it only if the target is
+            // provably empty, otherwise a shorter write would leave stale
+            // trailing bytes behind a valid-looking file.
+            int64_t end_position = 0;
+            const bool sized = seek_to(target, 0, SEEK_END) &&
+                               tell_position(target, end_position);
+            if (!sized) {
+                PyErr_Clear();
+            }
+            if (!sized || end_position != 0 ||
+                !seek_to(target, 0, SEEK_SET)) {
+                PyErr_Clear();
                 *error_code = common::E_INVALID_ARG;
                 PyErr_SetString(PyExc_ValueError,
-                                "target could not be truncated");
+                                "target has existing content and cannot be "
+                                "truncated");
                 return nullptr;
             }
         } else {

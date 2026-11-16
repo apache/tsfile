@@ -166,3 +166,18 @@ def test_forward_only_stream_at_nonzero_position_is_rejected():
     target._buffer += b"prefix"
     with pytest.raises(ValueError):
         TsFileWriter(target)
+
+
+class _SeekableWithoutTruncate(io.BytesIO):
+    def truncate(self, size=None):
+        raise io.UnsupportedOperation("truncate")
+
+
+def test_seekable_target_without_truncate_must_be_empty():
+    with pytest.raises(ValueError):
+        TsFileWriter(_SeekableWithoutTruncate(b"stale"))
+
+    target = _SeekableWithoutTruncate()
+    with TsFileWriter(target) as writer:
+        _write_table(writer)
+    assert len(target.getvalue()) > 0
