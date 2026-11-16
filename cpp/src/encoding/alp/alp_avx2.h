@@ -31,6 +31,8 @@
 
 #include <stdint.h>
 
+#include <cstring>
+
 #include "alp_traits.h"
 #include "common/simd_dispatch.h"
 
@@ -68,7 +70,7 @@ static inline __m256i AlpAvx2CvttpdEpi64(__m256d v) {
 TSFILE_TARGET_AVX2
 static inline __m256d AlpAvx2Cvtepi64Pd(__m256i v) {
     alignas(32) int64_t lanes[4];
-    _mm256_storeu_si256(reinterpret_cast<__m256i*>(lanes), v);
+    std::memcpy(lanes, &v, sizeof(lanes));
     return _mm256_setr_pd(
         static_cast<double>(lanes[0]), static_cast<double>(lanes[1]),
         static_cast<double>(lanes[2]), static_cast<double>(lanes[3]));

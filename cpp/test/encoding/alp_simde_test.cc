@@ -248,41 +248,41 @@ TEST(AlpSimdeTest, UnpackMatchesReferenceAcrossBitWidths) {
 // by the scalar reference agreeing with both.
 
 template <typename T>
-static uint32_t EncodeWithSimde(
+static bool EncodeWithSimde(
     const std::vector<T>& values, uint8_t factor, uint8_t exponent,
     std::vector<typename AlpTypeTraits<T>::Encoded>& encoded,
-    std::vector<uint8_t>& bitmap, std::vector<T>& exceptions) {
+    std::vector<uint8_t>& bitmap, std::vector<T>& exceptions,
+    uint32_t* exception_count) {
     const uint32_t count = static_cast<uint32_t>(values.size());
     encoded.assign(count, 0);
     bitmap.assign((count + 7) / 8, 0);
     exceptions.assign(count, T());
-    uint32_t exception_count = 0;
-    EXPECT_EQ(ALP_OK, AlpSimdeKernel<T>::EncodeValues(
-                          values.empty() ? nullptr : &values[0], count, factor,
-                          exponent, encoded.empty() ? nullptr : &encoded[0],
-                          bitmap.empty() ? nullptr : &bitmap[0],
-                          exceptions.empty() ? nullptr : &exceptions[0],
-                          &exception_count));
-    return exception_count;
+    *exception_count = 0;
+    return AlpSimdeKernel<T>::EncodeValues(
+               values.empty() ? nullptr : &values[0], count, factor, exponent,
+               encoded.empty() ? nullptr : &encoded[0],
+               bitmap.empty() ? nullptr : &bitmap[0],
+               exceptions.empty() ? nullptr : &exceptions[0],
+               exception_count) == ALP_OK;
 }
 
 template <typename T>
-static uint32_t EncodeWithAvx2(
+static bool EncodeWithAvx2(
     const std::vector<T>& values, uint8_t factor, uint8_t exponent,
     std::vector<typename AlpTypeTraits<T>::Encoded>& encoded,
-    std::vector<uint8_t>& bitmap, std::vector<T>& exceptions) {
+    std::vector<uint8_t>& bitmap, std::vector<T>& exceptions,
+    uint32_t* exception_count) {
     const uint32_t count = static_cast<uint32_t>(values.size());
     encoded.assign(count, 0);
     bitmap.assign((count + 7) / 8, 0);
     exceptions.assign(count, T());
-    uint32_t exception_count = 0;
-    EXPECT_EQ(ALP_OK, avx2_detail::AlpAvx2Kernel<T>::EncodeValues(
-                          values.empty() ? nullptr : &values[0], count, factor,
-                          exponent, encoded.empty() ? nullptr : &encoded[0],
-                          bitmap.empty() ? nullptr : &bitmap[0],
-                          exceptions.empty() ? nullptr : &exceptions[0],
-                          &exception_count));
-    return exception_count;
+    *exception_count = 0;
+    return avx2_detail::AlpAvx2Kernel<T>::EncodeValues(
+               values.empty() ? nullptr : &values[0], count, factor, exponent,
+               encoded.empty() ? nullptr : &encoded[0],
+               bitmap.empty() ? nullptr : &bitmap[0],
+               exceptions.empty() ? nullptr : &exceptions[0],
+               exception_count) == ALP_OK;
 }
 
 template <typename T>
@@ -298,11 +298,12 @@ static void ExpectAvx2MatchesSimdeForPair(const std::vector<T>& values,
     std::vector<uint8_t> avx2_bitmap;
     std::vector<T> avx2_exceptions;
 
-    const uint32_t simde_count =
-        EncodeWithSimde(values, factor, exponent, simde_encoded, simde_bitmap,
-                        simde_exceptions);
-    const uint32_t avx2_count = EncodeWithAvx2(
-        values, factor, exponent, avx2_encoded, avx2_bitmap, avx2_exceptions);
+    uint32_t simde_count = 0;
+    uint32_t avx2_count = 0;
+    ASSERT_TRUE(EncodeWithSimde(values, factor, exponent, simde_encoded,
+                                simde_bitmap, simde_exceptions, &simde_count));
+    ASSERT_TRUE(EncodeWithAvx2(values, factor, exponent, avx2_encoded,
+                               avx2_bitmap, avx2_exceptions, &avx2_count));
     ASSERT_EQ(simde_count, avx2_count);
     EXPECT_EQ(simde_bitmap, avx2_bitmap);
     EXPECT_EQ(simde_encoded, avx2_encoded);

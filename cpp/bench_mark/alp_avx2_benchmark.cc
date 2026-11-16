@@ -168,10 +168,15 @@ void PrintRow(const std::string& pattern, const std::string& pair,
               << std::right << std::setw(16) << std::fixed
               << std::setprecision(2) << simde_mps;
     if (avx2_mps > 0.0) {
-        std::cout << std::setw(16) << avx2_mps << std::setw(12)
-                  << std::setprecision(2) << (avx2_mps / simde_mps);
+        std::cout << std::setw(16) << avx2_mps;
     } else {
-        std::cout << std::setw(16) << "-" << std::setw(12) << "-";
+        std::cout << std::setw(16) << "-";
+    }
+    if (avx2_mps > 0.0 && simde_mps > 0.0) {
+        std::cout << std::setw(12) << std::setprecision(2)
+                  << (avx2_mps / simde_mps);
+    } else {
+        std::cout << std::setw(12) << "-";
     }
     std::cout << std::setw(10) << (ok ? "yes" : "no") << std::endl;
 }
