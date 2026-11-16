@@ -257,10 +257,10 @@ static uint32_t EncodeWithSimde(
     exceptions.assign(count, T());
     uint32_t exception_count = 0;
     EXPECT_EQ(ALP_OK, AlpSimdeKernel<T>::EncodeValues(
-                          values.empty() ? NULL : &values[0], count, factor,
-                          exponent, encoded.empty() ? NULL : &encoded[0],
-                          bitmap.empty() ? NULL : &bitmap[0],
-                          exceptions.empty() ? NULL : &exceptions[0],
+                          values.empty() ? nullptr : &values[0], count, factor,
+                          exponent, encoded.empty() ? nullptr : &encoded[0],
+                          bitmap.empty() ? nullptr : &bitmap[0],
+                          exceptions.empty() ? nullptr : &exceptions[0],
                           &exception_count));
     return exception_count;
 }
@@ -276,10 +276,10 @@ static uint32_t EncodeWithAvx2(
     exceptions.assign(count, T());
     uint32_t exception_count = 0;
     EXPECT_EQ(ALP_OK, avx2_detail::AlpAvx2Kernel<T>::EncodeValues(
-                          values.empty() ? NULL : &values[0], count, factor,
-                          exponent, encoded.empty() ? NULL : &encoded[0],
-                          bitmap.empty() ? NULL : &bitmap[0],
-                          exceptions.empty() ? NULL : &exceptions[0],
+                          values.empty() ? nullptr : &values[0], count, factor,
+                          exponent, encoded.empty() ? nullptr : &encoded[0],
+                          bitmap.empty() ? nullptr : &bitmap[0],
+                          exceptions.empty() ? nullptr : &exceptions[0],
                           &exception_count));
     return exception_count;
 }
@@ -314,17 +314,17 @@ static void ExpectAvx2MatchesSimdeForPair(const std::vector<T>& values,
     const uint32_t count = static_cast<uint32_t>(values.size());
     std::vector<T> simde_decoded(count);
     std::vector<T> avx2_decoded(count);
-    const uint8_t* bitmap_ptr = simde_count == 0 ? NULL : &simde_bitmap[0];
-    const T* exception_ptr = simde_count == 0 ? NULL : &simde_exceptions[0];
+    const uint8_t* bitmap_ptr = simde_count == 0 ? nullptr : &simde_bitmap[0];
+    const T* exception_ptr = simde_count == 0 ? nullptr : &simde_exceptions[0];
     ASSERT_EQ(ALP_OK,
               AlpSimdeKernel<T>::DecodeValues(
-                  simde_encoded.empty() ? NULL : &simde_encoded[0], count,
+                  simde_encoded.empty() ? nullptr : &simde_encoded[0], count,
                   factor, exponent, bitmap_ptr, exception_ptr, simde_count,
-                  simde_decoded.empty() ? NULL : &simde_decoded[0]));
+                  simde_decoded.empty() ? nullptr : &simde_decoded[0]));
     const uint32_t avx2_status = avx2_detail::AlpAvx2Kernel<T>::DecodeValues(
-        simde_encoded.empty() ? NULL : &simde_encoded[0], count, factor,
+        simde_encoded.empty() ? nullptr : &simde_encoded[0], count, factor,
         exponent, bitmap_ptr, exception_ptr, simde_count,
-        avx2_decoded.empty() ? NULL : &avx2_decoded[0]);
+        avx2_decoded.empty() ? nullptr : &avx2_decoded[0]);
     ASSERT_EQ(ALP_OK, avx2_status);
     for (uint32_t i = 0; i < count; ++i) {
         EXPECT_TRUE(Traits::BitwiseEqual(simde_decoded[i], avx2_decoded[i]))
@@ -437,7 +437,7 @@ static void ExpectAvx2UnpackMatchesSimde(uint8_t bit_width, uint32_t count) {
         values[i] = static_cast<Unsigned>(state) & mask;
     }
     std::vector<uint8_t> body;
-    AlpPackBits(values.empty() ? NULL : &values[0], count, bit_width, body);
+    AlpPackBits(values.empty() ? nullptr : &values[0], count, bit_width, body);
     const uint8_t dummy = 0;
     const uint8_t* body_ptr = body.empty() ? &dummy : &body[0];
 
@@ -449,6 +449,15 @@ static void ExpectAvx2UnpackMatchesSimde(uint8_t bit_width, uint32_t count) {
         body_ptr, count, bit_width, avx2_out.data()));
     EXPECT_EQ(simde_out, avx2_out)
         << "bit_width=" << static_cast<int>(bit_width) << " count=" << count;
+    // The kernels only cover whole groups of four; compare every value they
+    // did process against the input that was packed, so a mistake shared by
+    // both implementations cannot hide behind their agreement.
+    const uint32_t processed = count & ~static_cast<uint32_t>(3);
+    for (uint32_t i = 0; i < processed; ++i) {
+        EXPECT_EQ(values[i], avx2_out[i])
+            << "bit_width=" << static_cast<int>(bit_width) << " count=" << count
+            << " index=" << i;
+    }
 }
 
 template <typename Unsigned>
@@ -486,9 +495,9 @@ TEST(AlpAvx2Test, DecodeMalformedStatusMatchesSimde) {
     const uint8_t bitmap[1] = {0x02};
     float out[4] = {0, 0, 0, 0};
     EXPECT_EQ(ALP_MALFORMED, AlpSimdeKernel<float>::DecodeValues(
-                                 encoded, 4, 0, 0, bitmap, NULL, 0, out));
+                                 encoded, 4, 0, 0, bitmap, nullptr, 0, out));
     EXPECT_EQ(ALP_MALFORMED, avx2_detail::AlpAvx2Kernel<float>::DecodeValues(
-                                 encoded, 4, 0, 0, bitmap, NULL, 0, out));
+                                 encoded, 4, 0, 0, bitmap, nullptr, 0, out));
 
     // One exception value but no bitmap position to consume it.
     const float exceptions[1] = {5.0f};

@@ -188,7 +188,7 @@ struct AlpAvx2Kernel<float> {
 
         uint32_t exception_index = 0;
         for (uint32_t index = 0; index < count; ++index) {
-            if (bitmap != NULL &&
+            if (bitmap != nullptr &&
                 (bitmap[index >> 3] &
                  static_cast<uint8_t>(1u << (index & 7u))) != 0) {
                 if (exception_index >= exception_count) {
@@ -306,7 +306,7 @@ struct AlpAvx2Kernel<double> {
 
         uint32_t exception_index = 0;
         for (uint32_t index = 0; index < count; ++index) {
-            if (bitmap != NULL &&
+            if (bitmap != nullptr &&
                 (bitmap[index >> 3] &
                  static_cast<uint8_t>(1u << (index & 7u))) != 0) {
                 if (exception_index >= exception_count) {
@@ -319,6 +319,12 @@ struct AlpAvx2Kernel<double> {
     }
 };
 
+// Both unpack kernels gather one 64-bit window per lane, so a lane can read up
+// to 8 bytes starting at that value's byte offset. Callers must pass the padded
+// ALP body produced by AlpPackBits, which reserves at least 16 zero guard bytes
+// past the logical stream; AlpDecodeBlock validates body_bytes against that
+// padded size before unpacking. The kernels process whole groups of four only:
+// AlpUnpackBits passes count & ~3 and decodes the remaining values itself.
 template <typename Unsigned>
 struct AlpAvx2UnpackKernel;
 
