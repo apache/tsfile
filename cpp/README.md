@@ -342,13 +342,13 @@ cmake .. -DENABLE_THREADS=OFF  # disable — all thread code is stripped at comp
 
 // Enable or disable the parallel write / read paths at runtime.  The flags are
 // consulted on every write and when a query opens its iterators.
-storage::set_parallel_write_enabled(true);
-storage::set_parallel_read_enabled(true);
+common::set_parallel_write_enabled(true);
+common::set_parallel_read_enabled(true);
 
 // Resize the global worker pool (1..64).  Takes effect immediately when the
 // library has been initialized; do not call it while any reader, writer or
 // result set is in use.
-storage::set_thread_count(4);
+common::set_thread_count(4);
 ```
 
 The C API exposes the same switches as

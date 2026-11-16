@@ -21,7 +21,7 @@
 
 # Function
 ```
-The example is to show how to write and read a TsFile File.
+The examples show how to write and read a TsFile file.
 ```
 # Usage
 ## Dependencies with Maven
@@ -31,54 +31,49 @@ The example is to show how to write and read a TsFile File.
     <dependency>
         <groupId>org.apache.tsfile</groupId>
         <artifactId>tsfile</artifactId>
-     	  <version>2.1.0</version>
+        <version>2.5.0</version>
     </dependency>
 </dependencies>
 ```
 
+## Write examples
 
-## Run TsFileWrite.java
+All writers below live in `src/main/java/org/apache/tsfile/` and can be run from
+an IDE or with `java -cp <classpath> org.apache.tsfile.<ClassName>`.
 
+| Class | Write model | API | Output file |
+|---|---|---|---|
+| `TsFileWriteWithTSRecord` | Non-aligned (tree model) | `TsFileWriter.registerTimeseries` + `TSRecord` | `Record.tsfile` |
+| `TsFileWriteWithTablet` | Non-aligned (tree model) | `TsFileWriter.registerTimeseries` + `Tablet` | `Tablet.tsfile` |
+| `TsFileWriteAlignedWithTSRecord` | Aligned | `TsFileWriter.registerAlignedTimeseries` + `TSRecord` | `alignedRecord.tsfile` |
+| `TsFileWriteAlignedWithTablet` | Aligned and non-aligned in one file | `registerAlignedTimeseries` + `registerTimeseries` + `Tablet` | `alignedTablet.tsfile` |
+| `TsFileForceAppendWrite` | Non-aligned (tree model) | `TsFileWriter.writeRecord` in batches | `test.tsfile` |
 
-  This class is to show how to write a TsFile. It provided two ways:
-  
-   The first one is using a JSON string for measurement(s). The JSON string is an array of JSON 
-   objects(schema). The object must include the *measurement_id*, *datatype*, *encoding*, and 
-   *compressor*. 
-   
-   An example JSON string is provided in the comments in 
-   the method
-   
-        public static void tsFileWriteWithJson() throws IOException,WriteProcessException
-   It uses this interface
-   
-        public void addMeasurementByJson(JSONObject measurement) throws WriteProcessException  
-   An alternative way is to add these measurements directly(manually) by the second interface: 
-   
-         public void addMeasurement(MeasurementSchema measurementSchema) throws WriteProcessException
-   
-   The method
-   
-         public static void tsFileWriteDirect() throws IOException,WriteProcessException
-   shows how to use that interface.
-   
-   Note that the measurements in the two methods are the same therefore there output TsFile should also be identical.
+`TSRecord` is the row-oriented API: one timestamp with a list of data points.
+`Tablet` is the column-oriented batch API and is preferred for volume writes.
+The aligned variants require every measurement of a device to share the same
+timestamp column.
 
+## Read examples
 
-  
-## Run TsFileRead.java
+### Run TsFileRead.java
 
- This class is to show how to read TsFile file named "testDirect.tsfile".
- 
- The TsFile file "testDirect.tsfile" is generated from class TsFileWrite.
- 
- It generates the same TsFile(testDirect.tsfile and testWithJson.tsfile) file by two different ways
- 
- Run TsFileWrite to generate the testDirect.tsfile first
- 
-## Run TsFileSequenceRead.java
+`TsFileRead` queries `test.tsfile`, so run `TsFileForceAppendWrite` first to
+generate it. The example shows a plain query, a time-range filter
+(`GlobalTimeExpression` with `TimeFilterApi`), a value filter
+(`SingleSeriesExpression` with `ValueFilterApi`), and a combined filter.
 
-  This class is to show the structure of a TsFile.
+### Run TsFileSequenceRead.java
 
-### Notice 
-  For detail, please refer to https://github.com/apache/tsfile/blob/develop/README.md.
+`TsFileSequenceRead` scans a TsFile from head to tail and prints its physical
+layout: magic strings, metadata positions, chunk groups, chunks, and pages. Pass
+the file to scan as the first argument; it defaults to `test.tsfile`.
+
+## V4 examples
+
+The `v4/` package contains examples for the newer reader/writer APIs:
+`ITsFileReaderAndITsFileWriter`, `WriteTabletWithITsFileWriter`,
+`TsFileTreeReaderExample`, and `TagFilterExample`.
+
+### Notice
+  For detail, please refer to https://github.com/apache/tsfile/blob/develop/README.md.

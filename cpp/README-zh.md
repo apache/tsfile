@@ -43,7 +43,7 @@ TsFile_cpp 的性能基准测试位于 `./bench_mark` 目录。
 
 我们使用 `clang-format` 来确保 C++ 代码遵循 `./clang-format` 文件中定义的一致规范（类似于 Google 风格）。
 
-`mvn spotless` 会使用 `clang-format v17.0.6` 来格式化 C++ 代码。在提交代码前，请先确认你环境里的 `clang-format` 版本与其一致，并且已经加入 `PATH`。
+`mvn spotless:apply` 会使用 `clang-format v17.0.6` 来格式化 C++ 代码。在提交代码前，请先确认你环境里的 `clang-format` 版本与其一致，并且已经加入 `PATH`。
 
 `clang-format v17.0.6` 安装方式如下：
 
@@ -75,7 +75,7 @@ mvn spotless:apply -P with-cpp
 如果你需要临时跳过代码格式化检查，可以添加 `-Dspotless.skip=true`，例如：
 
 ```bash
-mvn package -P with-cpp clean verify -Dspotless.skip=true
+mvn clean verify -P with-cpp -Dspotless.skip=true
 ```
 
 欢迎提交任何 Bug 报告。
@@ -108,10 +108,10 @@ bash build.sh install
 如果你安装了 Maven 工具，也可以运行：
 
 ```bash
-mvn package -P with-cpp clean verify
+mvn clean verify -P with-cpp
 ```
 
-构建完成后，可在 `./build` 目录下找到生成的共享库文件。
+`build.sh` 默认使用 Release，构建完成后可在 `./build/Release` 目录下找到生成的共享库文件。
 
 在向 GitHub 提交代码之前，请确保 `mvn` 编译通过。
 
@@ -164,14 +164,23 @@ cmake .. -DENABLE_THREADS=OFF  # 关闭——编译期剥离所有线程代码
 ```cpp
 #include "common/global.h"
 
-// 运行时开启或关闭并行写入（单核机器自动禁用）
-storage::set_parallel_write_enabled(true);
+// 运行时开启或关闭并行写入 / 读取路径。这两个开关在每次写入时以及查询
+// 打开迭代器时读取。
+common::set_parallel_write_enabled(true);
+common::set_parallel_read_enabled(true);
 
-// 设置工作线程数（必须在创建 TsFileWriter 之前调用）
-storage::set_write_thread_count(4);
+// 调整全局工作线程池（1..64）。库已初始化时立即生效；不得在 reader、
+// writer 或 result set 正在使用时调用。
+common::set_thread_count(4);
 ```
 
-默认情况下，当机器 CPU 核数大于 1 时自动启用并行写入，线程数设为硬件核数（上限 64）。
+C API 提供相同的开关：`tsfile_set_parallel_read_enabled()`、
+`tsfile_set_parallel_write_enabled()` 和 `tsfile_set_thread_count()`（以及对应的
+getter）；Python 绑定提供 `set_parallel_read_enabled()`、
+`set_parallel_write_enabled()` 和 `set_thread_count()`。
+
+并行读写默认开启，线程池为 6 个线程。使用 `ENABLE_THREADS=OFF` 时，setter
+只记录取值，并行路径在编译期被移除。
 
 ### 本地文件读取后端
 
@@ -210,7 +219,8 @@ reader 打开期间不得修改或截断文件。
 bash build.sh
 ```
 
-即可在 `./examples/build` 目录下生成可执行文件。
+即可在 `./examples/build/Debug` 目录下生成可执行文件（`build.sh` 默认使用 Debug；
+如需 Release，请修改脚本中的 `build_type`）。
 
 ### 文件级 Properties
 
