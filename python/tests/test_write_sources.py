@@ -270,3 +270,31 @@ def test_text_mode_file_is_rejected(tmp_path):
     with open(path, "w", encoding="utf-8") as target:
         with pytest.raises(ValueError, match="binary"):
             TsFileWriter(target)
+
+
+def test_table_writer_accepts_file_object():
+    from tsfile import TsFileTableWriter
+
+    buf = io.BytesIO()
+    schema = TableSchema(
+        "table_writer_table",
+        [
+            ColumnSchema("item_id", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("value", TSDataType.DOUBLE),
+        ],
+    )
+    with TsFileTableWriter(buf, schema) as writer:
+        tablet = Tablet(["item_id", "value"], [TSDataType.STRING, TSDataType.DOUBLE], 4)
+        tablet.set_table_name("table_writer_table")
+        for row in range(4):
+            tablet.add_timestamp(row, row)
+            tablet.add_value_by_name("item_id", row, f"id{row}")
+            tablet.add_value_by_name("value", row, row * 1.5)
+        writer.write_table(tablet)
+
+    with TsFileReader(io.BytesIO(buf.getvalue())) as reader:
+        with reader.query_table("table_writer_table", ["item_id", "value"]) as result:
+            seen = []
+            while result.next():
+                seen.append(result.get_value_by_name("value"))
+            assert seen == [row * 1.5 for row in range(4)]

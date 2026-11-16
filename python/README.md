@@ -233,6 +233,9 @@ with fsspec.open("s3://bucket/output.tsfile", "wb") as target:
         writer.write_table(tablet)
 ```
 
+`TsFileTableWriter` (the schema-bound table writer) accepts a writable file
+object in the same way.
+
 The target must provide `write()` and `tell()`. When it is seekable its
 existing content is discarded; a forward-only stream (for example a pipe) is
 accepted only while it is positioned at 0. A failing `flush()` is reported as
