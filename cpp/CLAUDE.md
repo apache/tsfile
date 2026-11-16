@@ -51,6 +51,11 @@ make -j$(nproc)
 # Via Maven from repo root
 ./mvnw clean verify -P with-cpp
 
+# Maven and build.sh compile in parallel. ./mvnw and build.sh use one job per
+# CPU core; a plain `mvn` falls back to 4. Override with
+# -Dcmake.build.parallel.level=N, CMAKE_BUILD_PARALLEL_LEVEL, or build.sh -j=N
+./mvnw -P with-cpp verify -Dcmake.build.parallel.level=8
+
 # Run all tests (fast iteration only: runs the built binary and skips the
 # Maven compile/link/package steps that CI performs)
 ./build/Release/lib/TsFile_Test

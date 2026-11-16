@@ -36,6 +36,7 @@ enable_lz4=ON
 enable_lzokay=ON
 enable_zlib=ON
 enable_zstd=ON
+build_jobs=""
 # Keep the default build compatible with CMake 3.11-era industrial toolchains.
 # Bundled XZ Utils requires CMake 3.20+, so LZMA2 must be enabled explicitly.
 enable_lzma2=OFF
@@ -45,6 +46,17 @@ shell_dir=$(cd "$(dirname "$0")";pwd)
 # 添加get_key_value函数
 get_key_value() {
     echo "${1#*=}"
+}
+
+detect_build_jobs()
+{
+  if command -v nproc >/dev/null 2>&1; then
+    nproc
+  elif command -v sysctl >/dev/null 2>&1 && sysctl -n hw.ncpu >/dev/null 2>&1; then
+    sysctl -n hw.ncpu
+  else
+    echo 1
+  fi
 }
 
 usage()
@@ -62,6 +74,8 @@ Options:
                          Checks passed to -fsanitize= when ASan is enabled
                          (default: address,undefined).
   -c=<ON|OFF>            Enable or disable code coverage.
+  -j=<n>, --jobs=<n>     Number of parallel compile jobs (default: detected
+                         processor count).
   --build-shared=<ON|OFF>
                          Build libtsfile as a shared library (default: ON).
   --build-static         Build libtsfile as a static library.
@@ -102,6 +116,7 @@ function print_config()
   echo "enable_zlib=$enable_zlib"
   echo "enable_zstd=$enable_zstd"
   echo "enable_lzma2=$enable_lzma2"
+  echo "build_jobs=$build_jobs"
 }
 
 function run_test_for_cov()
@@ -138,6 +153,11 @@ parse_options()
     -c)
       shift
       enable_cov=$(get_key_value "$1");;
+    -j=* | --jobs=*)
+      build_jobs=$(get_key_value "$1");;
+    -j | --jobs)
+      shift
+      build_jobs=$(get_key_value "$1");;
     --build-shared=*)
       build_shared=$(get_key_value "$1");;
     --build-static)
@@ -183,6 +203,12 @@ parse_options()
 }
 
 parse_options "$@"
+
+if [ -z "${build_jobs}" ]
+then
+  build_jobs=$(detect_build_jobs)
+fi
+
 print_config
 
 if [[ ${run_cov_only} -eq 1 ]]
@@ -243,7 +269,7 @@ cmake ../../                           \
   -DENABLE_ZSTD=$enable_zstd           \
   -DENABLE_LZMA2=$enable_lzma2
 
-VERBOSE=1 make
+VERBOSE=1 make -j"${build_jobs}"
 if [ ${do_install} -eq 1 ]
 then
   VERBOSE=1 make install

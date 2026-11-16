@@ -115,6 +115,11 @@ To build tsfile, use Maven which automatically detects and uses the appropriate 
 mvn clean verify -P with-cpp
 ```
 
+Compilation runs one job per CPU core under `./mvnw` (the wrapper exports
+`CMAKE_BUILD_PARALLEL_LEVEL`); a plain `mvn` invocation falls back to 4 jobs.
+Set `-Dcmake.build.parallel.level=N` or `CMAKE_BUILD_PARALLEL_LEVEL` to choose
+the job count, and `bash build.sh -j=N` for the direct CMake build.
+
 **Toolchain Selection:**
 
 Maven will automatically select the compiler based on your platform:
