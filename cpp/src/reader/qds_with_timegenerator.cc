@@ -56,12 +56,12 @@ int64_t SeriesScanStream::front() {
     } else {
         if (col_iter_->end()) {
             int ret = E_OK;  // cppcheck-suppress unreadVariable
+            delete col_iter_;
+            col_iter_ = nullptr;
+            tsblock_->reset();
             if (RET_FAIL(ssi_->get_next(tsblock_, false))) {
-                delete col_iter_;
-                col_iter_ = nullptr;
                 return INVALID_NEXT_TIMESTAMP;
             } else {
-                delete col_iter_;
                 col_iter_ = new ColIterator(0, tsblock_);
                 ASSERT(!col_iter_->end());
             }
@@ -136,15 +136,17 @@ void* ValueAt::at(int64_t target_timestamp) {
             }
         }
         tf_->reset_value(target_timestamp);
-        if (RET_FAIL(ssi_->get_next(tsblock_, (tsblock_ == nullptr), tf_))) {
+        delete time_col_iter_;
+        time_col_iter_ = nullptr;
+        delete value_col_iter_;
+        value_col_iter_ = nullptr;
+        tsblock_->reset();
+        if (RET_FAIL(ssi_->get_next(tsblock_, false, tf_))) {
             cur_time_ = INT64_MAX;
             return nullptr;
-        } else {
-            delete time_col_iter_;
-            delete value_col_iter_;
-            time_col_iter_ = new ColIterator(0, tsblock_);
-            value_col_iter_ = new ColIterator(1, tsblock_);
         }
+        time_col_iter_ = new ColIterator(0, tsblock_);
+        value_col_iter_ = new ColIterator(1, tsblock_);
     }
 }
 
@@ -306,7 +308,7 @@ int QDSWithTimeGenerator::init(TsFileIOReader* io_reader, QueryExpression* qe) {
             return ret;
         } else {
             va.io_reader_ = io_reader_;
-            data_types.push_back(va.value_col_iter_->get_data_type());
+            data_types.push_back(va.ssi_->get_data_type());
             value_at_vec_.push_back(va);
         }
     }
