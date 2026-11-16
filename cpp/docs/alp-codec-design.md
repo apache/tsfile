@@ -152,18 +152,21 @@ be bit-exactly reproducible by the decoder.
 SIMDe is already a TsFile C++ dependency. The ALP kernels will use the existing
 `ENABLE_SIMD` switch and `TsFile::SIMDe` target.
 
-- Write the kernels with `simde__m256i` and `simde_mm256_*`, matching the
-  existing encoding code style.
-- The kernels are header-only and compile into baseline TsFile translation
-  units with `ENABLE_SIMD`; there is no separate `-mavx2` translation unit and
-  no runtime CPU dispatch yet. On GCC/Clang, SIMDe annotates the AVX2 helpers
-  with target attributes, so native AVX2 instructions may be emitted inside
-  outlined helper calls; on MSVC without `/arch:AVX2` SIMDe emulates them.
-  A dedicated AVX2 object library plus runtime dispatch is a follow-up.
-- On AArch64 the same SIMDe source maps to NEON without the AVX2 flag.
-- Add a scalar fallback used when SIMD is disabled or unavailable.
-- Select the kernel at compile time through `ENABLE_SIMD`; there is no runtime
-  dispatch or function table yet.
+- Write the portable kernels with `simde__m256i` and `simde_mm256_*` in
+  `alp_simde.h`, matching the existing encoding code style.
+- The portable kernels are header-only and compile into baseline TsFile
+  translation units with `ENABLE_SIMD`. On AArch64 the same SIMDe source maps
+  to NEON without the AVX2 flag; on MSVC and on CPUs without AVX2 they are the
+  fallback.
+- On x86 with GCC/Clang, `alp_avx2.h` carries native AVX2 copies of the
+  `EncodeValues`, `DecodeValues` and bit-unpack kernels, compiled with
+  `TSFILE_TARGET_AVX2` (`__attribute__((target("avx2")))`). The dispatchers
+  `AlpSimdKernel` / `AlpSimdUnpackKernel` in `alp_simde.h` select them once per
+  batch call through `common::cpu_has_avx2()` from `common/simd_dispatch.h`.
+  The library is not built with `-mavx2`, so the binary's ISA floor does not
+  change: a CPU without AVX2 runs the SIMDe path, and both paths must encode
+  to identical bytes and decode to bit-identical values.
+- Add a scalar fallback used when SIMD is disabled.
 - The 64-bit unpack kernel reconstructs one value from a single 64-bit window,
   so it only handles fields up to 57 bits wide; wider fields are decoded by
   the scalar tail, which reads two overlapping words. Keep that limit in sync
@@ -179,11 +182,14 @@ SIMDe is already a TsFile C++ dependency. The ALP kernels will use the existing
 - Constant blocks, single-value blocks, partial final blocks, and multi-block
   pages.
 - Scalar and SIMD must encode to identical bytes and decode to identical
-  values.
+  values. On AVX2-capable x86 machines, differential tests also compare the
+  dispatched AVX2 kernels against the SIMDe kernels directly.
 - Corrupt/truncated payload tests must return errors without out-of-bounds
   access.
 - Benchmarks compare ALP against Gorilla for decimal, normalized, smooth,
-  repeated, and high-entropy data.
+  repeated, and high-entropy data. `cpp/bench_mark/alp_avx2_benchmark.cc`
+  measures the SIMDe and AVX2 kernels per entry point in a default
+  (no `-mavx2`) build.
 
 ## References and Provenance
 

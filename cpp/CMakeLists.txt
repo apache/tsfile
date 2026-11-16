@@ -486,6 +486,15 @@ if (BUILD_BENCHMARK)
             ${PROJECT_SRC_DIR})
     target_link_libraries(alp_vs_gorilla_benchmark PRIVATE
             tsfile Threads::Threads)
+
+    if (ENABLE_SIMD)
+        add_executable(alp_avx2_benchmark
+                bench_mark/alp_avx2_benchmark.cc)
+        target_include_directories(alp_avx2_benchmark PRIVATE
+                ${PROJECT_SRC_DIR})
+        target_link_libraries(alp_avx2_benchmark PRIVATE
+                tsfile Threads::Threads)
+    endif ()
 endif ()
 if (BUILD_TOOLS)
     add_subdirectory(tools)

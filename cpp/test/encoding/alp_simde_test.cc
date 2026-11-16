@@ -239,6 +239,267 @@ TEST(AlpSimdeTest, UnpackMatchesReferenceAcrossBitWidths) {
     }
 }
 
+#ifdef TSFILE_X86_AVX2_DISPATCH
+
+// The AlpSimdeTest cases above run through the dispatched entry points, so on
+// an AVX2 CPU they exercise the native kernels. These tests compare the AVX2
+// kernels against the SIMDe fallback directly, so a mismatch cannot be hidden
+// by the scalar reference agreeing with both.
+
+template <typename T>
+static uint32_t EncodeWithSimde(
+    const std::vector<T>& values, uint8_t factor, uint8_t exponent,
+    std::vector<typename AlpTypeTraits<T>::Encoded>& encoded,
+    std::vector<uint8_t>& bitmap, std::vector<T>& exceptions) {
+    const uint32_t count = static_cast<uint32_t>(values.size());
+    encoded.assign(count, 0);
+    bitmap.assign((count + 7) / 8, 0);
+    exceptions.assign(count, T());
+    uint32_t exception_count = 0;
+    EXPECT_EQ(ALP_OK, AlpSimdeKernel<T>::EncodeValues(
+                          values.empty() ? NULL : &values[0], count, factor,
+                          exponent, encoded.empty() ? NULL : &encoded[0],
+                          bitmap.empty() ? NULL : &bitmap[0],
+                          exceptions.empty() ? NULL : &exceptions[0],
+                          &exception_count));
+    return exception_count;
+}
+
+template <typename T>
+static uint32_t EncodeWithAvx2(
+    const std::vector<T>& values, uint8_t factor, uint8_t exponent,
+    std::vector<typename AlpTypeTraits<T>::Encoded>& encoded,
+    std::vector<uint8_t>& bitmap, std::vector<T>& exceptions) {
+    const uint32_t count = static_cast<uint32_t>(values.size());
+    encoded.assign(count, 0);
+    bitmap.assign((count + 7) / 8, 0);
+    exceptions.assign(count, T());
+    uint32_t exception_count = 0;
+    EXPECT_EQ(ALP_OK, avx2_detail::AlpAvx2Kernel<T>::EncodeValues(
+                          values.empty() ? NULL : &values[0], count, factor,
+                          exponent, encoded.empty() ? NULL : &encoded[0],
+                          bitmap.empty() ? NULL : &bitmap[0],
+                          exceptions.empty() ? NULL : &exceptions[0],
+                          &exception_count));
+    return exception_count;
+}
+
+template <typename T>
+static void ExpectAvx2MatchesSimdeForPair(const std::vector<T>& values,
+                                          uint8_t factor, uint8_t exponent) {
+    typedef AlpTypeTraits<T> Traits;
+    typedef typename Traits::Encoded Encoded;
+
+    std::vector<Encoded> simde_encoded;
+    std::vector<uint8_t> simde_bitmap;
+    std::vector<T> simde_exceptions;
+    std::vector<Encoded> avx2_encoded;
+    std::vector<uint8_t> avx2_bitmap;
+    std::vector<T> avx2_exceptions;
+
+    const uint32_t simde_count =
+        EncodeWithSimde(values, factor, exponent, simde_encoded, simde_bitmap,
+                        simde_exceptions);
+    const uint32_t avx2_count = EncodeWithAvx2(
+        values, factor, exponent, avx2_encoded, avx2_bitmap, avx2_exceptions);
+    ASSERT_EQ(simde_count, avx2_count);
+    EXPECT_EQ(simde_bitmap, avx2_bitmap);
+    EXPECT_EQ(simde_encoded, avx2_encoded);
+    for (uint32_t i = 0; i < simde_count; ++i) {
+        EXPECT_TRUE(
+            Traits::BitwiseEqual(simde_exceptions[i], avx2_exceptions[i]))
+            << "exception index " << i;
+    }
+
+    const uint32_t count = static_cast<uint32_t>(values.size());
+    std::vector<T> simde_decoded(count);
+    std::vector<T> avx2_decoded(count);
+    const uint8_t* bitmap_ptr = simde_count == 0 ? NULL : &simde_bitmap[0];
+    const T* exception_ptr = simde_count == 0 ? NULL : &simde_exceptions[0];
+    ASSERT_EQ(ALP_OK,
+              AlpSimdeKernel<T>::DecodeValues(
+                  simde_encoded.empty() ? NULL : &simde_encoded[0], count,
+                  factor, exponent, bitmap_ptr, exception_ptr, simde_count,
+                  simde_decoded.empty() ? NULL : &simde_decoded[0]));
+    const uint32_t avx2_status = avx2_detail::AlpAvx2Kernel<T>::DecodeValues(
+        simde_encoded.empty() ? NULL : &simde_encoded[0], count, factor,
+        exponent, bitmap_ptr, exception_ptr, simde_count,
+        avx2_decoded.empty() ? NULL : &avx2_decoded[0]);
+    ASSERT_EQ(ALP_OK, avx2_status);
+    for (uint32_t i = 0; i < count; ++i) {
+        EXPECT_TRUE(Traits::BitwiseEqual(simde_decoded[i], avx2_decoded[i]))
+            << "decoded index " << i;
+    }
+}
+
+template <typename T>
+static void ExpectAvx2MatchesSimde(const std::vector<T>& values) {
+    if (!common::cpu_has_avx2()) {
+        GTEST_SKIP() << "CPU does not support AVX2";
+        return;
+    }
+    typedef AlpTypeTraits<T> Traits;
+    for (uint8_t exponent = 0; exponent <= Traits::MaxExponent(); ++exponent) {
+        for (uint8_t factor = 0; factor <= exponent; ++factor) {
+            ExpectAvx2MatchesSimdeForPair(values, factor, exponent);
+        }
+    }
+}
+
+TEST(AlpAvx2Test, FloatValuesMatchSimde) {
+    std::vector<float> values;
+    for (int i = 0; i < 1024; ++i) {
+        values.push_back(static_cast<float>(i % 251) * 0.01f - 1.25f);
+    }
+    ExpectAvx2MatchesSimde(values);
+}
+
+TEST(AlpAvx2Test, DoubleValuesMatchSimde) {
+    std::vector<double> values;
+    for (int i = 0; i < 1024; ++i) {
+        values.push_back(static_cast<double>(i % 509) * 0.001 - 0.25);
+    }
+    ExpectAvx2MatchesSimde(values);
+}
+
+TEST(AlpAvx2Test, SpecialValuesMatchSimde) {
+    const float nan_f = std::numeric_limits<float>::quiet_NaN();
+    const double nan_d = std::numeric_limits<double>::quiet_NaN();
+    std::vector<float> floats = {0.0f,
+                                 -0.0f,
+                                 1.0f,
+                                 -1.0f,
+                                 nan_f,
+                                 std::numeric_limits<float>::infinity(),
+                                 -std::numeric_limits<float>::infinity(),
+                                 std::numeric_limits<float>::denorm_min(),
+                                 std::numeric_limits<float>::max()};
+    ExpectAvx2MatchesSimde(floats);
+
+    std::vector<double> doubles = {0.0,
+                                   -0.0,
+                                   1.0,
+                                   -1.0,
+                                   nan_d,
+                                   std::numeric_limits<double>::infinity(),
+                                   -std::numeric_limits<double>::infinity(),
+                                   std::numeric_limits<double>::denorm_min(),
+                                   std::numeric_limits<double>::max()};
+    ExpectAvx2MatchesSimde(doubles);
+}
+
+template <typename T>
+static void ExpectAvx2MatchesSimdeAroundVectorBoundaries() {
+    if (!common::cpu_has_avx2()) {
+        GTEST_SKIP() << "CPU does not support AVX2";
+        return;
+    }
+    const uint32_t counts[] = {0,  1,  2,  3,  4,   5,   6,   7,   8,
+                               9,  15, 16, 17, 23,  24,  25,  31,  32,
+                               33, 63, 64, 65, 127, 128, 129, 1024};
+    uint64_t state = 0x9e3779b97f4a7c15ULL;
+    std::vector<T> maximum(counts[sizeof(counts) / sizeof(counts[0]) - 1]);
+    for (size_t i = 0; i < maximum.size(); ++i) {
+        state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+        const double fraction = static_cast<double>(state % 100000) / 1000.0;
+        maximum[i] = static_cast<T>(fraction - 50.0);
+    }
+    for (size_t c = 0; c < sizeof(counts) / sizeof(counts[0]); ++c) {
+        const std::vector<T> values(maximum.begin(),
+                                    maximum.begin() + counts[c]);
+        // A pair that encodes the decimal data plus one that rejects most of
+        // it, so both the vector body and the exception path are covered.
+        ExpectAvx2MatchesSimdeForPair(values, 0, 0);
+        ExpectAvx2MatchesSimdeForPair(values, 3, 3);
+        ExpectAvx2MatchesSimdeForPair(values, 2, 2);
+    }
+}
+
+TEST(AlpAvx2Test, FloatAroundVectorBoundaries) {
+    ExpectAvx2MatchesSimdeAroundVectorBoundaries<float>();
+}
+
+TEST(AlpAvx2Test, DoubleAroundVectorBoundaries) {
+    ExpectAvx2MatchesSimdeAroundVectorBoundaries<double>();
+}
+
+template <typename Unsigned>
+static void ExpectAvx2UnpackMatchesSimde(uint8_t bit_width, uint32_t count) {
+    const Unsigned mask =
+        bit_width >= sizeof(Unsigned) * 8
+            ? static_cast<Unsigned>(~static_cast<Unsigned>(0))
+            : static_cast<Unsigned>((static_cast<uint64_t>(1) << bit_width) -
+                                    1);
+    std::vector<Unsigned> values(count);
+    uint64_t state = 0x243f6a8885a308d3ULL;
+    for (size_t i = 0; i < values.size(); ++i) {
+        state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+        values[i] = static_cast<Unsigned>(state) & mask;
+    }
+    std::vector<uint8_t> body;
+    AlpPackBits(values.empty() ? NULL : &values[0], count, bit_width, body);
+    const uint8_t dummy = 0;
+    const uint8_t* body_ptr = body.empty() ? &dummy : &body[0];
+
+    std::vector<Unsigned> simde_out(count, 0);
+    std::vector<Unsigned> avx2_out(count, 0);
+    ASSERT_TRUE(AlpSimdeUnpackKernel<Unsigned>::Unpack(
+        body_ptr, count, bit_width, simde_out.data()));
+    ASSERT_TRUE(avx2_detail::AlpAvx2UnpackKernel<Unsigned>::Unpack(
+        body_ptr, count, bit_width, avx2_out.data()));
+    EXPECT_EQ(simde_out, avx2_out)
+        << "bit_width=" << static_cast<int>(bit_width) << " count=" << count;
+}
+
+template <typename Unsigned>
+static void ExpectAvx2UnpackMatchesSimdeAcrossBitWidths() {
+    if (!common::cpu_has_avx2()) {
+        GTEST_SKIP() << "CPU does not support AVX2";
+        return;
+    }
+    const uint32_t counts[] = {0, 1, 2, 3, 4, 5, 7, 8, 9, 31, 64, 65, 1024};
+    const uint8_t max_width = AlpSimdeUnpackKernel<Unsigned>::SafeBitWidth();
+    for (uint8_t bit_width = 0; bit_width <= max_width; ++bit_width) {
+        for (size_t c = 0; c < sizeof(counts) / sizeof(counts[0]); ++c) {
+            ExpectAvx2UnpackMatchesSimde<Unsigned>(bit_width, counts[c]);
+        }
+    }
+}
+
+TEST(AlpAvx2Test, UnpackUint32MatchesSimde) {
+    ExpectAvx2UnpackMatchesSimdeAcrossBitWidths<uint32_t>();
+}
+
+TEST(AlpAvx2Test, UnpackUint64MatchesSimde) {
+    ExpectAvx2UnpackMatchesSimdeAcrossBitWidths<uint64_t>();
+}
+
+TEST(AlpAvx2Test, DecodeMalformedStatusMatchesSimde) {
+    if (!common::cpu_has_avx2()) {
+        GTEST_SKIP() << "CPU does not support AVX2";
+        return;
+    }
+    // Bitmap position 1 is marked as an exception but no exception value is
+    // supplied: both paths must reject the block rather than read past the
+    // exception array.
+    const int32_t encoded[4] = {1, 2, 3, 4};
+    const uint8_t bitmap[1] = {0x02};
+    float out[4] = {0, 0, 0, 0};
+    EXPECT_EQ(ALP_MALFORMED, AlpSimdeKernel<float>::DecodeValues(
+                                 encoded, 4, 0, 0, bitmap, NULL, 0, out));
+    EXPECT_EQ(ALP_MALFORMED, avx2_detail::AlpAvx2Kernel<float>::DecodeValues(
+                                 encoded, 4, 0, 0, bitmap, NULL, 0, out));
+
+    // One exception value but no bitmap position to consume it.
+    const float exceptions[1] = {5.0f};
+    EXPECT_EQ(ALP_MALFORMED, AlpSimdeKernel<float>::DecodeValues(
+                                 encoded, 4, 0, 0, bitmap, exceptions, 2, out));
+    EXPECT_EQ(ALP_MALFORMED, avx2_detail::AlpAvx2Kernel<float>::DecodeValues(
+                                 encoded, 4, 0, 0, bitmap, exceptions, 2, out));
+}
+
+#endif  // TSFILE_X86_AVX2_DISPATCH
+
 #endif  // ENABLE_SIMD
 
 }  // namespace alp
