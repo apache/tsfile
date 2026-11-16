@@ -32,6 +32,8 @@
 #     e.g. to debug Maven itself, use
 #       set MAVEN_OPTS=-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=8000
 #   MAVEN_SKIP_RC - flag to disable loading of mavenrc files
+#   CMAKE_BUILD_PARALLEL_LEVEL - parallel jobs for the C++ (CMake) build; set to
+#     the host core count when unset
 # ----------------------------------------------------------------------------
 
 if [ -z "$MAVEN_SKIP_RC" ] ; then
@@ -298,6 +300,27 @@ if $cygwin; then
     CLASSPATH=`cygpath --path --windows "$CLASSPATH"`
   [ -n "$MAVEN_PROJECTBASEDIR" ] &&
     MAVEN_PROJECTBASEDIR=`cygpath --path --windows "$MAVEN_PROJECTBASEDIR"`
+fi
+
+# Let the native (C++) build use every core unless the caller pinned a level.
+# Each probe is only trusted when it actually returns a value; `sysctl` in
+# particular exists on Linux, where `hw.ncpu` does not.
+if [ -z "$CMAKE_BUILD_PARALLEL_LEVEL" ]; then
+  if [ -n "$NUMBER_OF_PROCESSORS" ]; then
+    CMAKE_BUILD_PARALLEL_LEVEL="$NUMBER_OF_PROCESSORS"
+  fi
+  if [ -z "$CMAKE_BUILD_PARALLEL_LEVEL" ] && command -v nproc >/dev/null 2>&1; then
+    CMAKE_BUILD_PARALLEL_LEVEL=$(nproc 2>/dev/null)
+  fi
+  if [ -z "$CMAKE_BUILD_PARALLEL_LEVEL" ]; then
+    CMAKE_BUILD_PARALLEL_LEVEL=$(getconf _NPROCESSORS_ONLN 2>/dev/null)
+  fi
+  if [ -z "$CMAKE_BUILD_PARALLEL_LEVEL" ]; then
+    CMAKE_BUILD_PARALLEL_LEVEL=$(sysctl -n hw.ncpu 2>/dev/null)
+  fi
+  if [ -n "$CMAKE_BUILD_PARALLEL_LEVEL" ]; then
+    export CMAKE_BUILD_PARALLEL_LEVEL
+  fi
 fi
 
 # Provide a "standardized" way to retrieve the CLI args that will

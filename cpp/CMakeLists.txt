@@ -166,17 +166,9 @@ if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
 endif ()
 
-if (NOT DEFINED CMAKE_BUILD_PARALLEL_LEVEL)
-    include(ProcessorCount)
-    ProcessorCount(N)
-    if (N EQUAL 0)
-        set(N 1)
-    endif ()
-    set(CMAKE_BUILD_PARALLEL_LEVEL ${N} CACHE STRING "Number of parallel build jobs")
-    message("CMAKE BUILD PARALLEL LEVEL: ${CMAKE_BUILD_PARALLEL_LEVEL} (auto-detected)")
-else ()
-    message("CMAKE BUILD PARALLEL LEVEL: ${CMAKE_BUILD_PARALLEL_LEVEL} (from environment)")
-endif ()
+# Build parallelism is set by the driver, not here: `cmake --build` honors only the
+# CMAKE_BUILD_PARALLEL_LEVEL environment variable (never a cache variable of that
+# name), so the Maven build passes --parallel and build.sh passes -j instead.
 
 message("CMAKE BUILD TYPE " ${CMAKE_BUILD_TYPE})
 # Tune Release builds for the build-host CPU (-march=native). OFF by default:

@@ -113,6 +113,8 @@ mvn clean verify -P with-cpp
 
 `build.sh` 默认使用 Release，构建完成后可在 `./build/Release` 目录下找到生成的共享库文件。
 
+`build.sh` 和 `./mvnw` 默认按 CPU 核数并行编译（`mvnw` 会导出 `CMAKE_BUILD_PARALLEL_LEVEL`）；直接使用 `mvn` 时默认 4 个并行任务。可用 `-j=N`（`build.sh`）、`-Dcmake.build.parallel.level=N`（Maven）或环境变量 `CMAKE_BUILD_PARALLEL_LEVEL` 调整并行度。
+
 在向 GitHub 提交代码之前，请确保 `mvn` 编译通过。
 
 ---

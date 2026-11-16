@@ -37,6 +37,11 @@ cmake --build cpp/build/static --target tsfile
 cd cpp && bash build.sh --build-static
 ```
 
+Maven builds and `build.sh` compile in parallel: `./mvnw` and `build.sh` use one
+job per CPU core, while a plain `mvn` falls back to 4. Control the count with
+`-Dcmake.build.parallel.level=N`, the `CMAKE_BUILD_PARALLEL_LEVEL` environment
+variable, or `bash build.sh -j=N`.
+
 Use a separate build directory when switching library kind. A direct MSVC
 consumer of the static archive must define `TSFILE_STATIC`; consumers of the
 exported CMake target inherit the required definition. Verify the artifact in
