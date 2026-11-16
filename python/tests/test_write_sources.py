@@ -125,9 +125,11 @@ def test_flush_failure_is_reported():
             raise OSError("disk full")
 
     target = FailingFlush()
-    with pytest.raises(FileSyncError):
+    with pytest.raises(FileSyncError) as excinfo:
         with TsFileWriter(target) as writer:
             _write_table(writer)
+    # The original OSError text is kept, not replaced by a generic message.
+    assert "disk full" in str(excinfo.value)
 
 
 def test_memory_threshold_is_applied():

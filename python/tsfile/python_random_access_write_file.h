@@ -28,4 +28,11 @@ void* create_tsfile_writer_from_python_file(PyObject* target,
                                             uint64_t memory_threshold,
                                             int32_t* error_code);
 
+/**
+ * Returns the text of the last sink failure (for example the OSError raised by
+ * a target's flush()), or NULL when the last operation set no Python error.
+ * The pointer stays valid until the next sink operation on this thread.
+ */
+const char* python_random_access_write_file_last_error(void);
+
 #endif  // PYTHON_TSFILE_PYTHON_RANDOM_ACCESS_WRITE_FILE_H

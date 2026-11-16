@@ -21,7 +21,6 @@
 
 #include <algorithm>
 #include <memory>
-#include <mutex>
 #include <new>
 #include <string>
 #include <utility>
@@ -33,24 +32,45 @@
 
 namespace {
 
-class PythonTargetLock {
+// Every access to the target happens with the GIL held, so the GIL itself
+// serializes them; mixing it with a separate mutex (and dropping the GIL while
+// waiting for that mutex) is both unnecessary and easy to get wrong.
+class PythonGILGuard {
    public:
-    explicit PythonTargetLock(std::mutex& mutex)
-        : gil_state_(PyGILState_Ensure()), lock_(mutex, std::defer_lock) {
-        PyThreadState* thread_state = PyEval_SaveThread();
-        lock_.lock();
-        PyEval_RestoreThread(thread_state);
-    }
-
-    ~PythonTargetLock() {
-        lock_.unlock();
-        PyGILState_Release(gil_state_);
-    }
+    PythonGILGuard() : state_(PyGILState_Ensure()) {}
+    ~PythonGILGuard() { PyGILState_Release(state_); }
 
    private:
-    PyGILState_STATE gil_state_;
-    std::unique_lock<std::mutex> lock_;
+    PyGILState_STATE state_;
 };
+
+// Preserve the underlying Python error text for the caller: the C API can only
+// return an errno, but dropping the exception entirely would hide e.g. the
+// OSError message behind a generic FileSyncError.
+thread_local std::string g_last_python_error;
+
+std::string take_python_error_message() {
+    PyObject* type = nullptr;
+    PyObject* value = nullptr;
+    PyObject* traceback = nullptr;
+    PyErr_Fetch(&type, &value, &traceback);
+    PyErr_NormalizeException(&type, &value, &traceback);
+    std::string message;
+    if (value != nullptr) {
+        PyObject* text = PyObject_Str(value);
+        if (text != nullptr) {
+            const char* utf8 = PyUnicode_AsUTF8(text);
+            if (utf8 != nullptr) {
+                message.assign(utf8);
+            }
+            Py_DECREF(text);
+        }
+    }
+    Py_XDECREF(type);
+    Py_XDECREF(value);
+    Py_XDECREF(traceback);
+    return message;
+}
 
 bool has_callable_attribute(PyObject* target, const char* name) {
     PyObject* attribute = PyObject_GetAttrString(target, name);
@@ -139,7 +159,7 @@ class PythonRandomAccessWriteFile : public storage::RandomAccessWriteFile {
     ~PythonRandomAccessWriteFile() override { close(); }
 
     bool is_opened() const override {
-        PythonTargetLock lock(mutex_);
+        PythonGILGuard gil;
         return target_ != nullptr;
     }
 
@@ -152,7 +172,7 @@ class PythonRandomAccessWriteFile : public storage::RandomAccessWriteFile {
         if (buf == nullptr) {
             return common::E_INVALID_ARG;
         }
-        PythonTargetLock lock(mutex_);
+        PythonGILGuard gil;
         if (target_ == nullptr) {
             return common::E_FILE_WRITE_ERR;
         }
@@ -161,7 +181,7 @@ class PythonRandomAccessWriteFile : public storage::RandomAccessWriteFile {
             const int64_t cur = write_bytes(
                 target_, buf + written, static_cast<Py_ssize_t>(len - written));
             if (cur <= 0) {
-                PyErr_Clear();
+                g_last_python_error = take_python_error_message();
                 return common::E_FILE_WRITE_ERR;
             }
             written += static_cast<uint32_t>(cur);
@@ -171,7 +191,7 @@ class PythonRandomAccessWriteFile : public storage::RandomAccessWriteFile {
     }
 
     int sync() override {
-        PythonTargetLock lock(mutex_);
+        PythonGILGuard gil;
         if (target_ == nullptr) {
             return common::E_FILE_WRITE_ERR;
         }
@@ -182,7 +202,7 @@ class PythonRandomAccessWriteFile : public storage::RandomAccessWriteFile {
         }
         PyObject* result = PyObject_CallMethod(target_, "flush", nullptr);
         if (result == nullptr) {
-            PyErr_Clear();
+            g_last_python_error = take_python_error_message();
             return common::E_FILE_SYNC_ERR;
         }
         Py_DECREF(result);
@@ -193,7 +213,7 @@ class PythonRandomAccessWriteFile : public storage::RandomAccessWriteFile {
         if (size < 0) {
             return common::E_INVALID_ARG;
         }
-        PythonTargetLock lock(mutex_);
+        PythonGILGuard gil;
         if (target_ == nullptr) {
             return common::E_FILE_WRITE_ERR;
         }
@@ -208,7 +228,7 @@ class PythonRandomAccessWriteFile : public storage::RandomAccessWriteFile {
     }
 
     int seek_to_end() override {
-        PythonTargetLock lock(mutex_);
+        PythonGILGuard gil;
         if (target_ == nullptr) {
             return common::E_FILE_WRITE_ERR;
         }
@@ -229,12 +249,12 @@ class PythonRandomAccessWriteFile : public storage::RandomAccessWriteFile {
     // offsets; tell() may fail on streams that only support it while idle, so
     // track the bytes written instead of asking the target each time.
     int64_t get_position() override {
-        PythonTargetLock lock(mutex_);
+        PythonGILGuard gil;
         return position_;
     }
 
     int close() override {
-        PythonTargetLock lock(mutex_);
+        PythonGILGuard gil;
         if (target_ == nullptr) {
             return common::E_OK;
         }
@@ -247,10 +267,13 @@ class PythonRandomAccessWriteFile : public storage::RandomAccessWriteFile {
     PyObject* target_;
     std::string name_;
     int64_t position_;
-    mutable std::mutex mutex_;
 };
 
 }  // namespace
+
+const char* python_random_access_write_file_last_error() {
+    return g_last_python_error.empty() ? nullptr : g_last_python_error.c_str();
+}
 
 void* create_tsfile_writer_from_python_file(PyObject* target,
                                             uint64_t memory_threshold,

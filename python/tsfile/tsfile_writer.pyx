@@ -35,6 +35,7 @@ cdef extern from "python_random_access_write_file.h":
     TsFileWriter create_tsfile_writer_from_python_file(
         PyObject* target, uint64_t memory_threshold,
         int32_t* error_code) except? NULL
+    const char* python_random_access_write_file_last_error()
 
 #cython: language_level=3
 
@@ -231,7 +232,7 @@ cdef class TsFileWriterPy:
         cdef TsFileWriter closing = self.writer
         self.writer = NULL
         errno = _tsfile_writer_close(closing)
-        check_error(errno)
+        check_error(errno, python_random_access_write_file_last_error())
 
     cpdef flush(self):
         """
@@ -242,7 +243,7 @@ cdef class TsFileWriterPy:
         if self.writer == NULL:
             return
         errno = _tsfile_writer_flush(self.writer)
-        check_error(errno)
+        check_error(errno, python_random_access_write_file_last_error())
 
     def __dealloc__(self):
         try:
