@@ -26,6 +26,7 @@ on:
       - 'cpp/**'
       - 'go/**'
       - 'python/**'
+      - 'packaging/**'
       - '!cpp/docs/**'
       - '!**.md'
   pull_request:
@@ -42,6 +43,7 @@ on:
       - 'cpp/**'
       - 'go/**'
       - 'python/**'
+      - 'packaging/**'
       - '!cpp/docs/**'
       - '!**.md'
 
