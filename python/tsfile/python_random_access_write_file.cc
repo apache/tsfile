@@ -275,28 +275,39 @@ void* create_tsfile_writer_from_python_file(PyObject* target,
         PyErr_SetString(PyExc_TypeError, "target must support tell()");
         return nullptr;
     }
+    // Rewind when the target allows it.  A forward-only stream inherits
+    // callable seek()/truncate() from io.RawIOBase that raise
+    // io.UnsupportedOperation, so treating a callable method as support would
+    // reject freshly opened streams; only the position check matters then.
+    bool rewound = false;
     if (has_callable_attribute(target, "seek")) {
-        if (!seek_to(target, 0, SEEK_SET)) {
+        if (seek_to(target, 0, SEEK_SET)) {
+            rewound = true;
+        } else {
             PyErr_Clear();
-            *error_code = common::E_INVALID_ARG;
-            PyErr_SetString(PyExc_ValueError, "target must be seekable");
-            return nullptr;
         }
-    } else if (initial_position != 0) {
+    }
+    if (!rewound && initial_position != 0) {
         *error_code = common::E_INVALID_ARG;
         PyErr_SetString(PyExc_ValueError,
                         "target must be positioned at 0 before writing");
         return nullptr;
     }
-    if (has_callable_attribute(target, "truncate")) {
+    if (rewound && has_callable_attribute(target, "truncate")) {
         PyObject* truncated = PyObject_CallMethod(target, "truncate", "i", 0);
         if (truncated == nullptr) {
             PyErr_Clear();
-            *error_code = common::E_INVALID_ARG;
-            PyErr_SetString(PyExc_ValueError, "target could not be truncated");
-            return nullptr;
+            // At position 0 there may be nothing stale to clear; a target
+            // that started with content must support truncate.
+            if (initial_position != 0) {
+                *error_code = common::E_INVALID_ARG;
+                PyErr_SetString(PyExc_ValueError,
+                                "target could not be truncated");
+                return nullptr;
+            }
+        } else {
+            Py_DECREF(truncated);
         }
-        Py_DECREF(truncated);
     }
 
     try {

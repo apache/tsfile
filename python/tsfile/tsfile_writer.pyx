@@ -228,9 +228,10 @@ cdef class TsFileWriterPy:
         cdef ErrorCode errno
         if self.writer == NULL:
             return
-        errno = _tsfile_writer_close(self.writer)
-        check_error(errno)
+        cdef TsFileWriter closing = self.writer
         self.writer = NULL
+        errno = _tsfile_writer_close(closing)
+        check_error(errno)
 
     cpdef flush(self):
         """

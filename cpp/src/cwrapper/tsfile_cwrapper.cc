@@ -2529,9 +2529,8 @@ ERRNO _tsfile_writer_write_ts_record(TsFileWriter writer, TsRecord data) {
 ERRNO _tsfile_writer_close(TsFileWriter writer) {
     auto* w = static_cast<storage::TsFileWriter*>(writer);
     int ret = w->close();
-    if (ret != common::E_OK) {
-        return ret;
-    }
+    // Release the writer even when close() failed: the handle must not leak,
+    // and destroy() is the documented cleanup path for a failed close.
     delete w;
     return ret;
 }

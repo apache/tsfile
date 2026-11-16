@@ -126,3 +126,43 @@ def test_flush_failure_is_reported():
     with pytest.raises(Exception):
         with TsFileWriter(target) as writer:
             _write_table(writer)
+
+
+class _ForwardOnlyStream(io.RawIOBase):
+    """A write-only sink: seek/truncate exist but raise, like a pipe."""
+
+    def __init__(self):
+        self._buffer = bytearray()
+
+    def writable(self):
+        return True
+
+    def write(self, data):
+        self._buffer += data
+        return len(data)
+
+    def tell(self):
+        return len(self._buffer)
+
+
+def test_forward_only_stream_is_accepted():
+    target = _ForwardOnlyStream()
+    with TsFileWriter(target) as writer:
+        _write_table(writer)
+
+    with TsFileReader(io.BytesIO(bytes(target._buffer))) as reader:
+        result = reader.query_table("test_table", ["item_id", "value"])
+        try:
+            seen = []
+            while result.next():
+                seen.append(result.get_value_by_name("item_id"))
+            assert seen == [f"id{i}" for i in range(10)]
+        finally:
+            result.close()
+
+
+def test_forward_only_stream_at_nonzero_position_is_rejected():
+    target = _ForwardOnlyStream()
+    target._buffer += b"prefix"
+    with pytest.raises(ValueError):
+        TsFileWriter(target)
