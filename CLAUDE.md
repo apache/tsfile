@@ -21,7 +21,7 @@
 
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides repository-wide guidance for coding agents. `AGENTS.md` is a symbolic link to this file; edit this file to update both entry points.
 
 ## Project Overview
 
@@ -51,12 +51,49 @@ The root `pom.xml` orchestrates all three via Maven profiles:
 - **Java is independent**: The Java implementation shares no build-time dependency with C++ or Python.
 - All three implementations read/write the same TsFile binary format.
 
+## Codec and File-Format Compatibility
+
+- When adding or modifying encoders, decoders, or compression/decompression implementations, use the corresponding Java implementation in the current source version as the reference. Keep codec behavior and binary representation consistent with Java.
+- The on-disk TsFile format must also remain consistent with Java for the same file-format version, including encoded/compressed payload structure, page/chunk headers, and metadata. Do not introduce language-specific file-format changes.
+- For changes affecting codecs or the on-disk format, add or update regression tests covering codec behavior, boundary values, and block/page boundaries. Verify cross-language compatibility in both directions: Java must read files produced by the changed implementation, and the changed implementation must read Java-generated files.
+
+## Skill Documentation
+
+- When a code change alters behavior, update the affected skill documentation in the same change. This includes API and CLI behavior, defaults, errors, build workflows, and encoding/compression or file-format behavior.
+- Review `skills/tsfile/` for SDK and format changes, and `skills/tsfile-cli/` plus `cpp/tools/skills/tsfile-cli/` for CLI changes. Update the relevant `SKILL.md`, references, examples, and helper scripts as needed, keeping duplicated CLI documentation consistent.
+- A behavior change is incomplete until the skill instructions and examples describe the resulting behavior accurately.
+
 ## Code Formatting
 
 ```bash
 ./mvnw spotless:apply    # Format all languages (Java: Google Java Format, C++: clang-format, Python: Black)
 ./mvnw spotless:check    # Check formatting without modifying
 ```
+
+## Required Checks Before Pushing
+
+Before pushing code, executable scripts, or build/test configuration changes to a remote, run the full Maven test suite from the repository root and verify that all required checks pass for the changes being pushed.
+
+Pure documentation-only changes are exempt from full Maven builds, tests, and sanitizer runs. For these changes, review the documentation for accuracy and consistency, verify referenced paths and commands, and run `git diff --check`. A change that also modifies code, executable scripts, or build/test configuration does not qualify for this exemption.
+
+For changes requiring full verification, run:
+
+```bash
+# Full Java, C++, and Python build, unit tests, and integration tests.
+# with-python includes C++; enable LZMA2 as in the C++ CI jobs (CMake 3.20+).
+./mvnw clean verify -P with-java,with-python -Denable.lzma2=ON
+
+# C++ AddressSanitizer run, in addition to the ordinary full test suite.
+./mvnw clean verify -P with-cpp -Denable.asan=ON \
+  -Dbuild.type=RelWithDebInfo -Denable.lzma2=ON
+
+# Explicit formatting check across all three language modules.
+./mvnw spotless:check -P with-java,with-python
+```
+
+- Do not substitute focused tests, a build-only command, or an earlier revision's results for the full suite. Do not bypass tests, formatting, or other validation with skip flags in these verification runs.
+- Inspect the applicable workflows in `.github/workflows/` and verify their additional checks, including Python binding ASan/LSan coverage as documented in `python/SANITIZER.md`, compatibility tests, and static analysis. A successful ordinary Maven run does not establish that sanitizer checks passed; the Python sanitizer build also requires its separate instrumentation check and ownership test run.
+- Check the actual test reports and exit statuses for Maven, ASan, formatting, and other required checks. Record the commands and results before pushing. If a required check fails, is skipped, or cannot run in the current environment, report the blocker and do not push until it has passed on a supported environment.
 
 ## Internationalization
 
