@@ -45,6 +45,30 @@ The root `pom.xml` orchestrates all three via Maven profiles:
 ./mvnw clean verify -P with-python     # Python (requires C++ built first)
 ```
 
+### Local Iteration vs. Pre-Push Verification
+
+These two entry points serve different purposes and are not interchangeable.
+
+**While iterating**, run the already-built test artifacts directly for fast feedback:
+
+```bash
+./cpp/build/Release/lib/TsFile_Test                      # C++ test binary
+./cpp/build/Release/lib/TsFile_Test --gtest_filter=Foo.*  # narrow to relevant cases
+cd python && pytest tests/                                # Python tests
+```
+
+**Before committing or pushing**, run the Maven entry point that CI uses, from the repository root:
+
+```bash
+./mvnw -P with-cpp verify      # C++ changes
+./mvnw -P with-python verify   # Python changes (also builds C++)
+./mvnw -P with-java verify     # Java changes
+```
+
+These are smoke checks for a branch in flight. The full pre-push requirements — including the `clean` full-suite build, the C++ ASan run, Python binding sanitizer coverage and `spotless:check` — are defined under [Required Checks Before Pushing](#required-checks-before-pushing) and are not replaced by the commands above.
+
+CI compiles, links, and packages through Maven, so running the test binary alone does not reproduce that pipeline. For example, a `constexpr` constant without an out-of-class definition links fine on macOS with the directly built binary but fails under Linux/LTO in CI.
+
 ## Cross-Module Dependencies
 
 - **Python depends on C++**: The Python module uses Cython to bind to the C++ shared library (`libtsfile`). C++ must be built before Python (`-P with-python` implies C++ build).

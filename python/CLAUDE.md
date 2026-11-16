@@ -42,11 +42,14 @@ The Python module depends on the C++ shared library (`libtsfile`). **Build C++ f
 cd python
 python setup.py build_ext --inplace
 
-# Run tests
+# Run tests (fast iteration against the in-place build)
 pytest tests/
 
 # Run a single test
 pytest tests/test_write_and_read.py -k "test_name"
+
+# Before pushing, use the Maven entry point CI uses (from the repo root, no clean)
+./mvnw -P with-python verify
 
 # ASan/LSan coverage of the bindings (Linux; run from the repo root; see
 # SANITIZER.md). TSFILE_SANITIZER is required or test_sanitizer_ownership.py
