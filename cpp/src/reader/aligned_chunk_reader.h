@@ -248,6 +248,15 @@ class AlignedChunkReader : public IChunkReader {
                value_in_.has_remaining();
     }
 
+    // True when a non-empty value-page bitmap does not cover @row. An empty
+    // bitmap means the page carried no values (every row is null). Otherwise
+    // the page's declared row count is authoritative: rows in the last
+    // bitmap byte's padding bits are rejected too.
+    FORCE_INLINE bool value_row_out_of_bitmap(int64_t row) const {
+        return !value_page_col_notnull_bitmap_.empty() &&
+               row >= static_cast<int64_t>(value_page_data_num_);
+    }
+
     int decode_tv_buf_into_tsblock_by_datatype(common::ByteStream& time_in,
                                                common::ByteStream& value_in,
                                                common::TsBlock* ret_tsblock,
