@@ -19,6 +19,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
@@ -41,6 +42,12 @@
 #include "reader/tsfile_reader.h"
 #include "utils/injection.h"
 #include "writer/tsfile_table_writer.h"
+
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
 
 namespace {
 
@@ -106,11 +113,19 @@ class TableReadFailureTest
         storage::libtsfile_init();
         saved_index_degree_ = common::g_config_value_.max_degree_of_index_node_;
         ASSERT_EQ(storage::set_max_degree_of_index_node(2), common::E_OK);
+        // Parallel CTest processes can seed from the same clock tick.
+#ifdef _WIN32
+        const auto process_id = static_cast<uint64_t>(_getpid());
+#else
+        const auto process_id = static_cast<uint64_t>(getpid());
+#endif
+        static std::atomic<uint64_t> filename_counter{0};
         filename_ =
             "table_read_failure_" +
             std::to_string(
                 std::chrono::steady_clock::now().time_since_epoch().count()) +
-            ".tsfile";
+            "_" + std::to_string(process_id) + "_" +
+            std::to_string(filename_counter.fetch_add(1)) + ".tsfile";
         storage::WriteFile file;
         int flags = O_WRONLY | O_CREAT | O_TRUNC;
 #ifdef _WIN32
