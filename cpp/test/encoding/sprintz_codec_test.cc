@@ -742,16 +742,10 @@ void CheckBlockBoundaryCounts() {
     }
 }
 
-template <typename T>
-void CheckTruncatedStreams() {
-    typedef typename SprintzTypes<T>::Decoder Decoder;
-    ValueSets<T> sets = MakeValueSets<T>(40, 11);
-    ByteStream full(1024, MOD_ENCODER_OBJ);
-    EncodeAll(sets.smooth, full);
-
+std::vector<uint8_t> CopyStreamBytes(ByteStream& stream) {
     std::vector<uint8_t> bytes;
-    bytes.reserve(static_cast<size_t>(full.total_size()));
-    ByteStream::BufferIterator iter = full.init_buffer_iterator();
+    bytes.reserve(static_cast<size_t>(stream.total_size()));
+    ByteStream::BufferIterator iter = stream.init_buffer_iterator();
     while (true) {
         ByteStream::Buffer buffer = iter.get_next_buf();
         if (buffer.buf_ == nullptr || buffer.len_ == 0) {
@@ -760,6 +754,17 @@ void CheckTruncatedStreams() {
         const uint8_t* begin = reinterpret_cast<const uint8_t*>(buffer.buf_);
         bytes.insert(bytes.end(), begin, begin + buffer.len_);
     }
+    return bytes;
+}
+
+template <typename T>
+void CheckTruncatedStreams() {
+    typedef typename SprintzTypes<T>::Decoder Decoder;
+    ValueSets<T> sets = MakeValueSets<T>(40, 11);
+    ByteStream full(1024, MOD_ENCODER_OBJ);
+    EncodeAll(sets.smooth, full);
+
+    std::vector<uint8_t> bytes = CopyStreamBytes(full);
     ASSERT_EQ(bytes.size(), full.total_size());
 
     for (size_t len = 0; len <= bytes.size(); ++len) {
@@ -1045,6 +1050,267 @@ TEST_F(SprintzCodecTest, FloatBatchReadExactChunks) {
 
 TEST_F(SprintzCodecTest, DoubleBatchReadExactChunks) {
     CheckReadExactChunks<double>(1000, 1);
+}
+
+// ── Java-generated golden streams ────────────────────────────────────────
+//
+// These byte streams were produced by the Java implementation
+// (java/tsfile/src/main/java/org/apache/tsfile/encoding/encoder/
+// {Int,Long,Float,Double}SprintzEncoder with its default "fire" predictor),
+// so the decoders below are exercised on bytes they did not produce. The C++
+// encoder is asserted to emit the same bytes for the same values, which pins
+// each fixture to the shared on-disk format, and the decoder is then driven
+// through read_exact, the per-value loop and the batch loop.
+
+// JavaInt32Smooth13: first block plus a short tail block (Java
+// IntSprintzEncoder, 13 values)
+const uint8_t kJavaInt32Smooth13Bytes[] = {
+    0x03, 0xe8, 0x07, 0xb6, 0xdb, 0x6d, 0x84, 0x0e, 0x0b, 0x03, 0x04,
+    0x80, 0x70, 0x1a, 0x04, 0xc0, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+const int32_t kJavaInt32Smooth13Values[] = {
+    1000, 1003, 1006, 1009, 1012, 1015, 1018,
+    1021, 1024, 1027, 1030, 1033, 1036,
+};
+// JavaInt32Constant12: constant run (Java IntSprintzEncoder, 12 values)
+const uint8_t kJavaInt32Constant12Bytes[] = {
+    0x01, 0x07, 0x00, 0x83, 0x06, 0x03, 0x03, 0x03, 0xff, 0x80, 0x00,
+};
+const int32_t kJavaInt32Constant12Values[] = {
+    7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
+};
+// JavaInt32GroupFlush140: crosses the encoder's 16-group flush and ends in a
+// short block (Java IntSprintzEncoder, 140 values)
+const uint8_t kJavaInt32GroupFlush140Bytes[] = {
+    0x04, 0xf4, 0x03, 0x11, 0x11, 0x11, 0xc3, 0x04, 0xf6, 0x03, 0x11, 0x11,
+    0xc1, 0x33, 0x04, 0xf8, 0x03, 0x11, 0xc1, 0x33, 0x33, 0x04, 0xfa, 0x03,
+    0xc1, 0x33, 0x33, 0x3a, 0x04, 0xf5, 0x03, 0x11, 0x11, 0x1c, 0x13, 0x04,
+    0xf7, 0x03, 0x11, 0x1c, 0x13, 0x33, 0x04, 0xf9, 0x03, 0x1c, 0x13, 0x33,
+    0x33, 0x04, 0xf4, 0x03, 0x11, 0x11, 0x11, 0xc3, 0x04, 0xf6, 0x03, 0x11,
+    0x11, 0xc1, 0x33, 0x04, 0xf8, 0x03, 0x11, 0xc1, 0x33, 0x33, 0x04, 0xfa,
+    0x03, 0xc1, 0x33, 0x33, 0x3a, 0x04, 0xf5, 0x03, 0x11, 0x11, 0x1c, 0x13,
+    0x04, 0xf7, 0x03, 0x11, 0x1c, 0x13, 0x33, 0x04, 0xf9, 0x03, 0x1c, 0x13,
+    0x33, 0x33, 0x04, 0xf4, 0x03, 0x11, 0x11, 0x11, 0xc3, 0x85, 0x0c, 0x09,
+    0x03, 0x05, 0xfb, 0x7d, 0xff, 0x1f, 0x9f, 0xd0, 0x00, 0x00, 0x00,
+};
+const int32_t kJavaInt32GroupFlush140Values[] = {
+    500, 501, 502, 503, 504, 505, 506, 500, 501, 502, 503, 504, 505, 506,
+    500, 501, 502, 503, 504, 505, 506, 500, 501, 502, 503, 504, 505, 506,
+    500, 501, 502, 503, 504, 505, 506, 500, 501, 502, 503, 504, 505, 506,
+    500, 501, 502, 503, 504, 505, 506, 500, 501, 502, 503, 504, 505, 506,
+    500, 501, 502, 503, 504, 505, 506, 500, 501, 502, 503, 504, 505, 506,
+    500, 501, 502, 503, 504, 505, 506, 500, 501, 502, 503, 504, 505, 506,
+    500, 501, 502, 503, 504, 505, 506, 500, 501, 502, 503, 504, 505, 506,
+    500, 501, 502, 503, 504, 505, 506, 500, 501, 502, 503, 504, 505, 506,
+    500, 501, 502, 503, 504, 505, 506, 500, 501, 502, 503, 504, 505, 506,
+    500, 501, 502, 503, 504, 505, 506, 500, 501, 502, 503, 504, 505, 506,
+};
+// JavaInt64Timestamps17: epoch-millisecond timestamps (Java LongSprintzEncoder,
+// 17 values)
+const uint8_t kJavaInt64Timestamps17Bytes[] = {
+    0x0b, 0x00, 0x00, 0x01, 0x93, 0x43, 0x3e, 0xa8, 0x00, 0xf9, 0xff,
+    0x3f, 0xe6, 0xfc, 0x9f, 0x8b, 0xf0, 0x7d, 0xef, 0xb9, 0x88, 0x2c,
+    0x29, 0x03, 0x08, 0xc9, 0xa1, 0x9f, 0x65, 0x94, 0x64, 0xd0, 0xcf,
+    0xb3, 0xc4, 0x32, 0x68, 0x67, 0xda, 0x5f, 0x19, 0x34, 0x33, 0xed,
+    0x6e, 0x0c, 0x9a, 0x19, 0xf6, 0xd6, 0x46, 0x4d, 0x0c, 0xfb, 0x7a,
+    0xc3, 0x26, 0x86, 0x7d, 0xc5, 0x31, 0x93, 0x43, 0x3e, 0xe6, 0x80,
+};
+const int64_t kJavaInt64Timestamps17Values[] = {
+    1732000000000LL, 1732000001000LL, 1732000002000LL, 1732000003000LL,
+    1732000004000LL, 1732000005000LL, 1732000006000LL, 1732000007000LL,
+    1732000008000LL, 1732000009000LL, 1732000010000LL, 1732000011000LL,
+    1732000012000LL, 1732000013000LL, 1732000014000LL, 1732000015000LL,
+    1732000016000LL,
+};
+// JavaFloatSmooth12: smooth float series (Java FloatSprintzEncoder, 12 values)
+const uint8_t kJavaFloatSmooth12Bytes[] = {
+    0x12, 0x41, 0xa0, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x83,
+    0x41, 0xb2, 0x00, 0x00, 0xda, 0x1e, 0x71, 0x33, 0xe7, 0x60,
+};
+const uint32_t kJavaFloatSmooth12Bits[] = {
+    0x41a00000U, 0x41a20000U, 0x41a40000U, 0x41a60000U,
+    0x41a80000U, 0x41aa0000U, 0x41ac0000U, 0x41ae0000U,
+    0x41b00000U, 0x41b20000U, 0x41b40000U, 0x41b60000U,
+};
+// JavaDoubleSmooth25: smooth double series (Java DoubleSprintzEncoder, 25
+// values)
+const uint8_t kJavaDoubleSmooth25Bytes[] = {
+    0x1c, 0x41, 0x2e, 0x84, 0x80, 0x00, 0x00, 0x00, 0x00, 0x10, 0x62, 0x4d,
+    0xd1, 0x06, 0x24, 0xdb, 0xfc, 0x0d, 0x1d, 0x61, 0x06, 0x24, 0xdb, 0xfc,
+    0x0d, 0x2d, 0xc1, 0x06, 0x24, 0xdd, 0xfc, 0x0d, 0x30, 0x01, 0x06, 0x24,
+    0xdd, 0x1c, 0x41, 0x2e, 0x84, 0x80, 0x04, 0x9b, 0xa5, 0xe3, 0x10, 0x62,
+    0x4d, 0xd1, 0x06, 0x24, 0xdd, 0xfc, 0x0d, 0x1f, 0xa1, 0x06, 0x24, 0xdd,
+    0xfc, 0x0d, 0x1f, 0xa1, 0x06, 0x25, 0xe5, 0xfc, 0x0d, 0x1f, 0xa1, 0x06,
+    0x25, 0xe5, 0x87, 0x41, 0x2e, 0x84, 0x80, 0x09, 0x37, 0x4b, 0xc7, 0xe8,
+    0x5a, 0x34, 0x57, 0xcf, 0x33, 0x3c, 0x39, 0x74, 0x8c, 0x7e, 0xf9, 0xdb,
+    0x4c, 0x18, 0xb4, 0x9c, 0x42, 0x99, 0x38, 0xf2, 0xb3, 0xe3, 0xc7, 0x6b,
+    0xe1, 0x79, 0xf6, 0xb4, 0x24, 0x00, 0x62, 0x4d, 0xd2, 0xf0,
+};
+const uint64_t kJavaDoubleSmooth25Bits[] = {
+    0x412e848000000000ULL, 0x412e84800083126fULL, 0x412e8480010624ddULL,
+    0x412e84800189374cULL, 0x412e8480020c49baULL, 0x412e8480028f5c29ULL,
+    0x412e848003126e98ULL, 0x412e848003958106ULL, 0x412e848004189375ULL,
+    0x412e8480049ba5e3ULL, 0x412e8480051eb852ULL, 0x412e848005a1cac1ULL,
+    0x412e84800624dd2fULL, 0x412e848006a7ef9eULL, 0x412e8480072b020cULL,
+    0x412e848007ae147bULL, 0x412e8480083126e9ULL, 0x412e848008b43958ULL,
+    0x412e848009374bc7ULL, 0x412e848009ba5e35ULL, 0x412e84800a3d70a4ULL,
+    0x412e84800ac08312ULL, 0x412e84800b439581ULL, 0x412e84800bc6a7f0ULL,
+    0x412e84800c49ba5eULL,
+};
+
+float FloatFromBits(uint32_t bits) {
+    float value;
+    std::memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+double DoubleFromBits(uint64_t bits) {
+    double value;
+    std::memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+template <typename T, size_t N>
+std::vector<T> ToVector(const T (&values)[N]) {
+    return std::vector<T>(values, values + N);
+}
+
+// The fixture must be what the C++ encoder emits for the same values;
+// otherwise the bytes and the expected values describe different streams.
+template <typename T, typename EncoderT>
+void ExpectEncoderMatchesJava(const std::vector<T>& values,
+                              const uint8_t* expected, size_t expected_len) {
+    ByteStream stream(1024, MOD_ENCODER_OBJ);
+    EncoderT encoder;
+    for (size_t i = 0; i < values.size(); ++i) {
+        ASSERT_EQ(E_OK, encoder.encode(values[i], stream));
+    }
+    ASSERT_EQ(E_OK, encoder.flush(stream));
+    std::vector<uint8_t> bytes = CopyStreamBytes(stream);
+    ASSERT_EQ(expected_len, bytes.size());
+    ASSERT_EQ(0, std::memcmp(expected, bytes.data(), expected_len));
+}
+
+// Decode Java bytes three ways: read_exact (batch plus scalar handoff), a
+// pure per-value drain, and a batch drain with block-splitting capacities.
+template <typename T, typename DecoderT>
+void CheckJavaGolden(const uint8_t* bytes, size_t len, const T* expected,
+                     int count) {
+    {
+        ByteStream in(1024, MOD_ENCODER_OBJ);
+        in.write_buf(reinterpret_cast<const char*>(bytes),
+                     static_cast<uint32_t>(len));
+        DecoderT decoder;
+        std::vector<T> out(static_cast<size_t>(count > 0 ? count : 1));
+        ASSERT_EQ(E_OK, ReadExact(decoder, out.data(), count, in));
+        for (int i = 0; i < count; ++i) {
+            ExpectSameBits(expected[i], out[static_cast<size_t>(i)],
+                           "java golden, read_exact");
+        }
+        ASSERT_LE(in.remaining_size(), 8u);
+    }
+
+    ByteStream ref_in(1024, MOD_ENCODER_OBJ);
+    ByteStream bat_in(1024, MOD_ENCODER_OBJ);
+    ref_in.write_buf(reinterpret_cast<const char*>(bytes),
+                     static_cast<uint32_t>(len));
+    bat_in.write_buf(reinterpret_cast<const char*>(bytes),
+                     static_cast<uint32_t>(len));
+
+    std::vector<T> ref_values;
+    DecoderT ref_decoder;
+    T one = T();
+    while (ref_decoder.has_remaining(ref_in)) {
+        ASSERT_EQ(E_OK, ReadOne(ref_decoder, one, ref_in));
+        ref_values.push_back(one);
+    }
+
+    std::vector<T> batch_values;
+    DecoderT bat_decoder;
+    const int capacities[] = {1, 3, 7, 9, 5, 129};
+    std::vector<T> buffer(129);
+    int round = 0;
+    while (bat_decoder.has_remaining(bat_in)) {
+        int actual = 0;
+        const int capacity = capacities[round++ % 6];
+        ASSERT_EQ(E_OK, ReadBatch(bat_decoder, buffer.data(), capacity, actual,
+                                  bat_in));
+        if (actual <= 0) {
+            break;
+        }
+        batch_values.insert(batch_values.end(), buffer.begin(),
+                            buffer.begin() + actual);
+    }
+
+    ASSERT_EQ(ref_in.remaining_size(), bat_in.remaining_size());
+    ASSERT_EQ(ref_values.size(), batch_values.size());
+    // Every fixture ends in a short block, so a drain returns every value.
+    ASSERT_EQ(static_cast<size_t>(count), ref_values.size());
+    for (size_t i = 0; i < ref_values.size(); ++i) {
+        ExpectSameBits(expected[i], ref_values[i], "java golden, per-value");
+        ExpectSameBits(expected[i], batch_values[i], "java golden, batch");
+    }
+}
+
+TEST_F(SprintzCodecTest, JavaGoldenInt32) {
+    std::vector<int32_t> smooth = ToVector(kJavaInt32Smooth13Values);
+    ExpectEncoderMatchesJava<int32_t, Int32SprintzEncoder>(
+        smooth, kJavaInt32Smooth13Bytes, sizeof(kJavaInt32Smooth13Bytes));
+    CheckJavaGolden<int32_t, Int32SprintzDecoder>(
+        kJavaInt32Smooth13Bytes, sizeof(kJavaInt32Smooth13Bytes),
+        kJavaInt32Smooth13Values, static_cast<int>(smooth.size()));
+
+    std::vector<int32_t> constant = ToVector(kJavaInt32Constant12Values);
+    ExpectEncoderMatchesJava<int32_t, Int32SprintzEncoder>(
+        constant, kJavaInt32Constant12Bytes, sizeof(kJavaInt32Constant12Bytes));
+    CheckJavaGolden<int32_t, Int32SprintzDecoder>(
+        kJavaInt32Constant12Bytes, sizeof(kJavaInt32Constant12Bytes),
+        kJavaInt32Constant12Values, static_cast<int>(constant.size()));
+
+    std::vector<int32_t> group = ToVector(kJavaInt32GroupFlush140Values);
+    ExpectEncoderMatchesJava<int32_t, Int32SprintzEncoder>(
+        group, kJavaInt32GroupFlush140Bytes,
+        sizeof(kJavaInt32GroupFlush140Bytes));
+    CheckJavaGolden<int32_t, Int32SprintzDecoder>(
+        kJavaInt32GroupFlush140Bytes, sizeof(kJavaInt32GroupFlush140Bytes),
+        kJavaInt32GroupFlush140Values, static_cast<int>(group.size()));
+}
+
+TEST_F(SprintzCodecTest, JavaGoldenInt64) {
+    std::vector<int64_t> values = ToVector(kJavaInt64Timestamps17Values);
+    ExpectEncoderMatchesJava<int64_t, Int64SprintzEncoder>(
+        values, kJavaInt64Timestamps17Bytes,
+        sizeof(kJavaInt64Timestamps17Bytes));
+    CheckJavaGolden<int64_t, Int64SprintzDecoder>(
+        kJavaInt64Timestamps17Bytes, sizeof(kJavaInt64Timestamps17Bytes),
+        kJavaInt64Timestamps17Values, static_cast<int>(values.size()));
+}
+
+TEST_F(SprintzCodecTest, JavaGoldenFloat) {
+    std::vector<float> values;
+    for (size_t i = 0; i < sizeof(kJavaFloatSmooth12Bits) / sizeof(uint32_t);
+         ++i) {
+        values.push_back(FloatFromBits(kJavaFloatSmooth12Bits[i]));
+    }
+    ExpectEncoderMatchesJava<float, FloatSprintzEncoder>(
+        values, kJavaFloatSmooth12Bytes, sizeof(kJavaFloatSmooth12Bytes));
+    CheckJavaGolden<float, FloatSprintzDecoder>(
+        kJavaFloatSmooth12Bytes, sizeof(kJavaFloatSmooth12Bytes), values.data(),
+        static_cast<int>(values.size()));
+}
+
+TEST_F(SprintzCodecTest, JavaGoldenDouble) {
+    std::vector<double> values;
+    for (size_t i = 0; i < sizeof(kJavaDoubleSmooth25Bits) / sizeof(uint64_t);
+         ++i) {
+        values.push_back(DoubleFromBits(kJavaDoubleSmooth25Bits[i]));
+    }
+    ExpectEncoderMatchesJava<double, DoubleSprintzEncoder>(
+        values, kJavaDoubleSmooth25Bytes, sizeof(kJavaDoubleSmooth25Bytes));
+    CheckJavaGolden<double, DoubleSprintzDecoder>(
+        kJavaDoubleSmooth25Bytes, sizeof(kJavaDoubleSmooth25Bytes),
+        values.data(), static_cast<int>(values.size()));
 }
 
 }  // namespace
