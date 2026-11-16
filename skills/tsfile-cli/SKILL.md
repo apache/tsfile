@@ -130,6 +130,7 @@ TYPE  ∈ { BOOLEAN, INT32, INT64, FLOAT, DOUBLE, STRING, TEXT, TIMESTAMP, DATE,
 - `--encoding` and `--compression` may override the bound defaults by data type.
 - Encoding overrides follow the SDK encoder/decoder factories, including ALP
   and GORILLA_V1 for FLOAT/DOUBLE, and RLE for BOOLEAN/FLOAT/DOUBLE.
+  GORILLA_V1 rejects NaN (reserved end marker), but accepts NULL and infinities.
   FLOAT/DOUBLE RLE uses the SDK's two-decimal scaling and may be lossy.
   ALP is C++/Python-only, not Java-compatible. LZMA2 requires an enabled build.
 - `--stdin` or `-i <input.csv>` is required; TSV, `--columns`, `--no-header`, and

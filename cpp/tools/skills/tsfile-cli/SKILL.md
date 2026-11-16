@@ -114,6 +114,7 @@ COMP  ∈ UNCOMPRESSED, SNAPPY, GZIP, LZO, LZ4, ZSTD, LZMA2
 - `--encoding` and `--compression` are keyed by declared data type and apply to all declared columns of that type.
 - Encoding overrides follow the SDK encoder/decoder factories, including ALP
   and GORILLA_V1 for FLOAT/DOUBLE, and RLE for BOOLEAN/FLOAT/DOUBLE.
+  GORILLA_V1 rejects NaN (reserved end marker), but accepts NULL and infinities.
   FLOAT/DOUBLE RLE uses the SDK's two-decimal scaling and may be lossy.
   ALP is C++/Python-only, not Java-compatible. LZMA2 requires an enabled build.
 - CSV null and backslash rules: see `references/commands.md` before preparing input.

@@ -170,6 +170,8 @@ TAG/FIELD of that type; they do not target individual columns and do not affect 
 
 Encoding overrides are validated against the SDK encoder/decoder factories,
 including ALP and GORILLA_V1 for FLOAT/DOUBLE, and RLE for BOOLEAN/FLOAT/DOUBLE.
+GORILLA_V1 reserves NaN as its end marker: CSV NaN values are rejected with the
+column and line number, without committing output; NULL and infinities remain valid.
 FLOAT/DOUBLE RLE follows the SDK's two-decimal scaling and may be lossy.
 `schema` and verbose write summaries report ALP by name. ALP is C++/Python-only;
 Java cannot query ALP series. Native build options control compression

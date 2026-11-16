@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cerrno>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -380,7 +381,8 @@ void unescape_leading_backslash_prefix(CsvCell& cell) {
 
 bool add_typed_value(storage::Tablet& tablet, uint32_t row,
                      uint32_t schema_index, const ColumnDef& def,
-                     const CsvCell& csv_cell, std::string& error) {
+                     common::TSEncoding encoding, const CsvCell& csv_cell,
+                     std::string& error) {
     if (is_csv_null(csv_cell)) {
         return true;  // null
     }
@@ -458,6 +460,13 @@ bool add_typed_value(storage::Tablet& tablet, uint32_t row,
                 error = "FLOAT out of range '" + cell + "'";
                 return false;
             }
+            if (encoding == common::GORILLA_V1 && std::isnan(v)) {
+                error =
+                    "NaN is reserved as the GORILLA_V1 end marker "
+                    "(column '" +
+                    def.name + "')";
+                return false;
+            }
             tablet.add_value(row, schema_index, v);
             return true;
         }
@@ -470,6 +479,13 @@ bool add_typed_value(storage::Tablet& tablet, uint32_t row,
             }
             if (errno == ERANGE) {
                 error = "DOUBLE out of range '" + cell + "'";
+                return false;
+            }
+            if (encoding == common::GORILLA_V1 && std::isnan(v)) {
+                error =
+                    "NaN is reserved as the GORILLA_V1 end marker "
+                    "(column '" +
+                    def.name + "')";
                 return false;
             }
             tablet.add_value(row, schema_index, v);
@@ -644,7 +660,8 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
             for (size_t j = 0; j < columns.size(); ++j) {
                 std::string cell_err;
                 if (!add_typed_value(tablet, r, static_cast<uint32_t>(j),
-                                     columns[j], batch[i].cells[j], cell_err)) {
+                                     columns[j], col_schemas[j].encoding_,
+                                     batch[i].cells[j], cell_err)) {
                     err << "Error: " << cell_err << " (line "
                         << batch[i].line_no << ")\n";
                     return kExitFile;
