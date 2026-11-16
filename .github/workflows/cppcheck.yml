@@ -26,9 +26,19 @@ on:
     paths:
       - '.github/workflows/cppcheck.yml'
       - '.mvn/**'
-      - 'cpp/**'
       - 'mvnw'
+      - 'mvnw.cmd'
       - 'pom.xml'
+      - 'cpp/CMakeLists.txt'
+      - 'cpp/cmake/**'
+      - 'cpp/src/**'
+      - 'cpp/tools/**'
+      - 'cpp/examples/**'
+      - 'cpp/third_party/**'
+      - 'cpp/build.sh'
+      - 'cpp/pom.xml'
+      - '!cpp/tools/skills/**'
+      - '!**.md'
   pull_request:
     branches:
       - develop
@@ -38,9 +48,19 @@ on:
     paths:
       - '.github/workflows/cppcheck.yml'
       - '.mvn/**'
-      - 'cpp/**'
       - 'mvnw'
+      - 'mvnw.cmd'
       - 'pom.xml'
+      - 'cpp/CMakeLists.txt'
+      - 'cpp/cmake/**'
+      - 'cpp/src/**'
+      - 'cpp/tools/**'
+      - 'cpp/examples/**'
+      - 'cpp/third_party/**'
+      - 'cpp/build.sh'
+      - 'cpp/pom.xml'
+      - '!cpp/tools/skills/**'
+      - '!**.md'
   workflow_dispatch:
 
 concurrency:

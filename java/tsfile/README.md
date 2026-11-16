@@ -31,16 +31,16 @@
 
 ### Add TsFile as a dependency in Maven
 
-The current version is `2.1.0`
+The current version is `2.5.0`
 
 ```xml  
 <dependencies>
     <dependency>
       <groupId>org.apache.tsfile</groupId>
       <artifactId>tsfile</artifactId>
-      <version>2.1.0</version>
+      <version>2.5.0</version>
     </dependency>
-<dependencies>
+</dependencies>
 ```
 
 ### TsFile Java API
@@ -75,10 +75,10 @@ Data written is through TsFileWriter.
 3. Write data
 
     ```java
-    TSRecord tsRecord = new TSRecord(1, "solarpanel1");
-    tsRecord.addTuple(DataPoint.getDataPoint(TSDataType.FLOAT, "voltage", 1.1f));
-    tsRecord.addTuple(DataPoint.getDataPoint(TSDataType.FLOAT, "electricity", 2.2f));
-    tsFileWriter.write(tsRecord);
+    TSRecord tsRecord = new TSRecord("solarpanel1", 1);
+    tsRecord.addTuple(DataPoint.getDataPoint(TSDataType.FLOAT, "voltage", "1.1"));
+    tsRecord.addTuple(DataPoint.getDataPoint(TSDataType.FLOAT, "electricity", "2.2"));
+    tsFileWriter.writeRecord(tsRecord);
     ```
 
 4. Close TsFileWriter, only closed TsFile could be queried.
@@ -102,15 +102,15 @@ Data query is through TsFileReader.
 
    ```java
    TsFileSequenceReader reader = new TsFileSequenceReader(path);
-   TsFileReader tsFileReader = new TsFileReader(reader)；
+   TsFileReader tsFileReader = new TsFileReader(reader);
    ```
 
 2. Construct query expression, including predicate and filter
 
       ```java
       ArrayList<Path> paths = new ArrayList<>();
-      paths.add(new Path("solarpanel1", "voltage"));
-      paths.add(new Path("solarpanel1", "electricity"));
+      paths.add(new Path("solarpanel1", "voltage", true));
+      paths.add(new Path("solarpanel1", "electricity", true));
    
       IExpression timeFilter = BinaryExpression.and(
       new GlobalTimeExpression(TimeFilterApi.gtEq(1L)),
@@ -122,7 +122,7 @@ Data query is through TsFileReader.
 3. Query data
 
    ```java
-   QueryDataSet queryDataSet = readTsFile.query(queryExpression);
+   QueryDataSet queryDataSet = tsFileReader.query(queryExpression);
    while (queryDataSet.hasNext()) {
         queryDataSet.next();
    }

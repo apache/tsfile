@@ -45,6 +45,7 @@ on:
       - 'cpp/cmake/**'
       - 'cpp/third_party/**'
       - 'cpp/test/reader/table_view/encoding_compression_compatibility_test.cc'
+      - '!**.md'
   pull_request:
     branches:
       - develop
@@ -73,6 +74,7 @@ on:
       - 'cpp/cmake/**'
       - 'cpp/third_party/**'
       - 'cpp/test/reader/table_view/encoding_compression_compatibility_test.cc'
+      - '!**.md'
   workflow_dispatch:
     inputs:
       forceUpdates:

@@ -9,19 +9,31 @@ on:
       - develop
       - iotdb
       - rc/*
-    paths-ignore:
-      - 'docs/**'
-      - 'cpp/**'
-      - 'python/**'
+    paths:
+      - '.github/workflows/unit-test-java.yml'
+      - '.mvn/**'
+      - 'mvnw'
+      - 'mvnw.cmd'
+      - 'pom.xml'
+      - 'checkstyle.xml'
+      - 'compat/compatibility-matrix.csv'
+      - 'java/**'
+      - '!**.md'
   pull_request:
     branches:
       - develop
       - iotdb
       - rc/*
-    paths-ignore:
-      - 'docs/**'
-      - 'cpp/**'
-      - 'python/**'
+    paths:
+      - '.github/workflows/unit-test-java.yml'
+      - '.mvn/**'
+      - 'mvnw'
+      - 'mvnw.cmd'
+      - 'pom.xml'
+      - 'checkstyle.xml'
+      - 'compat/compatibility-matrix.csv'
+      - 'java/**'
+      - '!**.md'
   # Enable manually starting builds, and allow forcing updating of SNAPSHOT dependencies.
   workflow_dispatch:
     inputs:

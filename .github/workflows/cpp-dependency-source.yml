@@ -26,6 +26,8 @@ on:
     paths:
       - '.github/workflows/cpp-dependency-source.yml'
       - 'cpp/**'
+      - '!cpp/docs/**'
+      - '!**.md'
       - 'packaging/tests/test_native_install.py'
       - 'pom.xml'
   pull_request:
@@ -37,6 +39,8 @@ on:
     paths:
       - '.github/workflows/cpp-dependency-source.yml'
       - 'cpp/**'
+      - '!cpp/docs/**'
+      - '!**.md'
       - 'packaging/tests/test_native_install.py'
       - 'pom.xml'
   workflow_dispatch:
