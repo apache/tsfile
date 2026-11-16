@@ -65,7 +65,7 @@ cd python && pytest tests/                                # Python tests
 ./mvnw -P with-java verify     # Java changes
 ```
 
-Omit `clean` for these runs: it discards cached dependency downloads and rebuilds them. The full-suite command under [Required Checks Before Pushing](#required-checks-before-pushing) still applies when pushing code.
+These are smoke checks for a branch in flight. The full pre-push requirements — including the `clean` full-suite build, the C++ ASan run, Python binding sanitizer coverage and `spotless:check` — are defined under [Required Checks Before Pushing](#required-checks-before-pushing) and are not replaced by the commands above.
 
 CI compiles, links, and packages through Maven, so running the test binary alone does not reproduce that pipeline. For example, a `constexpr` constant without an out-of-class definition links fine on macOS with the directly built binary but fails under Linux/LTO in CI.
 
