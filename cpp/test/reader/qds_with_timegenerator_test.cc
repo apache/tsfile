@@ -346,6 +346,35 @@ TEST_F(QDSWithTimeGeneratorTest, StatisticsPrunedFilterReturnsEmptyResult) {
     reader_.destroy_query_data_set(result);
 }
 
+TEST_F(QDSWithTimeGeneratorTest, OrWithPrunedSeriesKeepsOtherSeries) {
+    // s2 has no chunk that can satisfy t > 100, so its leaf is an empty
+    // stream; the OR must still return s1's rows and pad s2 with NULLs.
+    Expression* expression =
+        new Expression(OR_EXPR, series_expr(device_, "s1", TimeFilter::eq(2)),
+                       series_expr(device_, "s2", TimeFilter::gt(100)));
+    ResultSet* result = query(expression, {"s1", "s2"});
+    ASSERT_NE(result, nullptr);
+
+    std::vector<RowSnapshot> rows;
+    collect_rows(result, rows);
+    ASSERT_EQ(timestamps(rows), (std::vector<int64_t>{2}));
+    EXPECT_EQ(rows[0].value1, 20);
+    EXPECT_EQ(rows[0].value2, 200);
+    reader_.destroy_query_data_set(result);
+}
+
+TEST_F(QDSWithTimeGeneratorTest, AndWithPrunedSeriesReturnsEmptyResult) {
+    Expression* expression =
+        new Expression(AND_EXPR, series_expr(device_, "s1", TimeFilter::eq(2)),
+                       series_expr(device_, "s2", TimeFilter::gt(100)));
+    ResultSet* result = query(expression, {"s1", "s2"});
+    ASSERT_NE(result, nullptr);
+    bool has_next = true;
+    ASSERT_EQ(result->next(has_next), E_OK);
+    EXPECT_FALSE(has_next);
+    reader_.destroy_query_data_set(result);
+}
+
 TEST_F(QDSWithTimeGeneratorTest, RowFilteredSeriesReturnsEmptyResult) {
     // 5 lies inside s2's [2, 6] statistics range, so chunk pruning keeps the
     // series but no row satisfies the filter.

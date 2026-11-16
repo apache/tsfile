@@ -420,16 +420,27 @@ int QDSWithTimeGenerator::construct_node_tree(Expression* expr, Node*& node) {
         if (RET_FAIL(construct_node_tree(expr->left_, node->left_))) {
         } else if (RET_FAIL(construct_node_tree(expr->right_, node->right_))) {
         }
+        if (ret != E_OK) {
+            destroy_node(node);
+            node = nullptr;
+        }
     } else if (expr->type_ == SERIES_EXPR) {
         Node* leaf = new Node(LEAF_NODE);
         Path& path = expr->series_path_;
-        int ret = io_reader_->alloc_ssi(path.device_id_, path.measurement_,
-                                        leaf->sss_.ssi_, pa_, expr->filter_);
+        ret = io_reader_->alloc_ssi(path.device_id_, path.measurement_,
+                                    leaf->sss_.ssi_, pa_, expr->filter_);
         if (E_OK == ret) {
             leaf->sss_.init();
+        } else if (ret == E_NO_MORE_DATA) {
+            // The filter pruned every chunk of this series. Keep the leaf so
+            // parent AND/OR nodes still have a child; its stream reports
+            // INVALID_NEXT_TIMESTAMP for every lookup.
+            ret = E_OK;
+        }
+        if (ret == E_OK) {
             node = leaf;
         } else {
-            // do nothing, this leaf node will return no data at all.
+            delete leaf;
         }
     }
     return ret;
