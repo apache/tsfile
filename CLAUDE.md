@@ -57,8 +57,9 @@ The root `pom.xml` orchestrates all three via Maven profiles:
 - The on-disk TsFile format must also remain consistent with Java for the same file-format version, including encoded/compressed payload structure, page/chunk headers, and metadata. Do not introduce language-specific file-format changes.
 - For changes affecting codecs or the on-disk format, add or update regression tests covering codec behavior, boundary values, and block/page boundaries. Verify cross-language compatibility in both directions: Java must read files produced by the changed implementation, and the changed implementation must read Java-generated files.
 
-## Skill Documentation
+## CLI and Skill Synchronization
 
+- When SDK functionality is added or changed, review the corresponding CLI integration (`cpp/tools/` and `java/tools/`, as applicable) and synchronize commands, options, defaults, supported types/codecs, and errors in the same change. Reuse SDK capability information where available and add regression tests. If no CLI change is applicable, explain why in the change description.
 - When a code change alters behavior, update the affected skill documentation in the same change. This includes API and CLI behavior, defaults, errors, build workflows, and encoding/compression or file-format behavior.
 - Review `skills/tsfile/` for SDK and format changes, and `skills/tsfile-cli/` plus `cpp/tools/skills/tsfile-cli/` for CLI changes. Update the relevant `SKILL.md`, references, examples, and helper scripts as needed, keeping duplicated CLI documentation consistent.
 - A behavior change is incomplete until the skill instructions and examples describe the resulting behavior accurately.
