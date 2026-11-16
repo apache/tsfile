@@ -408,7 +408,12 @@ exts = [
         depends=["tsfile/python_random_access_read_file.h"],
         **common,
     ),
-    Extension("tsfile.tsfile_writer", ["tsfile/tsfile_writer.pyx"], **common),
+    Extension(
+        "tsfile.tsfile_writer",
+        ["tsfile/tsfile_writer.pyx", "tsfile/python_random_access_write_file.cc"],
+        depends=["tsfile/python_random_access_write_file.h"],
+        **common,
+    ),
 ]
 
 setup(

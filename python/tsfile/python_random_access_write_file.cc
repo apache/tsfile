@@ -1,0 +1,282 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+#include "python_random_access_write_file.h"
+
+#include <algorithm>
+#include <memory>
+#include <mutex>
+#include <new>
+#include <string>
+#include <utility>
+
+#include "file/random_access_write_file.h"
+#include "utils/errno_define.h"
+#include "writer/tsfile_writer.h"
+
+namespace {
+
+class PythonTargetLock {
+   public:
+    explicit PythonTargetLock(std::mutex& mutex)
+        : gil_state_(PyGILState_Ensure()), lock_(mutex, std::defer_lock) {
+        PyThreadState* thread_state = PyEval_SaveThread();
+        lock_.lock();
+        PyEval_RestoreThread(thread_state);
+    }
+
+    ~PythonTargetLock() {
+        lock_.unlock();
+        PyGILState_Release(gil_state_);
+    }
+
+   private:
+    PyGILState_STATE gil_state_;
+    std::unique_lock<std::mutex> lock_;
+};
+
+bool has_callable_attribute(PyObject* target, const char* name) {
+    PyObject* attribute = PyObject_GetAttrString(target, name);
+    if (attribute == nullptr) {
+        PyErr_Clear();
+        return false;
+    }
+    const bool callable = PyCallable_Check(attribute) != 0;
+    Py_DECREF(attribute);
+    return callable;
+}
+
+bool seek_to(PyObject* target, int64_t offset, int whence) {
+    PyObject* result = PyObject_CallMethod(
+        target, "seek", "Li", static_cast<long long>(offset), whence);
+    if (result == nullptr) {
+        return false;
+    }
+    Py_DECREF(result);
+    return true;
+}
+
+bool tell_position(PyObject* target, int64_t& position) {
+    PyObject* result =
+        PyObject_CallMethod(target, const_cast<char*>("tell"), nullptr);
+    if (result == nullptr) {
+        return false;
+    }
+    const long long value = PyLong_AsLongLong(result);
+    Py_DECREF(result);
+    if (value == -1 && PyErr_Occurred()) {
+        return false;
+    }
+    position = static_cast<int64_t>(value);
+    return true;
+}
+
+int64_t write_bytes(PyObject* target, const char* buf, Py_ssize_t len) {
+    PyObject* result =
+        PyObject_CallMethod(target, const_cast<char*>("write"), "y#", buf, len);
+    if (result == nullptr) {
+        return -1;
+    }
+    const long long written = PyLong_AsLongLong(result);
+    Py_DECREF(result);
+    if (written < 0 && PyErr_Occurred()) {
+        return -1;
+    }
+    return static_cast<int64_t>(written);
+}
+
+std::string target_name(PyObject* target) {
+    std::string name("<python-file>");
+    PyObject* value = PyObject_GetAttrString(target, "name");
+    if (value == nullptr) {
+        PyErr_Clear();
+        return name;
+    }
+    if (PyUnicode_Check(value)) {
+        const char* text = PyUnicode_AsUTF8(value);
+        if (text != nullptr) {
+            name.assign(text);
+        } else {
+            PyErr_Clear();
+        }
+    } else if (PyBytes_Check(value)) {
+        char* text = nullptr;
+        Py_ssize_t length = 0;
+        if (PyBytes_AsStringAndSize(value, &text, &length) == 0) {
+            name.assign(text, static_cast<size_t>(length));
+        } else {
+            PyErr_Clear();
+        }
+    }
+    Py_DECREF(value);
+    return name;
+}
+
+class PythonRandomAccessWriteFile : public storage::RandomAccessWriteFile {
+   public:
+    PythonRandomAccessWriteFile(PyObject* target, std::string name)
+        : target_(target), name_(std::move(name)) {
+        Py_INCREF(target_);
+    }
+
+    ~PythonRandomAccessWriteFile() override { close(); }
+
+    bool is_opened() const override {
+        PythonTargetLock lock(mutex_);
+        return target_ != nullptr;
+    }
+
+    const std::string& file_path() const override { return name_; }
+
+    int write(const char* buf, uint32_t len) override {
+        if (len == 0) {
+            return common::E_OK;
+        }
+        if (buf == nullptr) {
+            return common::E_INVALID_ARG;
+        }
+        PythonTargetLock lock(mutex_);
+        if (target_ == nullptr) {
+            return common::E_FILE_WRITE_ERR;
+        }
+        uint32_t written = 0;
+        while (written < len) {
+            const int64_t cur = write_bytes(
+                target_, buf + written, static_cast<Py_ssize_t>(len - written));
+            if (cur <= 0) {
+                PyErr_Clear();
+                return common::E_FILE_WRITE_ERR;
+            }
+            written += static_cast<uint32_t>(cur);
+        }
+        return common::E_OK;
+    }
+
+    int sync() override {
+        PythonTargetLock lock(mutex_);
+        if (target_ == nullptr) {
+            return common::E_FILE_WRITE_ERR;
+        }
+        // flush() is optional for a non-durable sink; ignore a missing method.
+        PyObject* result = PyObject_CallMethod(target_, "flush", nullptr);
+        if (result == nullptr) {
+            PyErr_Clear();
+            return common::E_OK;
+        }
+        Py_DECREF(result);
+        return common::E_OK;
+    }
+
+    int truncate(int64_t size) override {
+        if (size < 0) {
+            return common::E_INVALID_ARG;
+        }
+        PythonTargetLock lock(mutex_);
+        if (target_ == nullptr) {
+            return common::E_FILE_WRITE_ERR;
+        }
+        PyObject* result = PyObject_CallMethod(target_, "truncate", "L",
+                                               static_cast<long long>(size));
+        if (result == nullptr) {
+            PyErr_Clear();
+            return common::E_NOT_SUPPORT;
+        }
+        Py_DECREF(result);
+        return common::E_OK;
+    }
+
+    int seek_to_end() override {
+        PythonTargetLock lock(mutex_);
+        if (target_ == nullptr) {
+            return common::E_FILE_WRITE_ERR;
+        }
+        if (!seek_to(target_, 0, SEEK_END)) {
+            PyErr_Clear();
+            return common::E_NOT_SUPPORT;
+        }
+        return common::E_OK;
+    }
+
+    int64_t get_position() override {
+        PythonTargetLock lock(mutex_);
+        if (target_ == nullptr) {
+            return 0;
+        }
+        int64_t position = 0;
+        if (!tell_position(target_, position)) {
+            PyErr_Clear();
+            return 0;
+        }
+        return position;
+    }
+
+    int close() override {
+        PythonTargetLock lock(mutex_);
+        if (target_ == nullptr) {
+            return common::E_OK;
+        }
+        Py_DECREF(target_);
+        target_ = nullptr;
+        return common::E_OK;
+    }
+
+   private:
+    PyObject* target_;
+    std::string name_;
+    mutable std::mutex mutex_;
+};
+
+}  // namespace
+
+void* create_tsfile_writer_from_python_file(PyObject* target,
+                                            int32_t* error_code) {
+    if (error_code == nullptr) {
+        PyErr_SetString(PyExc_ValueError, "error_code must not be null");
+        return nullptr;
+    }
+    *error_code = common::E_OK;
+    if (target == nullptr || !has_callable_attribute(target, "write") ||
+        !has_callable_attribute(target, "tell")) {
+        *error_code = common::E_INVALID_ARG;
+        PyErr_SetString(PyExc_TypeError,
+                        "target must be a writable binary file object");
+        return nullptr;
+    }
+
+    try {
+        *error_code = storage::libtsfile_init();
+        if (*error_code != common::E_OK) {
+            return nullptr;
+        }
+        std::unique_ptr<storage::RandomAccessWriteFile> write_file(
+            new PythonRandomAccessWriteFile(target, target_name(target)));
+        std::unique_ptr<storage::TsFileWriter> writer(
+            new storage::TsFileWriter());
+        *error_code = writer->init(std::move(write_file));
+        if (*error_code != common::E_OK) {
+            return nullptr;
+        }
+        return writer.release();
+    } catch (const std::bad_alloc&) {
+        *error_code = common::E_OOM;
+    } catch (...) {
+        *error_code = common::E_FILE_OPEN_ERR;
+    }
+    return nullptr;
+}

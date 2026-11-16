@@ -20,6 +20,7 @@
 #include "cwrapper/tsfile_cwrapper.h"
 
 #include <fcntl.h>
+#include <file/memory_random_access_write_file.h>
 #include <file/write_file.h>
 #include <reader/qds_without_timegenerator.h>
 #include <writer/tsfile_table_writer.h>
@@ -226,6 +227,49 @@ WriteFile write_file_new(const char* pathname, ERRNO* err_code) {
     return file;
 }
 
+WriteFile write_file_new_memory(ERRNO* err_code) {
+    if (err_code == nullptr) {
+        return nullptr;
+    }
+    storage::MemoryRandomAccessWriteFile* file =
+        new (std::nothrow) storage::MemoryRandomAccessWriteFile();
+    if (file == nullptr) {
+        *err_code = common::E_OOM;
+        return nullptr;
+    }
+    *err_code = common::E_OK;
+    return file;
+}
+
+ERRNO write_file_get_buffer(WriteFile write_file, uint8_t** buffer,
+                            uint32_t* length) {
+    if (buffer == nullptr || length == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    *buffer = nullptr;
+    *length = 0;
+    if (write_file == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    auto* sink = static_cast<storage::RandomAccessWriteFile*>(write_file);
+    auto* mem = dynamic_cast<storage::MemoryRandomAccessWriteFile*>(sink);
+    if (mem == nullptr) {
+        return common::E_NOT_SUPPORT;
+    }
+    const std::vector<char>& data = mem->data();
+    if (data.empty()) {
+        return common::E_OK;
+    }
+    void* copy = malloc(data.size());
+    if (copy == nullptr) {
+        return common::E_OOM;
+    }
+    std::memcpy(copy, data.data(), data.size());
+    *buffer = static_cast<uint8_t*>(copy);
+    *length = static_cast<uint32_t>(data.size());
+    return common::E_OK;
+}
+
 TsFileWriter tsfile_writer_new(WriteFile file, TableSchema* schema,
                                ERRNO* err_code) {
     // C API: every public entry must defend against null callers — a null
@@ -259,7 +303,8 @@ TsFileWriter tsfile_writer_new(WriteFile file, TableSchema* schema,
             new storage::TableSchema(schema->table_name, column_schemas));
         std::unique_ptr<storage::TsFileTableWriter> table_writer(
             new storage::TsFileTableWriter(
-                static_cast<storage::WriteFile*>(file), table_schema.get()));
+                static_cast<storage::RandomAccessWriteFile*>(file),
+                table_schema.get()));
         *err_code = table_writer->get_error();
         if (*err_code != common::E_OK) {
             return nullptr;
@@ -306,8 +351,8 @@ TsFileWriter tsfile_writer_new_with_memory_threshold(WriteFile file,
             new storage::TableSchema(schema->table_name, column_schemas));
         std::unique_ptr<storage::TsFileTableWriter> table_writer(
             new storage::TsFileTableWriter(
-                static_cast<storage::WriteFile*>(file), table_schema.get(),
-                memory_threshold));
+                static_cast<storage::RandomAccessWriteFile*>(file),
+                table_schema.get(), memory_threshold));
         *err_code = table_writer->get_error();
         if (*err_code != common::E_OK) {
             return nullptr;
@@ -2341,7 +2386,7 @@ void free_column_schema(ColumnSchema schema) { free(schema.column_name); }
 void tsfile_free_buffer(void* buffer) { free(buffer); }
 
 void free_write_file(WriteFile* write_file) {
-    auto f = static_cast<storage::WriteFile*>(*write_file);
+    auto f = static_cast<storage::RandomAccessWriteFile*>(*write_file);
     delete f;
     *write_file = nullptr;
 }

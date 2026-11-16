@@ -151,6 +151,22 @@ int TsFileWriter::init(RandomAccessWriteFile* write_file) {
 // table_schema_map_ in do_check_schema_table when a new device appears.
 // All new MeasurementSchemaGroup/MeasurementSchema are freed in destroy().
 // -----------------------------------------------------------------------------
+int TsFileWriter::init(std::unique_ptr<RandomAccessWriteFile> write_file) {
+    if (!write_file || !write_file->is_opened()) {
+        return E_INVALID_ARG;
+    }
+    RandomAccessWriteFile* raw = write_file.release();
+    const int ret = init(raw);
+    if (ret != E_OK) {
+        delete raw;
+        return ret;
+    }
+    // init(raw) stored the pointer without taking ownership; transfer it now
+    // so destroy() deletes it exactly once.
+    write_file_created_ = true;
+    return E_OK;
+}
+
 int TsFileWriter::init(RestorableTsFileIOWriter* rw) {
     if (rw == nullptr || !rw->can_write()) {
         return E_INVALID_ARG;

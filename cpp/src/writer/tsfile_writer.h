@@ -61,6 +61,9 @@ class TsFileWriter {
     int open(const std::string& file_path, int flags, mode_t mode);
     int open(const std::string& file_path);
     int init(storage::RandomAccessWriteFile* write_file);
+    /** Like init(RandomAccessWriteFile*) but the writer takes ownership of
+     * @p write_file and deletes it on destroy(). */
+    int init(std::unique_ptr<storage::RandomAccessWriteFile> write_file);
     int init(storage::RestorableTsFileIOWriter* rw);
 
     void set_generate_table_schema(bool generate_table_schema);

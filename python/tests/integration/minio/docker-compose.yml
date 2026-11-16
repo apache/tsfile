@@ -1,0 +1,40 @@
+# MinIO test cluster for the TsFile object-storage write/read integration test.
+#
+# A single node with four drives enables MinIO erasure coding and presents the
+# same S3 API a multi-node distributed deployment does, without needing four
+# VMs. This is the standard lightweight "cluster" for a test environment.
+#
+# Bring it up:
+#   docker compose up -d
+# Then run the gated Python test:
+#   TSFILE_MINIO_ENDPOINT=http://127.0.0.1:9000 \
+#   TSFILE_MINIO_ACCESS_KEY=minioadmin \
+#   TSFILE_MINIO_SECRET_KEY=minioadmin \
+#   TSFILE_MINIO_BUCKET=tsfile-test \
+#   pytest python/tests/test_minio_integration.py -v
+services:
+  minio:
+    image: minio/minio:latest
+    command: server --address :9000 --console-address :9001 /data1 /data2 /data3 /data4
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data1:/data1
+      - minio-data2:/data2
+      - minio-data3:/data3
+      - minio-data4:/data4
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  minio-data1:
+  minio-data2:
+  minio-data3:
+  minio-data4:

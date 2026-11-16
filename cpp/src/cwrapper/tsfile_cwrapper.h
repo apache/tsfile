@@ -518,6 +518,31 @@ int set_allow_non_decreasing_timestamps(bool enabled);
 WriteFile write_file_new(const char* pathname, ERRNO* err_code);
 
 /**
+ * @brief Creates an in-memory WriteFile that accumulates bytes instead of
+ *        touching the filesystem.
+ *
+ * @param err_code [out] E_OK(0), or check error code in errno_define_c.h.
+ * @return WriteFile Valid handle on success.
+ * @note Use write_file_get_buffer() to obtain the serialized bytes (for
+ *       example, to upload to object storage). Free the buffer with
+ *       tsfile_free_buffer(). Free the handle with free_write_file() after the
+ *       TsFileWriter has been closed.
+ */
+WriteFile write_file_new_memory(ERRNO* err_code);
+
+/**
+ * @brief Copies the bytes written so far to a caller-owned buffer.
+ *
+ * @param write_file Valid in-memory WriteFile handle.
+ * @param buffer     [out] malloc'd copy of the bytes; free with
+ *                   tsfile_free_buffer().
+ * @param length     [out] Number of bytes in @p buffer.
+ * @return E_OK(0), or check error code in errno_define_c.h.
+ */
+ERRNO write_file_get_buffer(WriteFile write_file, uint8_t** buffer,
+                            uint32_t* length);
+
+/**
  * @brief Creates a TsFileWriter for writing a TsFile.
  *
  * @param file     Target file where the table data will be written.
