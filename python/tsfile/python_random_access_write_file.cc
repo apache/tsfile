@@ -19,7 +19,6 @@
 
 #include "python_random_access_write_file.h"
 
-#include <algorithm>
 #include <memory>
 #include <new>
 #include <string>
@@ -173,6 +172,7 @@ class PythonRandomAccessWriteFile : public storage::RandomAccessWriteFile {
             return common::E_INVALID_ARG;
         }
         PythonGILGuard gil;
+        g_last_python_error.clear();
         if (target_ == nullptr) {
             return common::E_FILE_WRITE_ERR;
         }
@@ -192,6 +192,7 @@ class PythonRandomAccessWriteFile : public storage::RandomAccessWriteFile {
 
     int sync() override {
         PythonGILGuard gil;
+        g_last_python_error.clear();
         if (target_ == nullptr) {
             return common::E_FILE_WRITE_ERR;
         }
@@ -217,10 +218,11 @@ class PythonRandomAccessWriteFile : public storage::RandomAccessWriteFile {
         if (target_ == nullptr) {
             return common::E_FILE_WRITE_ERR;
         }
+        g_last_python_error.clear();
         PyObject* result = PyObject_CallMethod(target_, "truncate", "L",
                                                static_cast<long long>(size));
         if (result == nullptr) {
-            PyErr_Clear();
+            g_last_python_error = take_python_error_message();
             return common::E_NOT_SUPPORT;
         }
         Py_DECREF(result);
@@ -232,13 +234,14 @@ class PythonRandomAccessWriteFile : public storage::RandomAccessWriteFile {
         if (target_ == nullptr) {
             return common::E_FILE_WRITE_ERR;
         }
+        g_last_python_error.clear();
         if (!seek_to(target_, 0, SEEK_END)) {
-            PyErr_Clear();
+            g_last_python_error = take_python_error_message();
             return common::E_NOT_SUPPORT;
         }
         int64_t end_position = 0;
         if (!tell_position(target_, end_position)) {
-            PyErr_Clear();
+            g_last_python_error = take_python_error_message();
             return common::E_NOT_SUPPORT;
         }
         position_ = end_position;
@@ -288,6 +291,11 @@ void* create_tsfile_writer_from_python_file(PyObject* target,
         *error_code = common::E_INVALID_ARG;
         PyErr_SetString(PyExc_TypeError,
                         "target must be a writable binary file object");
+        return nullptr;
+    }
+
+    *error_code = storage::libtsfile_init();
+    if (*error_code != common::E_OK) {
         return nullptr;
     }
 
@@ -346,10 +354,6 @@ void* create_tsfile_writer_from_python_file(PyObject* target,
     }
 
     try {
-        *error_code = storage::libtsfile_init();
-        if (*error_code != common::E_OK) {
-            return nullptr;
-        }
         common::g_config_value_.chunk_group_size_threshold_ = memory_threshold;
         std::unique_ptr<storage::RandomAccessWriteFile> write_file(
             new PythonRandomAccessWriteFile(target, target_name(target)));

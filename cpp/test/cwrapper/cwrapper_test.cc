@@ -24,6 +24,7 @@
 #endif
 #include <utils/db_utils.h>
 
+#include <atomic>
 #include <cstring>
 #include <limits>
 #include <string>
@@ -804,7 +805,15 @@ TEST_F(CWrapperTest, MemoryWriteFileRoundTrip) {
     ASSERT_NE(nullptr, buffer);
     ASSERT_GT(length, 0u);
 
-    const std::string path = "cwrapper_memory_write_round_trip.tsfile";
+#ifdef _WIN32
+    const auto process_id = static_cast<uint64_t>(_getpid());
+#else
+    const auto process_id = static_cast<uint64_t>(getpid());
+#endif
+    static std::atomic<uint64_t> round_trip_counter{0};
+    const std::string path =
+        "cwrapper_memory_write_round_trip_" + std::to_string(process_id) + "_" +
+        std::to_string(round_trip_counter.fetch_add(1)) + ".tsfile";
     {
         FILE* out = fopen(path.c_str(), "wb");
         ASSERT_NE(nullptr, out);
