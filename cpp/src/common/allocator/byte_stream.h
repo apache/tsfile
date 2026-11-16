@@ -1283,6 +1283,21 @@ class SerializationUtil {
         int32_t len = 0;
         int32_t read_len = 0;
         if (RET_FAIL(read_var_int(len, in))) {
+        } else if (len < 0) {
+            // A var-int length is zigzag-encoded and can decode to any
+            // negative value. Reject it before it is used as an allocation
+            // size and array index. write_var_str never emits a negative
+            // length; write_var_char_ptr's NO_STR_TO_READ sentinel belongs to
+            // read_var_char_ptr.
+            ret = E_TSFILE_CORRUPTED;
+        } else if (static_cast<uint64_t>(len) > in.remaining_size()) {
+            // Reject a length the stream cannot satisfy before allocating it,
+            // so a corrupt field cannot request a multi-GiB buffer that is
+            // discarded as soon as the read fails. E_PARTIAL_READ is what the
+            // read below used to return here; chunk/page header parsing
+            // relies on it to retry with a larger file window (see
+            // deserialize_buf_not_enough()).
+            ret = common::E_PARTIAL_READ;
         } else {
             char* tmp_buf =
                 static_cast<char*>(mem_alloc(len + 1, in.get_mid()));
@@ -1310,6 +1325,12 @@ class SerializationUtil {
         int ret = common::E_OK;
         int32_t len = 0;
         if (RET_FAIL(read_i32(len, in))) {
+        } else if (len < 0) {
+            // A fixed-width length field can hold a negative value; reject it
+            // before using it as an allocation size and array index.
+            ret = E_TSFILE_CORRUPTED;
+        } else if (static_cast<uint64_t>(len) > in.remaining_size()) {
+            ret = common::E_PARTIAL_READ;
         } else {
             int32_t read_len = 0;
             char* tmp_buf =
@@ -1340,6 +1361,12 @@ class SerializationUtil {
         int32_t len = 0;
         int32_t read_len = 0;
         if (RET_FAIL(read_i32(len, in))) {
+        } else if (len < 0 ||
+                   static_cast<uint64_t>(len) > in.remaining_size()) {
+            // A truncated length is what read_buf() used to report here; keep
+            // E_PARTIAL_READ so callers that grow their read window on
+            // deserialize_buf_not_enough() still retry.
+            ret = len < 0 ? E_TSFILE_CORRUPTED : common::E_PARTIAL_READ;
         } else {
             char* buf = (char*)pa->alloc(len);
             if (IS_NULL(buf)) {
@@ -1370,6 +1397,12 @@ class SerializationUtil {
         int32_t len = 0;
         int32_t read_len = 0;
         if (RET_FAIL(read_var_int(len, in))) {
+        } else if (len < 0 ||
+                   static_cast<uint64_t>(len) > in.remaining_size()) {
+            // A truncated length is what read_buf() used to report here; keep
+            // E_PARTIAL_READ so callers that grow their read window on
+            // deserialize_buf_not_enough() still retry.
+            ret = len < 0 ? E_TSFILE_CORRUPTED : common::E_PARTIAL_READ;
         } else {
             char* buf = (char*)pa->alloc(len);
             if (IS_NULL(buf)) {
