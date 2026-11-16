@@ -42,6 +42,8 @@
 #include "common/datatype/date_converter.h"
 #include "common/schema.h"
 #include "common/tablet.h"
+#include "encoding/decoder_factory.h"
+#include "encoding/encoder_factory.h"
 #include "file/write_file.h"
 #include "format/atomic_output.h"
 #include "format/input_format.h"
@@ -158,26 +160,11 @@ std::string lower_ascii(const std::string& s) {
 }
 
 bool parse_encoding_name(const std::string& name, common::TSEncoding& out) {
-    static const std::pair<const char*, common::TSEncoding> kEncodings[] = {
-        {"PLAIN", common::PLAIN},
-        {"DICTIONARY", common::DICTIONARY},
-        {"RLE", common::RLE},
-        {"DIFF", common::DIFF},
-        {"TS_2DIFF", common::TS_2DIFF},
-        {"BITMAP", common::BITMAP},
-        {"GORILLA_V1", common::GORILLA_V1},
-        {"REGULAR", common::REGULAR},
-        {"GORILLA", common::GORILLA},
-        {"ZIGZAG", common::ZIGZAG},
-        {"FREQ", common::FREQ},
-        {"CHIMP", common::CHIMP},
-        {"SPRINTZ", common::SPRINTZ},
-        {"RLBE", common::RLBE},
-        {"CAMEL", common::CAMEL},
-    };
-    for (const auto& e : kEncodings) {
-        if (name == e.first) {
-            out = e.second;
+    for (size_t i = 0; i < sizeof(common::s_encoding_names) /
+                               sizeof(common::s_encoding_names[0]);
+         ++i) {
+        if (name == common::s_encoding_names[i]) {
+            out = static_cast<common::TSEncoding>(i);
             return true;
         }
     }
@@ -207,33 +194,14 @@ bool parse_compression_name(const std::string& name,
 }
 
 bool encoding_supported(common::TSDataType type, common::TSEncoding encoding) {
-    switch (type) {
-        case common::BOOLEAN:
-            return encoding == common::PLAIN;
-        case common::INT32:
-        case common::DATE:
-        case common::INT64:
-        case common::TIMESTAMP:
-            return encoding == common::PLAIN || encoding == common::TS_2DIFF ||
-                   encoding == common::GORILLA || encoding == common::ZIGZAG ||
-                   encoding == common::RLE || encoding == common::SPRINTZ ||
-                   encoding == common::CHIMP || encoding == common::RLBE;
-        case common::FLOAT:
-            return encoding == common::PLAIN || encoding == common::TS_2DIFF ||
-                   encoding == common::GORILLA || encoding == common::SPRINTZ ||
-                   encoding == common::CHIMP || encoding == common::RLBE;
-        case common::DOUBLE:
-            return encoding == common::PLAIN || encoding == common::TS_2DIFF ||
-                   encoding == common::GORILLA || encoding == common::SPRINTZ ||
-                   encoding == common::CHIMP || encoding == common::RLBE ||
-                   encoding == common::CAMEL;
-        case common::STRING:
-        case common::TEXT:
-        case common::BLOB:
-            return encoding == common::PLAIN || encoding == common::DICTIONARY;
-        default:
-            return false;
-    }
+    auto* encoder =
+        storage::EncoderFactory::alloc_value_encoder(encoding, type);
+    auto* decoder =
+        storage::DecoderFactory::alloc_value_decoder(encoding, type);
+    const bool supported = encoder != nullptr && decoder != nullptr;
+    storage::EncoderFactory::free(encoder);
+    storage::DecoderFactory::free(decoder);
+    return supported;
 }
 
 bool compression_supported(common::CompressionType compression) {

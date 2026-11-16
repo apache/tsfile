@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "common/db_common.h"
+#include "format/staged_output.h"
 #include "utils/errno_define.h"
 
 using tsfile_cli::OutputFormat;
@@ -47,6 +48,48 @@ class FlushFailingStreamBuf : public std::stringbuf {
 };
 
 }  // namespace
+
+TEST(StagedOutputTest, PreservesBinaryDataAcrossBufferBoundaries) {
+    tsfile_cli::StagedOutput staged;
+    ASSERT_TRUE(staged.is_open());
+    std::string expected;
+    for (size_t i = 0; i < 4 * 64 * 1024 + 317; ++i) {
+        expected += static_cast<char>(i % 256);
+    }
+    staged.stream().write(expected.data(), expected.size());
+    ASSERT_TRUE(staged.stream().good());
+    std::ostringstream out;
+    EXPECT_TRUE(out.str().empty());
+    EXPECT_TRUE(staged.publish(out));
+    EXPECT_EQ(out.str(), expected);
+}
+
+TEST(StagedOutputTest, PublishesEmptyOutput) {
+    tsfile_cli::StagedOutput staged;
+    std::ostringstream out;
+    EXPECT_TRUE(staged.publish(out));
+    EXPECT_TRUE(out.str().empty());
+}
+
+TEST(StagedOutputTest, DoesNotPublishFailedStaging) {
+    tsfile_cli::StagedOutput staged;
+    staged.stream() << "partial rows\n";
+    staged.stream().setstate(std::ios::badbit);
+    std::ostringstream out;
+    EXPECT_FALSE(staged.publish(out));
+    EXPECT_TRUE(out.str().empty());
+}
+
+TEST(StagedOutputTest, ReportsWriteAndFlushFailures) {
+    tsfile_cli::StagedOutput staged;
+    staged.stream() << "rows\n";
+    FailingStreamBuf failing_buffer;
+    std::ostream failing_out(&failing_buffer);
+    EXPECT_FALSE(staged.publish(failing_out));
+    FlushFailingStreamBuf flush_buffer;
+    std::ostream flush_out(&flush_buffer);
+    EXPECT_FALSE(staged.publish(flush_out));
+}
 
 TEST(ErrorCodeMessageTest, KnownCodesMapToReadablePhrases) {
     EXPECT_STREQ(tsfile_cli::error_code_message(common::E_TABLE_NOT_EXIST),
@@ -185,6 +228,12 @@ TEST(EncodingNameTest, KnownEncodings) {
     EXPECT_STREQ(tsfile_cli::tsencoding_name(common::CHIMP), "CHIMP");
     EXPECT_STREQ(tsfile_cli::tsencoding_name(common::RLBE), "RLBE");
     EXPECT_STREQ(tsfile_cli::tsencoding_name(common::CAMEL), "CAMEL");
+    EXPECT_STREQ(tsfile_cli::tsencoding_name(common::ALP), "ALP");
+    EXPECT_STREQ(tsfile_cli::tsencoding_name(common::INVALID_ENCODING),
+                 "UNKNOWN");
+    EXPECT_STREQ(tsfile_cli::tsencoding_name(
+                     static_cast<common::TSEncoding>(common::ALP + 1)),
+                 "UNKNOWN");
 }
 
 TEST(CompressionNameTest, KnownCompressors) {

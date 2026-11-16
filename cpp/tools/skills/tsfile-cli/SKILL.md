@@ -65,7 +65,7 @@ does not replace the Java batch and format-aware import tools.
 | `stats` | FIELD statistics with null counts and source | maybe |
 | `count` | object/column counts; no summary row | maybe |
 | `head` | first N rows (default 10, `-n`) | yes |
-| `cat` | all matching rows (buffered) | yes |
+| `cat` | all matching rows (disk-staged) | yes |
 | `sketch` | physical layout text from the bound `printSketch` behavior | no FIELD decode |
 | `export` | writes one object file or a numbered multi-object directory | yes |
 
@@ -112,8 +112,10 @@ COMP  ∈ UNCOMPRESSED, SNAPPY, GZIP, LZO, LZ4, ZSTD, LZMA2
 
 - CSV must contain a unique header with `time` and exactly the declared TAG/FIELD names; rows are mapped by header name, not physical column order.
 - `--encoding` and `--compression` are keyed by declared data type and apply to all declared columns of that type.
-- CLI rejects explicit ALP, GORILLA_V1, and BOOLEAN/FLOAT/DOUBLE RLE overrides;
-  ALP reads work but `schema` shows `UNKNOWN`. LZMA2 requires an enabled build.
+- Encoding overrides follow the SDK encoder/decoder factories, including ALP
+  and GORILLA_V1 for FLOAT/DOUBLE, and RLE for BOOLEAN/FLOAT/DOUBLE.
+  FLOAT/DOUBLE RLE uses the SDK's two-decimal scaling and may be lossy.
+  ALP is C++/Python-only, not Java-compatible. LZMA2 requires an enabled build.
 - CSV null and backslash rules: see `references/commands.md` before preparing input.
 - `DATE` cells are `YYYY-MM-DD`; `TIMESTAMP` and row `time` use strict decimal int64.
 - **timestamps must be strictly increasing per device** (device = tag-column values);
@@ -134,7 +136,8 @@ Tree-model / JSON / programmatic writes → C++ SDK `cpp/examples/cpp_examples/d
 
 ## Caveats
 
-- `head`/`cat`/`export` buffer complete output in memory, including CSV/NDJSON;
-  use row/time/TAG bounds for large files. Nonzero exit means incomplete results.
+- Row output uses bounded buffers: stdout is disk-staged until reads succeed;
+  `export` streams to an atomic temporary target. Allow disk space for the result.
+  Aligned `table` output also spools. Nonzero exit means incomplete results.
 - Table results always include all TAG columns before selected FIELD columns.
 - `sketch` follows the bound TsFile `printSketch` text and does not support `-f`.

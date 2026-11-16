@@ -74,7 +74,8 @@ reader.close();
 - Current readers use `query(..., ResultSet*&)`; do not reuse old
   `get_table_names()` or `read_table()` helpers without version verification.
 - Prefer stack/RAII ownership where supported, but still follow explicit
-  close/free requirements in the public API and examples.
+  close/free requirements. Table result rows reuse string storage; copy values
+  needed after advancing the result set.
 - Use `cpp/examples/cpp_examples/` as executable API documentation.
 - Verify with `./mvnw -P with-cpp clean verify` or the checkout's documented
   `cpp/build.sh` flow.

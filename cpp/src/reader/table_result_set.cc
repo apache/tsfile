@@ -111,6 +111,8 @@ void TableResultSet::materialize_current_row() {
     uint32_t len = 0;
     bool null = false;
     row_record_->reset();
+    // RowRecord owns only the current row; release its previous string copies.
+    pa_.reset();
     for (uint32_t i = 0; i < row_iterator_->get_column_count(); ++i) {
         const auto value = row_iterator_->read(i, &len, &null);
         if (!null) {

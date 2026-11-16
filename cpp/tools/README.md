@@ -96,7 +96,7 @@ Exit codes: `0` success, `1` usage/argument error, `2` file open/corrupt,
 | `count` | Object/column counts; no synthetic summary row |
 | `sketch` | Print the physical file sketch, optionally to `-o` |
 | `head` | First N rows (default 10; use `-n`) |
-| `cat` | All matching rows, buffered before publishing |
+| `cat` | All matching rows, disk-staged before publishing |
 | `export` | Export one object to `-o`, or multiple objects to `--output-dir`, using `--type` |
 
 Use `ls`, `schema`, and `meta` for metadata-only discovery. `stats` can scan
@@ -119,12 +119,12 @@ strings, BOOLEAN/INT32/FLOAT/DOUBLE are bare values, nulls are `null`, and
 non-finite floats become `null`. CSV output follows RFC 4180.
 CSV nulls are unquoted `\N`; empty strings are quoted as `""`. Non-null STRING/TEXT
 values beginning with `\` gain one extra leading `\`, using the same encoding rule
-as CSV input described below. Timestamps are raw int64 values. Row commands
-currently stage the complete formatted result in memory before publishing it,
-including CSV/NDJSON and `export`. The `table` formatter additionally uses a
-temporary spool to align columns; this does not bound memory for the complete
-output path. Use row, time, and TAG bounds for large reads. `sketch` does not
-accept `--format`.
+as CSV input described below. Timestamps are raw int64 values. Row commands use
+bounded output buffers: stdout is staged on disk until reading succeeds, then
+published in 64 KiB blocks. `export` streams directly to its atomic temporary
+target. Reserve temporary disk space for the result; aligned `table` output
+uses an additional spool. Row, time, and TAG bounds reduce the work required;
+piping to `head` does not stop the initial read. `sketch` does not accept `--format`.
 
 Text output preserves well-formed UTF-8 and replaces malformed UTF-8 in names
 and text with U+FFFD (`�`). This also applies to sketch output and export
@@ -168,10 +168,12 @@ By default each column uses the engine's default encoding and compression for it
 `--encoding` and `--compression` override by canonical data type, applying to every declared
 TAG/FIELD of that type; they do not target individual columns and do not affect `time`.
 
-The CLI currently rejects explicit ALP, GORILLA_V1, and BOOLEAN/FLOAT/DOUBLE RLE
-overrides even though the SDK supports them. ALP files can be read, but `schema`
-currently displays their encoding as `UNKNOWN`. Native build options also
-control compression availability; LZMA2 is opt-in.
+Encoding overrides are validated against the SDK encoder/decoder factories,
+including ALP and GORILLA_V1 for FLOAT/DOUBLE, and RLE for BOOLEAN/FLOAT/DOUBLE.
+FLOAT/DOUBLE RLE follows the SDK's two-decimal scaling and may be lossy.
+`schema` and verbose write summaries report ALP by name. ALP is C++/Python-only;
+Java cannot query ALP series. Native build options control compression
+availability; LZMA2 is opt-in.
 
 | Option | Meaning |
 |---|---|
