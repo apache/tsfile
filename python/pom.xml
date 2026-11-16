@@ -235,17 +235,20 @@
                     <filesets>
                         <fileset>
                             <directory>${basedir}/tsfile</directory>
+                            <!-- Generated artifacts only. Hand-written
+                                 bridge sources (.h) live here too and must
+                                 survive clean. -->
                             <includes>
                                 <include>*.so*</include>
                                 <include>*.dylib</include>
                                 <include>*.dll</include>
-                                <include>*.h</include>
                                 <include>*.cpp</include>
+                                <!-- Cython-generated public API headers;
+                                     the hand-written bridge headers are left
+                                     alone. -->
+                                <include>tsfile_py_cpp.h</include>
+                                <include>tsfile_py_cpp_api.h</include>
                             </includes>
-                            <excludes>
-                                <exclude>python_random_access_read_file.h</exclude>
-                                <exclude>python_random_access_write_file.h</exclude>
-                            </excludes>
                         </fileset>
                         <fileset>
                             <directory>tsfile.egg-info</directory>
