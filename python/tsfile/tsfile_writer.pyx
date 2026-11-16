@@ -15,6 +15,8 @@
 # specific language governing permissions and limitations
 # under the License.
 #
+import os
+
 import pandas
 import pyarrow as pa
 
@@ -25,20 +27,42 @@ from tsfile.tablet import Tablet as TabletPy
 from libc.string cimport memset
 from libc.stdint cimport uint32_t, uint8_t, uintptr_t
 from cpython.bytes cimport PyBytes_AsStringAndSize
+from cpython.ref cimport PyObject
 from .tsfile_cpp cimport *
 from .tsfile_py_cpp cimport *
+
+cdef extern from "python_random_access_write_file.h":
+    TsFileWriter create_tsfile_writer_from_python_file(
+        PyObject* target, uint64_t memory_threshold,
+        int32_t* error_code) except? NULL
+    const char* python_random_access_write_file_last_error()
 
 #cython: language_level=3
 
 cdef class TsFileWriterPy:
     cdef TsFileWriter writer
+    cdef bint from_file_object
 
-    def __init__(self, pathname: str, memory_threshold: int = 128 * 1024 * 1024,
+    def __init__(self, pathname, memory_threshold: int = 128 * 1024 * 1024,
                  allow_non_decreasing_timestamps: bool = False):
+        """
+        Initialize from a str/bytes/PathLike path, or a writable binary file
+        object for fsspec-style remote targets. File objects must support
+        write/tell; existing content is discarded when the target is seekable
+        (a fresh file object simply starts empty).
+        """
         self.writer = NULL
+        self.from_file_object = False
         set_allow_non_decreasing_timestamps(
             <bint> allow_non_decreasing_timestamps)
-        self.writer = tsfile_writer_new_c(pathname, memory_threshold)
+        cdef ErrorCode error_code = 0
+        if isinstance(pathname, (str, bytes, os.PathLike)):
+            self.writer = tsfile_writer_new_c(pathname, memory_threshold)
+            return
+        self.from_file_object = True
+        self.writer = create_tsfile_writer_from_python_file(
+            <PyObject*> pathname, memory_threshold, &error_code)
+        check_error(error_code)
 
     def register_timeseries(self, device_name : str, timeseries_schema : TimeseriesSchemaPy):
         """
@@ -208,9 +232,13 @@ cdef class TsFileWriterPy:
         cdef ErrorCode errno
         if self.writer == NULL:
             return
-        errno = _tsfile_writer_close(self.writer)
-        check_error(errno)
+        cdef TsFileWriter closing = self.writer
         self.writer = NULL
+        errno = _tsfile_writer_close(closing)
+        cdef const char* closing_context = NULL
+        if self.from_file_object:
+            closing_context = python_random_access_write_file_last_error()
+        check_error(errno, closing_context)
 
     cpdef flush(self):
         """
@@ -221,7 +249,10 @@ cdef class TsFileWriterPy:
         if self.writer == NULL:
             return
         errno = _tsfile_writer_flush(self.writer)
-        check_error(errno)
+        cdef const char* flush_context = NULL
+        if self.from_file_object:
+            flush_context = python_random_access_write_file_last_error()
+        check_error(errno, flush_context)
 
     def __dealloc__(self):
         try:

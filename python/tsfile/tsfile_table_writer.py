@@ -99,13 +99,15 @@ class TsFileTableWriter:
 
     def __init__(
         self,
-        path: str,
+        path: object,
         table_schema: TableSchema,
         memory_threshold=128 * 1024 * 1024,
         allow_non_decreasing_timestamps=False,
     ):
         """
-        :param path: The path of tsfile, will create if it doesn't exist.
+        :param path: The path of tsfile, will create if it doesn't exist; a
+            writable binary file object (for example one opened through
+            ``fsspec``) is accepted as well.
         :param table_schema: describes the schema of the tables they want to write.
         :param memory_threshold(Byte): memory usage threshold for flushing data.
         :param allow_non_decreasing_timestamps: when True, a timestamp equal to
