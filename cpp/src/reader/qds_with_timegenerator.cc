@@ -140,8 +140,14 @@ void* ValueAt::at(int64_t target_timestamp) {
         time_col_iter_ = nullptr;
         delete value_col_iter_;
         value_col_iter_ = nullptr;
-        tsblock_->reset();
-        if (RET_FAIL(ssi_->get_next(tsblock_, false, tf_))) {
+        // The iterators above only exist after the first lookup allocated
+        // tsblock_; keep the original allocate-if-null contract and only reset
+        // an already materialized block before it is reused.
+        const bool alloc_tsblock = (tsblock_ == nullptr);
+        if (tsblock_ != nullptr) {
+            tsblock_->reset();
+        }
+        if (RET_FAIL(ssi_->get_next(tsblock_, alloc_tsblock, tf_))) {
             cur_time_ = INT64_MAX;
             return nullptr;
         }

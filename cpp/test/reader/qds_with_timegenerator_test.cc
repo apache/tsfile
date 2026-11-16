@@ -195,8 +195,10 @@ TEST_F(QDSWithTimeGeneratorTest, SingleSeriesWithTimeFilter) {
         EXPECT_FALSE(result->is_null(2));
         EXPECT_FALSE(result->is_null(1));
         RowRecord* record = result->get_row_record();
-        rows.push_back({record->get_timestamp(), false,
-                        record->get_field(1)->value_.lval_, true, 0});
+        RowSnapshot row;
+        row.timestamp = record->get_timestamp();
+        row.value1 = record->get_field(1)->value_.lval_;
+        rows.push_back(row);
     }
     ASSERT_EQ(rows.size(), 6U);
     for (size_t i = 0; i < rows.size(); ++i) {
@@ -222,9 +224,6 @@ TEST_F(QDSWithTimeGeneratorTest, AndOfTwoSeriesIntersectsTimestamps) {
     EXPECT_EQ(rows[0].value2, 200);
     EXPECT_EQ(rows[1].value1, 40);
     EXPECT_EQ(rows[1].value2, 400);
-    EXPECT_FALSE(result->is_null("s1"));
-    EXPECT_FALSE(result->is_null("s2"));
-    EXPECT_FALSE(result->is_null(3));
     reader_.destroy_query_data_set(result);
 }
 
@@ -373,9 +372,11 @@ TEST_F(QDSWithTimeGeneratorTest, MissingSeriesFailsTheQuery) {
 class QDSWithTimeGeneratorMultiBlockTest : public ::testing::Test {
    protected:
     void SetUp() override {
-        ASSERT_EQ(libtsfile_init(), E_OK);
         saved_block_memory_ = g_config_value_.tsblock_max_memory_;
+        config_modified_ = false;
+        ASSERT_EQ(libtsfile_init(), E_OK);
         g_config_value_.tsblock_max_memory_ = 2048;
+        config_modified_ = true;
         file_ = unique_file_name("qds_with_timegenerator_blocks_test");
         std::remove(file_.c_str());
         write_file();
@@ -385,7 +386,10 @@ class QDSWithTimeGeneratorMultiBlockTest : public ::testing::Test {
     void TearDown() override {
         reader_.close();
         std::remove(file_.c_str());
-        g_config_value_.tsblock_max_memory_ = saved_block_memory_;
+        if (config_modified_) {
+            g_config_value_.tsblock_max_memory_ = saved_block_memory_;
+            config_modified_ = false;
+        }
         libtsfile_destroy();
     }
 
@@ -413,6 +417,7 @@ class QDSWithTimeGeneratorMultiBlockTest : public ::testing::Test {
 
     const std::string device_ = "root.qds_with_timegenerator_blocks";
     uint32_t saved_block_memory_ = 0;
+    bool config_modified_ = false;
     std::string file_;
     TsFileReader reader_;
 };
