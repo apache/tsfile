@@ -494,6 +494,14 @@
                 <groupId>org.apache.drill.tools</groupId>
                 <artifactId>drill-fmpp-maven-plugin</artifactId>
                 <version>${drill.freemarker.maven.plugin.version}</version>
+                <dependencies>
+                    <!-- Avoid FMPP's open version range selecting stale local metadata. -->
+                    <dependency>
+                        <groupId>xml-resolver</groupId>
+                        <artifactId>xml-resolver</artifactId>
+                        <version>1.2</version>
+                    </dependency>
+                </dependencies>
             </plugin>
         </plugins>
     </build>
