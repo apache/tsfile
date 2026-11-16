@@ -23,19 +23,26 @@
 #include <stdint.h>
 
 #include "alp_traits.h"
+#include "common/simd_dispatch.h"
 #include "simde/x86/avx2.h"
 #include "simde/x86/avx512/cvt.h"
 #include "simde/x86/avx512/cvtt.h"
 #include "simde/x86/sse4.1.h"
+#ifdef TSFILE_X86_AVX2_DISPATCH
+#include "alp_avx2.h"
+#endif
 
 namespace storage {
 namespace alp {
 
+// The SIMDe implementation below is the portable fallback. On x86-64 with
+// GCC/Clang the dispatchers below pick the native AVX2 copy from alp_avx2.h at
+// runtime when the CPU supports it.
 template <typename T>
-struct AlpSimdKernel;
+struct AlpSimdeKernel;
 
 template <>
-struct AlpSimdKernel<float> {
+struct AlpSimdeKernel<float> {
     static AlpStatus EncodeValues(const float* values, uint32_t count,
                                   uint8_t factor, uint8_t exponent,
                                   int32_t* encoded, uint8_t* bitmap,
@@ -115,6 +122,7 @@ struct AlpSimdKernel<float> {
                     Traits::DecodeValue(value, factor, exponent), values[i])) {
                 bitmap[i >> 3] |= static_cast<uint8_t>(1u << (i & 7u));
                 exceptions[ex_count++] = values[i];
+                encoded[i] = 0;
             } else {
                 encoded[i] = value;
             }
@@ -162,7 +170,7 @@ struct AlpSimdKernel<float> {
 };
 
 template <>
-struct AlpSimdKernel<double> {
+struct AlpSimdeKernel<double> {
     static AlpStatus EncodeValues(const double* values, uint32_t count,
                                   uint8_t factor, uint8_t exponent,
                                   int64_t* encoded, uint8_t* bitmap,
@@ -238,6 +246,7 @@ struct AlpSimdKernel<double> {
                     Traits::DecodeValue(value, factor, exponent), values[i])) {
                 bitmap[i >> 3] |= static_cast<uint8_t>(1u << (i & 7u));
                 exceptions[ex_count++] = values[i];
+                encoded[i] = 0;
             } else {
                 encoded[i] = value;
             }
@@ -284,6 +293,42 @@ struct AlpSimdKernel<double> {
 };
 
 template <typename T>
+struct AlpSimdKernel {
+    static AlpStatus EncodeValues(const T* values, uint32_t count,
+                                  uint8_t factor, uint8_t exponent,
+                                  typename AlpTypeTraits<T>::Encoded* encoded,
+                                  uint8_t* bitmap, T* exceptions,
+                                  uint32_t* exception_count) {
+#ifdef ALP_AVX2_DISPATCH
+        if (common::cpu_has_avx2()) {
+            return avx2_detail::AlpAvx2Kernel<T>::EncodeValues(
+                values, count, factor, exponent, encoded, bitmap, exceptions,
+                exception_count);
+        }
+#endif
+        return AlpSimdeKernel<T>::EncodeValues(values, count, factor, exponent,
+                                               encoded, bitmap, exceptions,
+                                               exception_count);
+    }
+
+    static AlpStatus DecodeValues(
+        const typename AlpTypeTraits<T>::Encoded* encoded, uint32_t count,
+        uint8_t factor, uint8_t exponent, const uint8_t* bitmap,
+        const T* exceptions, uint32_t exception_count, T* out) {
+#ifdef ALP_AVX2_DISPATCH
+        if (common::cpu_has_avx2()) {
+            return avx2_detail::AlpAvx2Kernel<T>::DecodeValues(
+                encoded, count, factor, exponent, bitmap, exceptions,
+                exception_count, out);
+        }
+#endif
+        return AlpSimdeKernel<T>::DecodeValues(encoded, count, factor, exponent,
+                                               bitmap, exceptions,
+                                               exception_count, out);
+    }
+};
+
+template <typename T>
 inline AlpStatus AlpSimdEncodeValues(
     const T* values, uint32_t count, uint8_t factor, uint8_t exponent,
     typename AlpTypeTraits<T>::Encoded* encoded, uint8_t* bitmap, T* exceptions,
@@ -304,10 +349,10 @@ inline AlpStatus AlpSimdDecodeValues(
 }
 
 template <typename Unsigned>
-struct AlpSimdUnpackKernel;
+struct AlpSimdeUnpackKernel;
 
 template <>
-struct AlpSimdUnpackKernel<uint32_t> {
+struct AlpSimdeUnpackKernel<uint32_t> {
     // A 32-bit value plus a 0..7 bit offset still fits in the gathered word.
     static uint8_t SafeBitWidth() { return 32; }
 
@@ -354,7 +399,7 @@ struct AlpSimdUnpackKernel<uint32_t> {
 };
 
 template <>
-struct AlpSimdUnpackKernel<uint64_t> {
+struct AlpSimdeUnpackKernel<uint64_t> {
     // Each lane gathers a single 64-bit window and shifts it right by the bit
     // offset, so at most 64 - 7 bits survive. Wider fields are decoded by the
     // scalar tail, which spans two words.
@@ -395,6 +440,25 @@ struct AlpSimdUnpackKernel<uint64_t> {
                                      masked);
         }
         return true;
+    }
+};
+
+template <typename Unsigned>
+struct AlpSimdUnpackKernel {
+    static uint8_t SafeBitWidth() {
+        return AlpSimdeUnpackKernel<Unsigned>::SafeBitWidth();
+    }
+
+    static bool Unpack(const uint8_t* body, uint32_t count, uint8_t bit_width,
+                       Unsigned* out) {
+#ifdef ALP_AVX2_DISPATCH
+        if (common::cpu_has_avx2()) {
+            return avx2_detail::AlpAvx2UnpackKernel<Unsigned>::Unpack(
+                body, count, bit_width, out);
+        }
+#endif
+        return AlpSimdeUnpackKernel<Unsigned>::Unpack(body, count, bit_width,
+                                                      out);
     }
 };
 

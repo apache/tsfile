@@ -55,6 +55,21 @@ file sizes, compiler flags, and whether the OS page cache was warm. The checksum
 makes accidental short reads, metadata-load failures, or optimizer removal
 visible; it is not a TsFile-content checksum.
 
+`alp_avx2_benchmark` measures the ALP SIMD kernels: the SIMDe portable
+implementation against the runtime-dispatched native AVX2 copies for
+`EncodeValues`, `DecodeValues`, and bit-unpacking. It is meant to be built with
+the default flags (no `-mavx2`), which is what a portable build ships:
+
+```bash
+cmake -S cpp -B cpp/build/Release \
+  -DCMAKE_BUILD_TYPE=Release -DBUILD_BENCHMARK=ON -DBUILD_TEST=OFF
+cmake --build cpp/build/Release --target alp_avx2_benchmark
+./cpp/build/Release/alp_avx2_benchmark
+```
+
+On non-x86-64 targets, and on x86-64 CPUs without AVX2, only the SIMDe column
+is measured. The `ok` column checks that both kernels produce identical values.
+
 `gorilla_v1_batch_decode_benchmark` compares the per-value GORILLA_V1 decode
 loop with the raw-pointer batch decoder on the same encoded stream for FLOAT
 and DOUBLE columns. It reports elapsed time, values per second and the speedup
