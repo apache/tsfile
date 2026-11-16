@@ -16,12 +16,34 @@ on:
     branches:
       - develop
       - rc/*
+    paths:
+      - '.github/workflows/codeql.yml'
+      - '.mvn/**'
+      - 'mvnw'
+      - 'mvnw.cmd'
+      - 'pom.xml'
+      - 'java/**'
+      - 'cpp/**'
+      - 'go/**'
+      - 'python/**'
+      - '!cpp/docs/**'
+      - '!**.md'
   pull_request:
     branches:
       - develop
       - rc/*
-    paths-ignore:
-      - 'docs/**'
+    paths:
+      - '.github/workflows/codeql.yml'
+      - '.mvn/**'
+      - 'mvnw'
+      - 'mvnw.cmd'
+      - 'pom.xml'
+      - 'java/**'
+      - 'cpp/**'
+      - 'go/**'
+      - 'python/**'
+      - '!cpp/docs/**'
+      - '!**.md'
 
 jobs:
   analyze:
@@ -89,7 +111,7 @@ jobs:
     # The Go bridge needs headers and libtsfile under cpp/target/build.
     - name: Build native library for Go
       if: matrix.language == 'go'
-      run: ./mvnw -P with-cpp -DskipTests -Dspotless.skip=true package
+      run: ./mvnw -P with-cpp -Dbuild.test=OFF -DskipTests -Dspotless.skip=true package
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL

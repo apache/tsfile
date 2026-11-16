@@ -15,18 +15,32 @@ on:
       - develop
       - iotdb
       - rc/*
-    paths-ignore:
-      - 'docs/**'
-      - 'java/**'
+    paths:
+      - '.github/workflows/unit-test-python-msvc.yml'
+      - '.mvn/**'
+      - 'mvnw'
+      - 'mvnw.cmd'
+      - 'pom.xml'
+      - 'python/**'
+      - 'cpp/**'
+      - '!cpp/docs/**'
+      - '!**.md'
   pull_request:
     branches:
       - develop
       - dev/*
       - iotdb
       - rc/*
-    paths-ignore:
-      - 'docs/**'
-      - 'java/**'
+    paths:
+      - '.github/workflows/unit-test-python-msvc.yml'
+      - '.mvn/**'
+      - 'mvnw'
+      - 'mvnw.cmd'
+      - 'pom.xml'
+      - 'python/**'
+      - 'cpp/**'
+      - '!cpp/docs/**'
+      - '!**.md'
   # Enable manually starting builds.
   workflow_dispatch:
 

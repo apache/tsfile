@@ -95,6 +95,10 @@ For changes requiring full verification, run:
 - Inspect the applicable workflows in `.github/workflows/` and verify their additional checks, including Python binding ASan/LSan coverage as documented in `python/SANITIZER.md`, compatibility tests, and static analysis. A successful ordinary Maven run does not establish that sanitizer checks passed; the Python sanitizer build also requires its separate instrumentation check and ownership test run.
 - Check the actual test reports and exit statuses for Maven, ASan, formatting, and other required checks. Record the commands and results before pushing. If a required check fails, is skipped, or cannot run in the current environment, report the blocker and do not push until it has passed on a supported environment.
 
+## CI Path Filters
+
+The GitHub Actions workflows under `.github/workflows/` use per-language `paths` whitelists so that documentation-only changes and unrelated language directories do not trigger builds. When adding a directory or shared build input that a workflow consumes, update that workflow's `paths` list in the same change. Markdown (`**.md`), `docs/**`, `skills/**`, `cpp/docs/**`, and other languages' source directories are intentionally excluded from the language test workflows.
+
 ## Internationalization
 
 Java logs and exception messages use a runtime `ResourceBundle` approach so the same JAR can emit English or Simplified Chinese based on a JVM startup property. See `java/CLAUDE.md` for the convention. Switch language with `-Dtsfile.locale=zh`.
