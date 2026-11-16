@@ -184,7 +184,7 @@ SIMDe is already a TsFile C++ dependency. The ALP kernels will use the existing
 - Constant blocks, single-value blocks, partial final blocks, and multi-block
   pages.
 - Scalar and SIMD must encode to identical bytes and decode to identical
-  values. On AVX2-capable x86 machines, differential tests also compare the
+  values. On AVX2-capable x86-64 machines, differential tests also compare the
   dispatched AVX2 kernels against the SIMDe kernels directly.
 - Corrupt/truncated payload tests must return errors without out-of-bounds
   access.

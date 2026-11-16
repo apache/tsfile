@@ -21,8 +21,10 @@
 // the runtime-dispatched native AVX2 copies. Build with the default flags
 // (no -mavx2) so the SIMDe side is what a portable build ships:
 //
-//   cmake -DBUILD_BENCHMARK=ON -DBUILD_TEST=OFF ..
-//   ./alp_avx2_benchmark
+//   cmake -S cpp -B cpp/build/Release \
+//     -DCMAKE_BUILD_TYPE=Release -DBUILD_BENCHMARK=ON -DBUILD_TEST=OFF
+//   cmake --build cpp/build/Release --target alp_avx2_benchmark
+//   ./cpp/build/Release/alp_avx2_benchmark
 //
 // When ALP AVX2 dispatch is not compiled (non-x86-64 targets) or the CPU has no
 // AVX2, only the SIMDe column is measured.

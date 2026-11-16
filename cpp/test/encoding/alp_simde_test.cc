@@ -17,6 +17,7 @@
  * under the License.
  */
 
+#include <cstdint>
 #include <cstring>
 #include <limits>
 #include <vector>
@@ -506,6 +507,54 @@ TEST(AlpAvx2Test, DecodeMalformedStatusMatchesSimde) {
                                  encoded, 4, 0, 0, bitmap, exceptions, 2, out));
     EXPECT_EQ(ALP_MALFORMED, avx2_detail::AlpAvx2Kernel<float>::DecodeValues(
                                  encoded, 4, 0, 0, bitmap, exceptions, 2, out));
+}
+
+// AVX2 has no packed int64 -> double conversion, so the AVX2 kernel uses a
+// scalar conversion per lane while SIMDe uses a split-arithmetic trick. Check
+// the values where that conversion is most delicate, against SIMDe and against
+// the scalar reference (factor 0, exponent 0 decodes to (double)encoded).
+TEST(AlpAvx2Test, DoubleDecodeAtInt64ExtremesMatchesReference) {
+    if (!common::cpu_has_avx2()) {
+        GTEST_SKIP() << "CPU does not support AVX2";
+        return;
+    }
+    typedef AlpTypeTraits<double> Traits;
+    const int64_t kMin = std::numeric_limits<int64_t>::min();
+    const int64_t kMax = std::numeric_limits<int64_t>::max();
+    const int64_t encoded[16] = {
+        kMin,
+        kMin + 1,
+        -((int64_t)1 << 62),
+        -((int64_t)1 << 53),
+        -((int64_t)1 << 52) - 1,
+        -1,
+        0,
+        1,
+        ((int64_t)1 << 52) - 1,
+        (int64_t)1 << 52,
+        ((int64_t)1 << 52) + 1,
+        (int64_t)1 << 53,
+        ((int64_t)1 << 62) - 1,
+        (int64_t)1 << 62,
+        kMax - 1,
+        kMax,
+    };
+    const uint32_t count = sizeof(encoded) / sizeof(encoded[0]);
+    std::vector<double> simde_out(count);
+    std::vector<double> avx2_out(count);
+    ASSERT_EQ(ALP_OK,
+              AlpSimdeKernel<double>::DecodeValues(
+                  encoded, count, 0, 0, nullptr, nullptr, 0, &simde_out[0]));
+    ASSERT_EQ(ALP_OK,
+              avx2_detail::AlpAvx2Kernel<double>::DecodeValues(
+                  encoded, count, 0, 0, nullptr, nullptr, 0, &avx2_out[0]));
+    for (uint32_t i = 0; i < count; ++i) {
+        EXPECT_TRUE(Traits::BitwiseEqual(simde_out[i], avx2_out[i]))
+            << "SIMDe mismatch at index " << i;
+        EXPECT_TRUE(Traits::BitwiseEqual(Traits::DecodeValue(encoded[i], 0, 0),
+                                         avx2_out[i]))
+            << "reference mismatch at index " << i;
+    }
 }
 
 #endif  // ALP_AVX2_DISPATCH
