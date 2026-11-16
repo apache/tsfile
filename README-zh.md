@@ -92,7 +92,7 @@ TsFile 数据模型（Schema）定义了所有设备物理量的集合，如下�
 
 ### 编码和压缩
 
-TsFile 通过采用二阶差分编码、游程编码（RLE）、位压缩和 Snappy 等先进的编码和压缩技术，优化时序数据的存储和访问，并支持对时间戳列和数据值列进行单独编码，以实现更好的数据处理效能。
+TsFile 通过采用二阶差分编码（TS_2DIFF）、游程编码（RLE）、GORILLA、CHIMP、SPRINTZ、RLBE、字典编码（DICTIONARY）等先进的编码技术，以及 LZ4（默认）、Zstandard、Snappy、GZIP、LZMA2 等压缩算法，优化时序数据的存储和访问，并支持对时间戳列和数据值列进行单独编码，以实现更好的数据处理效能。
 
 其独特之处在于编码算法专为时序数据特性设计，聚焦在时间属性和数据之间的相关性。
 
@@ -111,14 +111,18 @@ TsFile、CSV 和 Parquet 三种文件格式的比较
 
 | 数据类型    | 推荐编码       | 推荐压缩算法 |
 |---------|------------|--------|
+| BOOLEAN | RLE        | LZ4    |
 | INT32   | TS_2DIFF   | LZ4    |
+| DATE    | TS_2DIFF   | LZ4    |
 | INT64   | TS_2DIFF   | LZ4    |
+| TIMESTAMP | TS_2DIFF | LZ4    |
 | FLOAT   | GORILLA    | LZ4    |
 | DOUBLE  | GORILLA    | LZ4    |
-| BOOLEAN | RLE        | LZ4    |
-| TEXT    | DICTIONARY | LZ4    |
+| TEXT    | PLAIN      | LZ4    |
+| STRING  | PLAIN      | LZ4    |
+| BLOB    | PLAIN      | LZ4    |
 
-更多类型的编码和压缩方式参见[文档](https://iotdb.apache.org/zh/UserGuide/latest/Basic-Concept/Encoding-and-Compression.html)
+完整的编码与压缩支持矩阵参见[文档](https://iotdb.apache.org/zh/UserGuide/latest/Technical-Insider/Encoding-and-Compression.html)
 
 ## 开发和使用 TsFile
 
@@ -131,27 +135,28 @@ TsFile、CSV 和 Parquet 三种文件格式的比较
 ## 命令行工具（tsfile-cli）
 
 Apache TsFile 提供了命令行工具 `tsfile-cli`，这是一个单文件、对管道友好的工具，可直接在
-shell 中查看**并**导入 `.tsfile` 文件。读取类命令
-（`ls`、`meta`、`schema`、`stats`、`count`、`head`、`cat`、`sample`）将数据输出到 stdout、
-诊断信息输出到 stderr，因此可与 `awk`、`jq`、`sort` 等工具组合使用；`write` 命令则将 CSV
-导入为新的 `.tsfile`。支持的输出格式：`csv`、`tsv`、`json`（NDJSON）、`table`。
+shell 中查看**并**导入 `.tsfile` 文件。`ls`、`meta`、`schema`、`stats`、`count`、`sketch`、
+`head`、`cat` 等命令将数据行输出到 stdout、诊断信息输出到 stderr，因此可与 `awk`、`jq`、
+`sort` 等工具组合使用；`export` 可将数据行或文件导出，`write` 命令则将 CSV 导入为新的
+`.tsfile`。支持的输出格式：`table`（默认）、`ndjson`、`csv`。
 
 ### 命令
 
 | 命令 | 作用 |
 |---|---|
-| `ls`     | 列出文件中的表（表模型）或设备（树模型），每行一个名称 |
-| `meta`   | 文件概览：数据模型、表 / 设备 / 序列数量、时间范围、文件大小 |
+| `ls`     | 以 `model, object` 行的形式列出文件中的表（表模型）或设备（树模型） |
+| `meta`   | 文件概览：文件大小、格式版本、数据模型 |
 | `schema` | 每条序列的数据类型、编码、压缩方式 |
-| `stats`  | 每条序列的统计信息：行数、时间范围、最小 / 最大值、首 / 末值、求和 |
-| `count`  | 每条序列的行数及总计 —— 直接读取统计信息，不扫描数据页 |
+| `stats`  | FIELD 统计信息：行数、空值数、时间范围、最小 / 最大值、首 / 末值、求和 |
+| `count`  | 对象 / 列计数——不生成汇总行 |
+| `sketch` | 输出物理文件结构（chunk group、chunk、page），可用 `-o` 写入文件 |
 | `head`   | 输出前 N 行（默认 10，可用 `-n` 调整） |
-| `cat`    | 流式输出所有匹配的行 |
-| `sample` | 对行做可复现的蓄水池采样（`-n`、`--seed`） |
+| `cat`    | 输出所有匹配的行 |
+| `export` | 用 `-o` 导出单个对象，或用 `--output-dir` 导出多个对象（`--type` 指定格式） |
 | `write`  | 将 CSV 导入为新的表模型 `.tsfile` |
 
-其中元数据类命令（`ls`、`meta`、`schema`、`stats`、`count`）无需解码数据页即可回答大部分问题，
-而 `head`、`cat`、`sample` 则会读取真实的行数据。
+`ls`、`schema`、`meta` 用于只读元数据的发现；统计信息不可用时 `stats` 会扫描数据，
+表模型的 `count` 会扫描行。`head`、`cat`、`export` 和 `sketch` 则读取实际数据或文件布局。
 
 ### 示例
 
