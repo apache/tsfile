@@ -762,4 +762,75 @@ TEST(CApiCompatibilityTest, KeepsLegacySchemaAndTagFilterEntryPoints) {
               nullptr);
 }
 
+// The in-memory write sink lets a C caller serialize a TsFile without a
+// filesystem and upload the bytes themselves (write_file_get_buffer).
+TEST_F(CWrapperTest, MemoryWriteFileRoundTrip) {
+    ERRNO code = RET_OK;
+    WriteFile file = write_file_new_memory(&code);
+    ASSERT_EQ(RET_OK, code);
+    ASSERT_NE(nullptr, file);
+
+    std::vector<ColumnSchema> columns;
+    columns.push_back(
+        ColumnSchema{const_cast<char*>("device"), TS_DATATYPE_STRING, TAG});
+    columns.push_back(
+        ColumnSchema{const_cast<char*>("value"), TS_DATATYPE_INT64, FIELD});
+    TableSchema schema = {const_cast<char*>("memtable"), columns.data(),
+                          static_cast<int>(columns.size())};
+
+    TsFileWriter writer = tsfile_writer_new(file, &schema, &code);
+    ASSERT_EQ(RET_OK, code);
+    ASSERT_NE(nullptr, writer);
+
+    char* names[] = {const_cast<char*>("device"), const_cast<char*>("value")};
+    TSDataType types[] = {TS_DATATYPE_STRING, TS_DATATYPE_INT64};
+    Tablet tablet = tablet_new(names, types, 2, 4, &code);
+    ASSERT_EQ(RET_OK, code);
+    ASSERT_NE(nullptr, tablet);
+    for (uint32_t row = 0; row < 4; row++) {
+        ASSERT_EQ(RET_OK, tablet_add_timestamp(tablet, row, row));
+        ASSERT_EQ(RET_OK, tablet_add_value_by_name_string_with_len(
+                              tablet, row, names[0], "d0", 2));
+        ASSERT_EQ(RET_OK, tablet_add_value_by_name_int64_t(tablet, row,
+                                                           names[1], row * 10));
+    }
+    ASSERT_EQ(RET_OK, tsfile_writer_write(writer, tablet));
+    ASSERT_EQ(RET_OK, tsfile_writer_close(writer));
+    free_tablet(&tablet);
+
+    uint8_t* buffer = nullptr;
+    uint32_t length = 0;
+    ASSERT_EQ(RET_OK, write_file_get_buffer(file, &buffer, &length));
+    ASSERT_NE(nullptr, buffer);
+    ASSERT_GT(length, 0u);
+
+    const std::string path = "cwrapper_memory_write_round_trip.tsfile";
+    {
+        FILE* out = fopen(path.c_str(), "wb");
+        ASSERT_NE(nullptr, out);
+        ASSERT_EQ(length, fwrite(buffer, 1, length, out));
+        fclose(out);
+    }
+    tsfile_free_buffer(buffer);
+    free_write_file(&file);
+
+    TsFileReader reader = tsfile_reader_new(path.c_str(), &code);
+    ASSERT_EQ(RET_OK, code);
+    ASSERT_NE(nullptr, reader);
+    ResultSet result =
+        tsfile_query_table(reader, "memtable", names, 2, 0, 100, &code);
+    ASSERT_EQ(RET_OK, code);
+    int rows = 0;
+    while (tsfile_result_set_next(result, &code) && code == RET_OK) {
+        EXPECT_EQ(static_cast<int64_t>(rows * 10),
+                  tsfile_result_set_get_value_by_name_int64_t(result, "value"));
+        rows++;
+    }
+    EXPECT_EQ(RET_OK, code);
+    EXPECT_EQ(4, rows);
+    free_tsfile_result_set(&result);
+    tsfile_reader_close(reader);
+    remove(path.c_str());
+}
+
 }  // namespace cwrapper

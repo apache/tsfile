@@ -46,8 +46,8 @@ cdef class TsFileWriterPy:
         """
         Initialize from a str/bytes/PathLike path, or a writable binary file
         object for fsspec-style remote targets. File objects must support
-        write/tell; seek (when present) and truncate (when present) are used
-        to start from an empty file.
+        write/tell; existing content is discarded when the target is seekable
+        (a fresh file object simply starts empty).
         """
         self.writer = NULL
         set_allow_non_decreasing_timestamps(

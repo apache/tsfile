@@ -231,6 +231,10 @@ WriteFile write_file_new_memory(ERRNO* err_code) {
     if (err_code == nullptr) {
         return nullptr;
     }
+    // Same lazy initialization as write_file_new(): a writer built on this
+    // handle must not see the zero-initialized global config of a process
+    // that has not touched any other API yet.
+    init_tsfile_config();
     storage::MemoryRandomAccessWriteFile* file =
         new (std::nothrow) storage::MemoryRandomAccessWriteFile();
     if (file == nullptr) {

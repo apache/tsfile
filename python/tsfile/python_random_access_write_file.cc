@@ -132,7 +132,7 @@ std::string target_name(PyObject* target) {
 class PythonRandomAccessWriteFile : public storage::RandomAccessWriteFile {
    public:
     PythonRandomAccessWriteFile(PyObject* target, std::string name)
-        : target_(target), name_(std::move(name)) {
+        : target_(target), name_(std::move(name)), position_(0) {
         Py_INCREF(target_);
     }
 
@@ -166,6 +166,7 @@ class PythonRandomAccessWriteFile : public storage::RandomAccessWriteFile {
             }
             written += static_cast<uint32_t>(cur);
         }
+        position_ += written;
         return common::E_OK;
     }
 
@@ -215,20 +216,21 @@ class PythonRandomAccessWriteFile : public storage::RandomAccessWriteFile {
             PyErr_Clear();
             return common::E_NOT_SUPPORT;
         }
+        int64_t end_position = 0;
+        if (!tell_position(target_, end_position)) {
+            PyErr_Clear();
+            return common::E_NOT_SUPPORT;
+        }
+        position_ = end_position;
         return common::E_OK;
     }
 
+    // The writer asks for the position after every flush to record chunk
+    // offsets; tell() may fail on streams that only support it while idle, so
+    // track the bytes written instead of asking the target each time.
     int64_t get_position() override {
         PythonTargetLock lock(mutex_);
-        if (target_ == nullptr) {
-            return 0;
-        }
-        int64_t position = 0;
-        if (!tell_position(target_, position)) {
-            PyErr_Clear();
-            return -1;
-        }
-        return position;
+        return position_;
     }
 
     int close() override {
@@ -244,6 +246,7 @@ class PythonRandomAccessWriteFile : public storage::RandomAccessWriteFile {
    private:
     PyObject* target_;
     std::string name_;
+    int64_t position_;
     mutable std::mutex mutex_;
 };
 
@@ -306,8 +309,7 @@ void* create_tsfile_writer_from_python_file(PyObject* target,
             if (!sized) {
                 PyErr_Clear();
             }
-            if (!sized || end_position != 0 ||
-                !seek_to(target, 0, SEEK_SET)) {
+            if (!sized || end_position != 0 || !seek_to(target, 0, SEEK_SET)) {
                 PyErr_Clear();
                 *error_code = common::E_INVALID_ARG;
                 PyErr_SetString(PyExc_ValueError,

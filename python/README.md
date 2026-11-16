@@ -219,3 +219,22 @@ The object must provide `seek()`, `tell()`, and explicitly sized binary
 `read(size)` operations. The caller owns the object: `TsFileReader` keeps it
 alive while in use, preserves its cursor position, and does not close it.
 The local `FileReadBackend` setting does not apply to file objects.
+
+`TsFileWriter` accepts a writable binary file object as well, which lets a
+TsFile be written straight to an object store:
+
+```python
+import fsspec
+from tsfile import TsFileWriter
+
+with fsspec.open("s3://bucket/output.tsfile", "wb") as target:
+    with TsFileWriter(target) as writer:
+        writer.register_table(table_schema)
+        writer.write_table(tablet)
+```
+
+The target must provide `write()` and `tell()`. When it is seekable its
+existing content is discarded; a forward-only stream (for example a pipe) is
+accepted only while it is positioned at 0. A failing `flush()` is reported as
+`FileSyncError` instead of being ignored. As with the reader, the caller owns
+the object and closes it.

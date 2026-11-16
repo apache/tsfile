@@ -118,14 +118,56 @@ def test_file_object_with_existing_content_is_reset():
 
 
 def test_flush_failure_is_reported():
+    from tsfile import FileSyncError
+
     class FailingFlush(io.BytesIO):
         def flush(self):
             raise OSError("disk full")
 
     target = FailingFlush()
-    with pytest.raises(Exception):
+    with pytest.raises(FileSyncError):
         with TsFileWriter(target) as writer:
             _write_table(writer)
+
+
+def test_memory_threshold_is_applied():
+    from tsfile import get_tsfile_config
+
+    from tsfile import set_tsfile_config
+
+    original = get_tsfile_config()["chunk_group_size_threshold_"]
+    try:
+        with TsFileWriter(io.BytesIO(), memory_threshold=4096) as writer:
+            _write_table(writer)
+        assert get_tsfile_config()["chunk_group_size_threshold_"] == 4096
+    finally:
+        set_tsfile_config({"chunk_group_size_threshold_": original})
+
+
+def test_position_does_not_depend_on_tell_after_start():
+    class FlakyTell(io.BytesIO):
+        def __init__(self, *args):
+            super().__init__(*args)
+            self._calls = 0
+
+        def tell(self):
+            self._calls += 1
+            if self._calls > 1:
+                raise OSError("tell is not supported while writing")
+            return super().tell()
+
+    target = FlakyTell()
+    with TsFileWriter(target) as writer:
+        _write_table(writer)
+    with TsFileReader(io.BytesIO(target.getvalue())) as reader:
+        result = reader.query_table("test_table", ["item_id", "value"])
+        try:
+            seen = []
+            while result.next():
+                seen.append(result.get_value_by_name("item_id"))
+            assert seen == [f"id{i}" for i in range(10)]
+        finally:
+            result.close()
 
 
 class _ForwardOnlyStream(io.RawIOBase):
