@@ -122,6 +122,7 @@ struct AlpSimdeKernel<float> {
                     Traits::DecodeValue(value, factor, exponent), values[i])) {
                 bitmap[i >> 3] |= static_cast<uint8_t>(1u << (i & 7u));
                 exceptions[ex_count++] = values[i];
+                encoded[i] = 0;
             } else {
                 encoded[i] = value;
             }
@@ -245,6 +246,7 @@ struct AlpSimdeKernel<double> {
                     Traits::DecodeValue(value, factor, exponent), values[i])) {
                 bitmap[i >> 3] |= static_cast<uint8_t>(1u << (i & 7u));
                 exceptions[ex_count++] = values[i];
+                encoded[i] = 0;
             } else {
                 encoded[i] = value;
             }

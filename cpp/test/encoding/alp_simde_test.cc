@@ -253,8 +253,10 @@ static bool EncodeWithSimde(
     std::vector<typename AlpTypeTraits<T>::Encoded>& encoded,
     std::vector<uint8_t>& bitmap, std::vector<T>& exceptions,
     uint32_t* exception_count) {
+    typedef typename AlpTypeTraits<T>::Encoded Encoded;
     const uint32_t count = static_cast<uint32_t>(values.size());
-    encoded.assign(count, 0);
+    // A sentinel so a slot the kernel forgets to write is visible below.
+    encoded.assign(count, static_cast<Encoded>(0x5A5A5A5A));
     bitmap.assign((count + 7) / 8, 0);
     exceptions.assign(count, T());
     *exception_count = 0;
@@ -272,8 +274,9 @@ static bool EncodeWithAvx2(
     std::vector<typename AlpTypeTraits<T>::Encoded>& encoded,
     std::vector<uint8_t>& bitmap, std::vector<T>& exceptions,
     uint32_t* exception_count) {
+    typedef typename AlpTypeTraits<T>::Encoded Encoded;
     const uint32_t count = static_cast<uint32_t>(values.size());
-    encoded.assign(count, 0);
+    encoded.assign(count, static_cast<Encoded>(0x5A5A5A5A));
     bitmap.assign((count + 7) / 8, 0);
     exceptions.assign(count, T());
     *exception_count = 0;
@@ -307,6 +310,15 @@ static void ExpectAvx2MatchesSimdeForPair(const std::vector<T>& values,
     ASSERT_EQ(simde_count, avx2_count);
     EXPECT_EQ(simde_bitmap, avx2_bitmap);
     EXPECT_EQ(simde_encoded, avx2_encoded);
+    // Exception slots must be written deterministically even when the caller
+    // does not pre-zero the output (the buffers start at a sentinel).
+    for (uint32_t i = 0; i < static_cast<uint32_t>(values.size()); ++i) {
+        if ((simde_bitmap[i >> 3] & static_cast<uint8_t>(1u << (i & 7u))) !=
+            0) {
+            EXPECT_EQ(0, simde_encoded[i]) << "SIMDe exception slot " << i;
+            EXPECT_EQ(0, avx2_encoded[i]) << "AVX2 exception slot " << i;
+        }
+    }
     for (uint32_t i = 0; i < simde_count; ++i) {
         EXPECT_TRUE(
             Traits::BitwiseEqual(simde_exceptions[i], avx2_exceptions[i]))
