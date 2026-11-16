@@ -69,3 +69,21 @@ cmake --build cpp/build/Release --target alp_avx2_benchmark
 
 On non-x86 targets and on x86 CPUs without AVX2 only the SIMDe column is
 measured. The `ok` column checks that both kernels produce identical values.
+
+`gorilla_v1_batch_decode_benchmark` compares the per-value GORILLA_V1 decode
+loop with the raw-pointer batch decoder on the same encoded stream for FLOAT
+and DOUBLE columns. It reports elapsed time, values per second and the speedup
+for a smooth (time-series-like) series, a high-entropy series and a constant
+series, and verifies that both paths decode identical bit patterns. Build it
+through the main CMake project:
+
+```bash
+cmake -S cpp -B cpp/target/gv1-benchmark \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_BENCHMARK=ON -DBUILD_TEST=OFF -DBUILD_TOOLS=OFF
+cmake --build cpp/target/gv1-benchmark \
+  --target gorilla_v1_batch_decode_benchmark --config Release
+./cpp/target/gv1-benchmark/gorilla_v1_batch_decode_benchmark [values] [runs]
+```
+
+The defaults are 4 Mi values and a best-of-5 timing per case.

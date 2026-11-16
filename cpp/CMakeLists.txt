@@ -487,6 +487,13 @@ if (BUILD_BENCHMARK)
     target_link_libraries(alp_vs_gorilla_benchmark PRIVATE
             tsfile Threads::Threads)
 
+    add_executable(gorilla_v1_batch_decode_benchmark
+            bench_mark/gorilla_v1_batch_decode_benchmark.cc)
+    target_include_directories(gorilla_v1_batch_decode_benchmark PRIVATE
+            ${PROJECT_SRC_DIR})
+    target_link_libraries(gorilla_v1_batch_decode_benchmark PRIVATE
+            tsfile Threads::Threads)
+
     add_executable(sprintz_batch_decode_benchmark
             bench_mark/sprintz_batch_decode_benchmark.cc)
     target_include_directories(sprintz_batch_decode_benchmark PRIVATE
