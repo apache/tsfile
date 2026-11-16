@@ -26,7 +26,7 @@
 // in the bit-unpack). These copies are compiled with
 // __attribute__((target("avx2"))) and selected at runtime by
 // common::cpu_has_avx2(); see common/simd_dispatch.h. The portable SIMDe
-// kernels remain the fallback for non-x86 targets, MSVC, and CPUs without
+// kernels remain the fallback for non-x86-64 targets, MSVC, and CPUs without
 // AVX2, and both paths must produce identical bytes and values.
 
 #include <stdint.h>

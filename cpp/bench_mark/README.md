@@ -67,8 +67,8 @@ cmake --build cpp/build/Release --target alp_avx2_benchmark
 ./cpp/build/Release/alp_avx2_benchmark
 ```
 
-On non-x86 targets and on x86 CPUs without AVX2 only the SIMDe column is
-measured. The `ok` column checks that both kernels produce identical values.
+On non-x86-64 targets, and on x86-64 CPUs without AVX2, only the SIMDe column
+is measured. The `ok` column checks that both kernels produce identical values.
 
 `gorilla_v1_batch_decode_benchmark` compares the per-value GORILLA_V1 decode
 loop with the raw-pointer batch decoder on the same encoded stream for FLOAT

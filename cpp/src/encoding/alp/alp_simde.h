@@ -35,7 +35,7 @@
 namespace storage {
 namespace alp {
 
-// The SIMDe implementation below is the portable fallback. On x86 with
+// The SIMDe implementation below is the portable fallback. On x86-64 with
 // GCC/Clang the dispatchers below pick the native AVX2 copy from alp_avx2.h at
 // runtime when the CPU supports it.
 template <typename T>

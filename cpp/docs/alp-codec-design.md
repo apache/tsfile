@@ -156,13 +156,15 @@ SIMDe is already a TsFile C++ dependency. The ALP kernels will use the existing
   `alp_simde.h`, matching the existing encoding code style.
 - The portable kernels are header-only and compile into baseline TsFile
   translation units with `ENABLE_SIMD`. On AArch64 the same SIMDe source maps
-  to NEON without the AVX2 flag; on MSVC and on CPUs without AVX2 they are the
-  fallback.
+  to NEON without the AVX2 flag; on MSVC, 32-bit x86 and CPUs without AVX2
+  they are the fallback.
 - On x86-64 with GCC/Clang, `alp_avx2.h` carries native AVX2 copies of the
   `EncodeValues`, `DecodeValues` and bit-unpack kernels, compiled with
-  `TSFILE_TARGET_AVX2` (`__attribute__((target("avx2")))`). The dispatchers
-  `AlpSimdKernel` / `AlpSimdUnpackKernel` in `alp_simde.h` select them once per
-  batch call through `common::cpu_has_avx2()` from `common/simd_dispatch.h`.
+  `TSFILE_TARGET_AVX2` (`__attribute__((target("avx2")))`). ALP AVX2 is
+  compiled only for x86-64 (`ALP_AVX2_DISPATCH`); 32-bit x86 keeps the SIMDe
+  path. The dispatchers `AlpSimdKernel` / `AlpSimdUnpackKernel` in
+  `alp_simde.h` select the AVX2 copies once per batch call through
+  `common::cpu_has_avx2()` from `common/simd_dispatch.h`.
   The library is not built with `-mavx2`, so the binary's ISA floor does not
   change: a CPU without AVX2 runs the SIMDe path, and both paths must encode
   to identical bytes and decode to bit-identical values.

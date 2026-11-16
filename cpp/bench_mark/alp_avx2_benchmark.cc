@@ -24,8 +24,8 @@
 //   cmake -DBUILD_BENCHMARK=ON -DBUILD_TEST=OFF ..
 //   ./alp_avx2_benchmark
 //
-// On non-x86 targets, or on x86 CPUs without AVX2, only the SIMDe column is
-// measured.
+// When ALP AVX2 dispatch is not compiled (non-x86-64 targets) or the CPU has no
+// AVX2, only the SIMDe column is measured.
 
 #include <algorithm>
 #include <chrono>
@@ -386,10 +386,9 @@ int main() {
                   << std::endl;
     }
 #else
-    std::cout
-        << "Native AVX2 dispatch is not compiled on this target; only the "
-           "SIMDe column is measured."
-        << std::endl;
+    std::cout << "ALP AVX2 dispatch is not compiled on this target; only the "
+                 "SIMDe column is measured."
+              << std::endl;
 #endif
 
     std::cout << "ALP SIMD kernel micro-benchmark, "
