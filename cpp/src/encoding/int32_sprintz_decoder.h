@@ -20,6 +20,7 @@
 #ifndef INT32_SPRINTZ_DECODER_H
 #define INT32_SPRINTZ_DECODER_H
 
+#include <cstring>
 #include <iostream>
 #include <istream>
 #include <memory>
@@ -37,10 +38,12 @@ namespace storage {
 class Int32SprintzDecoder : public SprintzDecoder {
    public:
     Int32SprintzDecoder()
-        : fire_pred_(2),
+        : packer_(0),
+          fire_pred_(2),
           pre_value_(0),
           current_value_(0),
           current_buffer_(block_size_ + 1),
+          pack_buf_(block_size_ * sizeof(int32_t) + 8, 0),
           predict_scheme_("fire") {
         SprintzDecoder::reset();
         current_value_ = 0;
@@ -94,6 +97,12 @@ class Int32SprintzDecoder : public SprintzDecoder {
         return ret;
     }
 
+    int read_batch_int32(int32_t* out, int capacity, int& actual,
+                         common::ByteStream& in) override {
+        return batch_read(out, capacity, actual, current_buffer_.data(), in,
+                          true, sizeof(int32_t) + 1);
+    }
+
     void reset() override {
         SprintzDecoder::reset();
         current_value_ = 0;
@@ -141,20 +150,22 @@ class Int32SprintzDecoder : public SprintzDecoder {
             pre_value_ = tmp_prev_value;
             current_buffer_[0] = pre_value_;
 
-            // +8 zero bytes: the SIMD unpack gathers 8 bytes per value and
-            // may read up to 7 bytes past the packed group.
-            std::vector<uint8_t> pack_buf(bit_width_ + 8, 0);
             uint32_t read_len = 0;
-            input.read_buf(reinterpret_cast<char*>(pack_buf.data()), bit_width_,
-                           read_len);
-
-            std::vector<int32_t> tmp_buffer(8);
-            packer_ = std::make_shared<Int32Packer>(bit_width_);
-            packer_->unpack_8values(pack_buf.data(), 0, tmp_buffer.data());
-
-            for (int i = 0; i < 8; ++i) {
-                current_buffer_[i + 1] = tmp_buffer[i];
+            input.read_buf(reinterpret_cast<char*>(pack_buf_.data()),
+                           bit_width_, read_len);
+            // The SIMD unpack gathers 8 bytes per value and may read up to 7
+            // bytes past the packed group. Zero everything the read did not
+            // fill so a reused buffer never carries a previous block's bytes
+            // into the padding or into a short read's tail.
+            if (read_len < pack_buf_.size()) {
+                std::memset(pack_buf_.data() + read_len, 0,
+                            pack_buf_.size() - read_len);
             }
+
+            packer_.set_width(bit_width_);
+            packer_.unpack_8values(pack_buf_.data(), 0,
+                                   current_buffer_.data() + 1);
+
             ret = recalculate();
         }
         is_block_read_ = true;
@@ -191,11 +202,12 @@ class Int32SprintzDecoder : public SprintzDecoder {
     }
 
    private:
-    std::shared_ptr<Int32Packer> packer_;
+    Int32Packer packer_;
     IntFire fire_pred_;
     int32_t pre_value_;
     int32_t current_value_;
     std::vector<int32_t> current_buffer_;
+    std::vector<uint8_t> pack_buf_;
     std::string predict_scheme_;
 };
 

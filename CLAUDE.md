@@ -45,6 +45,30 @@ The root `pom.xml` orchestrates all three via Maven profiles:
 ./mvnw clean verify -P with-python     # Python (requires C++ built first)
 ```
 
+### Local Iteration vs. Pre-Push Verification
+
+These two entry points serve different purposes and are not interchangeable.
+
+**While iterating**, run the already-built test artifacts directly for fast feedback:
+
+```bash
+./cpp/build/Release/lib/TsFile_Test                      # C++ test binary
+./cpp/build/Release/lib/TsFile_Test --gtest_filter=Foo.*  # narrow to relevant cases
+cd python && pytest tests/                                # Python tests
+```
+
+**Before committing or pushing**, run the Maven entry point that CI uses, from the repository root:
+
+```bash
+./mvnw -P with-cpp verify      # C++ changes
+./mvnw -P with-python verify   # Python changes (also builds C++)
+./mvnw -P with-java verify     # Java changes
+```
+
+These are smoke checks for a branch in flight. The full pre-push requirements — including the `clean` full-suite build, the C++ ASan run, Python binding sanitizer coverage and `spotless:check` — are defined under [Required Checks Before Pushing](#required-checks-before-pushing) and are not replaced by the commands above.
+
+CI compiles, links, and packages through Maven, so running the test binary alone does not reproduce that pipeline. For example, a `constexpr` constant without an out-of-class definition links fine on macOS with the directly built binary but fails under Linux/LTO in CI.
+
 ## Cross-Module Dependencies
 
 - **Python depends on C++**: The Python module uses Cython to bind to the C++ shared library (`libtsfile`). C++ must be built before Python (`-P with-python` implies C++ build).
@@ -94,6 +118,10 @@ For changes requiring full verification, run:
 - Do not substitute focused tests, a build-only command, or an earlier revision's results for the full suite. Do not bypass tests, formatting, or other validation with skip flags in these verification runs.
 - Inspect the applicable workflows in `.github/workflows/` and verify their additional checks, including Python binding ASan/LSan coverage as documented in `python/SANITIZER.md`, compatibility tests, and static analysis. A successful ordinary Maven run does not establish that sanitizer checks passed; the Python sanitizer build also requires its separate instrumentation check and ownership test run.
 - Check the actual test reports and exit statuses for Maven, ASan, formatting, and other required checks. Record the commands and results before pushing. If a required check fails, is skipped, or cannot run in the current environment, report the blocker and do not push until it has passed on a supported environment.
+
+## CI Path Filters
+
+The GitHub Actions workflows under `.github/workflows/` use per-language `paths` whitelists so that documentation-only changes and unrelated language directories do not trigger builds. When adding a directory or shared build input that a workflow consumes, update that workflow's `paths` list in the same change. Markdown (`**.md`), `docs/**`, `skills/**`, `cpp/docs/**`, and other languages' source directories are intentionally excluded from the language test workflows.
 
 ## Internationalization
 

@@ -32,7 +32,7 @@
 
 This directory contains the Python implementation of TsFile. The Python version is built on the CPP version and uses the Cython package to integrate TsFile's read and write capabilities into the Python environment. Users can read and write TsFile as easily as they use read_csv and write_csv in Pandas.
 
-The source code can be found in the `./tsfile` directory. Files ending with `.pyx` and `.pyd` are wrapper code written in Cython. The `tsfile/tsfile.py` defines some user interfaces. You can find some examples of reading and writing in the `.examples/examples.py`.
+The source code can be found in the `./tsfile` directory. Files ending with `.pyx` are Cython wrapper code, and `tsfile/__init__.py` exports the public API together with the pure-Python modules (`constants.py`, `schema.py`, `tablet.py`, `tsfile_table_writer.py`, and the `dataset/` package). You can find an example of reading and writing in `examples/example.py`.
 
 
 ## How to make contributions

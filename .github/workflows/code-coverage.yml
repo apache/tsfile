@@ -4,14 +4,36 @@ on:
     branches:
       - develop
       - rc/*
-    paths-ignore:
-      - 'docs/**'
+    paths:
+      - '.github/workflows/code-coverage.yml'
+      - '.mvn/**'
+      - 'mvnw'
+      - 'mvnw.cmd'
+      - 'pom.xml'
+      - 'checkstyle.xml'
+      - 'codecov.yml'
+      - 'compat/compatibility-matrix.csv'
+      - 'java/**'
+      - 'cpp/**'
+      - '!cpp/docs/**'
+      - '!**.md'
   pull_request:
     branches:
       - develop
       - rc/*
-    paths-ignore:
-      - 'docs/**'
+    paths:
+      - '.github/workflows/code-coverage.yml'
+      - '.mvn/**'
+      - 'mvnw'
+      - 'mvnw.cmd'
+      - 'pom.xml'
+      - 'checkstyle.xml'
+      - 'codecov.yml'
+      - 'compat/compatibility-matrix.csv'
+      - 'java/**'
+      - 'cpp/**'
+      - '!cpp/docs/**'
+      - '!**.md'
 
 jobs:
   codecov:

@@ -23,11 +23,13 @@ on:
       - "go/**"
       - "cpp/src/cwrapper/**"
       - ".github/workflows/unit-test-go.yml"
+      - "!**.md"
   push:
     branches: [develop]
     paths:
       - "go/**"
       - "cpp/src/cwrapper/**"
+      - "!**.md"
 
 jobs:
   test:
@@ -83,12 +85,12 @@ jobs:
         run: |
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             if [[ "${{ matrix.toolchain }}" == "msvc" ]]; then
-              ./mvnw.cmd -P with-cpp -Dcpp.toolchain=msvc -Dbuild.type=Release -DskipTests -Dspotless.skip=true package
+              ./mvnw.cmd -P with-cpp -Dcpp.toolchain=msvc -Dbuild.type=Release -Dbuild.test=OFF -DskipTests -Dspotless.skip=true package
             else
-              ./mvnw.cmd -P with-cpp -Dcpp.toolchain=mingw -Dbuild.type=Release -DskipTests -Dspotless.skip=true package
+              ./mvnw.cmd -P with-cpp -Dcpp.toolchain=mingw -Dbuild.type=Release -Dbuild.test=OFF -DskipTests -Dspotless.skip=true package
             fi
           else
-            ./mvnw -P with-cpp -DskipTests -Dspotless.skip=true package
+            ./mvnw -P with-cpp -Dbuild.test=OFF -DskipTests -Dspotless.skip=true package
           fi
       - name: Expose Windows native libraries
         if: matrix.toolchain == 'mingw'

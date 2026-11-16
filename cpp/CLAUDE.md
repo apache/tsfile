@@ -51,11 +51,15 @@ make -j$(nproc)
 # Via Maven from repo root
 ./mvnw clean verify -P with-cpp
 
-# Run all tests
+# Run all tests (fast iteration only: runs the built binary and skips the
+# Maven compile/link/package steps that CI performs)
 ./build/Release/lib/TsFile_Test
 
 # Run specific test suite
 ./build/Release/lib/TsFile_Test --gtest_filter=SnappyCompressorTest.*
+
+# Before pushing, use the Maven entry point CI uses (from repo root, no clean)
+./mvnw -P with-cpp verify
 ```
 
 ## Build Options (CMake)

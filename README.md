@@ -90,7 +90,7 @@ TsFile adopts a columnar storage design, similar to other file formats, primaril
 
 ## Encoding and Compression
 
-TsFile employs advanced encoding and compression techniques to optimize storage and access for time series data. It uses methods like run-length encoding (RLE), bit-packing, and Snappy for efficient compression, allowing separate encoding of timestamp and value columns for better data processing. Its unique encoding algorithms are designed specifically for the characteristics of time series data in IoT scenarios, focusing on regular time intervals and the correlation among series. 
+TsFile employs advanced encoding and compression techniques to optimize storage and access for time series data. Timestamps and value columns are encoded separately, using methods such as TS_2DIFF, run-length encoding (RLE), GORILLA, CHIMP, SPRINTZ, RLBE, and DICTIONARY, and compressed with LZ4 (the default), Zstandard, Snappy, GZIP, or LZMA2. Its unique encoding algorithms are designed specifically for the characteristics of time series data in IoT scenarios, focusing on regular time intervals and the correlation among series.
 
 Its uniqueness lies in the encoding algorithm designed specifically for time series data characteristics, focusing on the correlation between time attributes and data.
 
@@ -111,14 +111,18 @@ Its development facilitates efficient data encoding, compression, and access, re
 
 | Data Type    | Recommended Encoding       | Recommended Compression |
 |---------|------------|--------|
+| BOOLEAN | RLE        | LZ4    |
 | INT32   | TS_2DIFF   | LZ4    |
+| DATE    | TS_2DIFF   | LZ4    |
 | INT64   | TS_2DIFF   | LZ4    |
+| TIMESTAMP | TS_2DIFF | LZ4    |
 | FLOAT   | GORILLA    | LZ4    |
 | DOUBLE  | GORILLA    | LZ4    |
-| BOOLEAN | RLE        | LZ4    |
-| TEXT    | DICTIONARY | LZ4    |
+| TEXT    | PLAIN      | LZ4    |
+| STRING  | PLAIN      | LZ4    |
+| BLOB    | PLAIN      | LZ4    |
 
-more see [Docs](https://iotdb.apache.org/UserGuide/latest/Basic-Concept/Encoding-and-Compression.html)
+For the full encoding/compression matrix, see [Docs](https://iotdb.apache.org/UserGuide/latest/Technical-Insider/Encoding-and-Compression.html)
 
 ## Build and Use TsFile
 
@@ -131,33 +135,36 @@ more see [Docs](https://iotdb.apache.org/UserGuide/latest/Basic-Concept/Encoding
 ## Command-Line Tool (tsfile-cli)
 
 Apache TsFile ships `tsfile-cli`, a single, pipe-friendly command-line tool for inspecting
-**and** importing `.tsfile` files directly from the shell. Read commands (`ls`, `meta`,
-`schema`, `stats`, `count`, `head`, `cat`, `sample`) print to stdout and diagnostics to
-stderr, so they compose with `awk`, `jq`, `sort`, and friends; the `write` command imports
-CSV into a new `.tsfile`. Output formats: `csv`, `tsv`, `json` (NDJSON), and `table`.
+**and** importing `.tsfile` files directly from the shell. Commands such as `ls`, `meta`,
+`schema`, `stats`, `count`, `sketch`, `head`, and `cat` print rows to stdout and diagnostics to
+stderr, so they compose with `awk`, `jq`, `sort`, and friends; `export` writes rows or files, and
+`write` imports CSV into a new `.tsfile`. Output formats: `table` (the default), `ndjson`, and
+`csv`.
 
 ### Commands
 
 | Command | What it does |
 |---|---|
-| `ls`     | List the tables (table model) or devices (tree model), one name per line |
-| `meta`   | File summary: data model, table/device/series counts, time range, and file size |
+| `ls`     | List the tables (table model) or devices (tree model) as `model, object` rows |
+| `meta`   | File summary: size, format version, and data model |
 | `schema` | Per-series data type, encoding, and compression |
-| `stats`  | Per-series statistics: count, time range, min/max, first/last, and sum |
-| `count`  | Per-series row counts plus a total — read from statistics, without scanning pages |
+| `stats`  | FIELD statistics: count, null count, time range, min/max, first/last, and sum |
+| `count`  | Object/column counts — no synthetic total row |
+| `sketch` | Print the physical file sketch (chunk groups, chunks, pages), optionally to `-o` |
 | `head`   | Print the first N rows (default 10; `-n` to change) |
-| `cat`    | Stream every matching row |
-| `sample` | Take a reproducible reservoir sample of rows (`-n`, `--seed`) |
+| `cat`    | Print every matching row |
+| `export` | Export one object to `-o`, or multiple objects to `--output-dir`, using `--type` |
 | `write`  | Import CSV into a new table-model `.tsfile` |
 
-The metadata commands (`ls`, `meta`, `schema`, `stats`, `count`) answer most questions
-without decoding data pages, while `head`, `cat`, and `sample` read the actual rows.
+Use `ls`, `schema`, and `meta` for metadata-only discovery. `stats` can scan when
+statistics are unavailable, and table-model `count` scans rows. `head`, `cat`, `export`,
+and `sketch` read the actual data or layout.
 
 ### Examples
 
 ```bash
 tsfile-cli ls data.tsfile                          # list tables / devices
-tsfile-cli meta data.tsfile                        # file overview (model, counts, time range, size)
+tsfile-cli meta data.tsfile                        # file overview (size, version, model)
 tsfile-cli head -n 20 data.tsfile                  # first 20 rows
 tsfile-cli cat -m temp -m humidity -f csv data.tsfile # stream selected columns as CSV
 
