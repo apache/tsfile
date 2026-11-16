@@ -74,7 +74,8 @@ Options:
                          Checks passed to -fsanitize= when ASan is enabled
                          (default: address,undefined).
   -c=<ON|OFF>            Enable or disable code coverage.
-  -j=<n>, --jobs=<n>     Number of parallel compile jobs (default: detected
+  -j=<n>, -j<n>, --jobs=<n>
+                         Number of parallel compile jobs (default: detected
                          processor count).
   --build-shared=<ON|OFF>
                          Build libtsfile as a shared library (default: ON).
@@ -155,6 +156,8 @@ parse_options()
       enable_cov=$(get_key_value "$1");;
     -j=* | --jobs=*)
       build_jobs=$(get_key_value "$1");;
+    -j[0-9]*)
+      build_jobs=${1#-j};;
     -j | --jobs)
       shift
       build_jobs=$(get_key_value "$1");;

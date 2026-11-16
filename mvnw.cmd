@@ -157,7 +157,8 @@ if exist %WRAPPER_JAR% (
 @REM End of extension
 
 @REM Let the native (C++) build use every core unless the caller pinned a level.
-if not defined CMAKE_BUILD_PARALLEL_LEVEL set "CMAKE_BUILD_PARALLEL_LEVEL=%NUMBER_OF_PROCESSORS%"
+@REM Guard on NUMBER_OF_PROCESSORS so the variable is never defined but empty.
+if not defined CMAKE_BUILD_PARALLEL_LEVEL if defined NUMBER_OF_PROCESSORS set "CMAKE_BUILD_PARALLEL_LEVEL=%NUMBER_OF_PROCESSORS%"
 
 @REM Provide a "standardized" way to retrieve the CLI args that will
 @REM work with both Windows and non-Windows executions.
