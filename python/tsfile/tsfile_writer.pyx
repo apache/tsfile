@@ -41,6 +41,7 @@ cdef extern from "python_random_access_write_file.h":
 
 cdef class TsFileWriterPy:
     cdef TsFileWriter writer
+    cdef bint from_file_object
 
     def __init__(self, pathname, memory_threshold: int = 128 * 1024 * 1024,
                  allow_non_decreasing_timestamps: bool = False):
@@ -51,12 +52,14 @@ cdef class TsFileWriterPy:
         (a fresh file object simply starts empty).
         """
         self.writer = NULL
+        self.from_file_object = False
         set_allow_non_decreasing_timestamps(
             <bint> allow_non_decreasing_timestamps)
         cdef ErrorCode error_code = 0
         if isinstance(pathname, (str, bytes, os.PathLike)):
             self.writer = tsfile_writer_new_c(pathname, memory_threshold)
             return
+        self.from_file_object = True
         self.writer = create_tsfile_writer_from_python_file(
             <PyObject*> pathname, memory_threshold, &error_code)
         check_error(error_code)
@@ -232,7 +235,10 @@ cdef class TsFileWriterPy:
         cdef TsFileWriter closing = self.writer
         self.writer = NULL
         errno = _tsfile_writer_close(closing)
-        check_error(errno, python_random_access_write_file_last_error())
+        cdef const char* closing_context = NULL
+        if self.from_file_object:
+            closing_context = python_random_access_write_file_last_error()
+        check_error(errno, closing_context)
 
     cpdef flush(self):
         """
@@ -243,7 +249,10 @@ cdef class TsFileWriterPy:
         if self.writer == NULL:
             return
         errno = _tsfile_writer_flush(self.writer)
-        check_error(errno, python_random_access_write_file_last_error())
+        cdef const char* flush_context = NULL
+        if self.from_file_object:
+            flush_context = python_random_access_write_file_last_error()
+        check_error(errno, flush_context)
 
     def __dealloc__(self):
         try:

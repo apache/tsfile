@@ -763,6 +763,29 @@ TEST(CApiCompatibilityTest, KeepsLegacySchemaAndTagFilterEntryPoints) {
               nullptr);
 }
 
+TEST_F(CWrapperTest, WriteFileGetBufferRejectsPathHandle) {
+#ifdef _WIN32
+    const auto process_id = static_cast<uint64_t>(_getpid());
+#else
+    const auto process_id = static_cast<uint64_t>(getpid());
+#endif
+    static std::atomic<uint64_t> path_counter{0};
+    const std::string path =
+        "cwrapper_get_buffer_path_" + std::to_string(process_id) + "_" +
+        std::to_string(path_counter.fetch_add(1)) + ".tsfile";
+    ERRNO code = RET_OK;
+    WriteFile file = write_file_new(path.c_str(), &code);
+    ASSERT_EQ(RET_OK, code);
+    ASSERT_NE(nullptr, file);
+    uint8_t* buffer = reinterpret_cast<uint8_t*>(0x1);
+    uint32_t length = 7;
+    EXPECT_EQ(RET_NOT_SUPPORT, write_file_get_buffer(file, &buffer, &length));
+    EXPECT_EQ(nullptr, buffer);
+    EXPECT_EQ(0u, length);
+    free_write_file(&file);
+    remove(path.c_str());
+}
+
 // The in-memory write sink lets a C caller serialize a TsFile without a
 // filesystem and upload the bytes themselves (write_file_get_buffer).
 TEST_F(CWrapperTest, MemoryWriteFileRoundTrip) {

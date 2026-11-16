@@ -155,7 +155,14 @@ class PythonRandomAccessWriteFile : public storage::RandomAccessWriteFile {
         Py_INCREF(target_);
     }
 
-    ~PythonRandomAccessWriteFile() override { close(); }
+    ~PythonRandomAccessWriteFile() override {
+        // A writer may outlive the interpreter (for example a module-level
+        // object); touching the Python API then is undefined. Leaking the
+        // reference during shutdown is the only safe option.
+        if (Py_IsInitialized()) {
+            close();
+        }
+    }
 
     bool is_opened() const override {
         PythonGILGuard gil;
@@ -235,6 +242,7 @@ class PythonRandomAccessWriteFile : public storage::RandomAccessWriteFile {
             return common::E_FILE_WRITE_ERR;
         }
         g_last_python_error.clear();
+        const int64_t previous_position = position_;
         if (!seek_to(target_, 0, SEEK_END)) {
             g_last_python_error = take_python_error_message();
             return common::E_NOT_SUPPORT;
@@ -242,6 +250,11 @@ class PythonRandomAccessWriteFile : public storage::RandomAccessWriteFile {
         int64_t end_position = 0;
         if (!tell_position(target_, end_position)) {
             g_last_python_error = take_python_error_message();
+            // The cursor already moved; put it back so a caller that falls
+            // back to appending does not land at the wrong offset.
+            if (seek_to(target_, previous_position, SEEK_SET)) {
+                PyErr_Clear();
+            }
             return common::E_NOT_SUPPORT;
         }
         position_ = end_position;
