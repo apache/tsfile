@@ -19,4 +19,5 @@
 include _build_support.py
 recursive-include tsfile *.pyx *.pxd *.pxi
 include tsfile/python_random_access_read_file.h
+include tsfile/python_random_access_write_file.h
 prune tsfile/include
