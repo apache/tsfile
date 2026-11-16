@@ -158,7 +158,7 @@ SIMDe is already a TsFile C++ dependency. The ALP kernels will use the existing
   translation units with `ENABLE_SIMD`. On AArch64 the same SIMDe source maps
   to NEON without the AVX2 flag; on MSVC and on CPUs without AVX2 they are the
   fallback.
-- On x86 with GCC/Clang, `alp_avx2.h` carries native AVX2 copies of the
+- On x86-64 with GCC/Clang, `alp_avx2.h` carries native AVX2 copies of the
   `EncodeValues`, `DecodeValues` and bit-unpack kernels, compiled with
   `TSFILE_TARGET_AVX2` (`__attribute__((target("avx2")))`). The dispatchers
   `AlpSimdKernel` / `AlpSimdUnpackKernel` in `alp_simde.h` select them once per

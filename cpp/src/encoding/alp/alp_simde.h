@@ -297,7 +297,7 @@ struct AlpSimdKernel {
                                   typename AlpTypeTraits<T>::Encoded* encoded,
                                   uint8_t* bitmap, T* exceptions,
                                   uint32_t* exception_count) {
-#ifdef TSFILE_X86_AVX2_DISPATCH
+#ifdef ALP_AVX2_DISPATCH
         if (common::cpu_has_avx2()) {
             return avx2_detail::AlpAvx2Kernel<T>::EncodeValues(
                 values, count, factor, exponent, encoded, bitmap, exceptions,
@@ -313,7 +313,7 @@ struct AlpSimdKernel {
         const typename AlpTypeTraits<T>::Encoded* encoded, uint32_t count,
         uint8_t factor, uint8_t exponent, const uint8_t* bitmap,
         const T* exceptions, uint32_t exception_count, T* out) {
-#ifdef TSFILE_X86_AVX2_DISPATCH
+#ifdef ALP_AVX2_DISPATCH
         if (common::cpu_has_avx2()) {
             return avx2_detail::AlpAvx2Kernel<T>::DecodeValues(
                 encoded, count, factor, exponent, bitmap, exceptions,
@@ -449,7 +449,7 @@ struct AlpSimdUnpackKernel {
 
     static bool Unpack(const uint8_t* body, uint32_t count, uint8_t bit_width,
                        Unsigned* out) {
-#ifdef TSFILE_X86_AVX2_DISPATCH
+#ifdef ALP_AVX2_DISPATCH
         if (common::cpu_has_avx2()) {
             return avx2_detail::AlpAvx2UnpackKernel<Unsigned>::Unpack(
                 body, count, bit_width, out);

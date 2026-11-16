@@ -35,6 +35,11 @@
 #include "common/simd_dispatch.h"
 
 #ifdef TSFILE_X86_AVX2_DISPATCH
+// These kernels use the 64-bit scalar conversion instruction, which 32-bit x86
+// does not provide without undefined behavior, so ALP dispatch is x86-64 only.
+// The RLE packers keep the wider TSFILE_X86_AVX2_DISPATCH definition.
+#if defined(__x86_64__)
+#define ALP_AVX2_DISPATCH 1
 
 #include <immintrin.h>
 
@@ -48,7 +53,6 @@ namespace avx2_detail {
 // out-of-range inputs; the callers range-check the result before using it.
 TSFILE_TARGET_AVX2
 static inline __m256i AlpAvx2CvttpdEpi64(__m256d v) {
-#if defined(__x86_64__)
     const __m128d lo = _mm256_castpd256_pd128(v);
     const __m128d hi = _mm256_extractf128_pd(v, 1);
     const long long l0 = _mm_cvttsd_si64(lo);
@@ -56,15 +60,6 @@ static inline __m256i AlpAvx2CvttpdEpi64(__m256d v) {
     const long long h0 = _mm_cvttsd_si64(hi);
     const long long h1 = _mm_cvttsd_si64(_mm_unpackhi_pd(hi, hi));
     return _mm256_setr_epi64x(l0, l1, h0, h1);
-#else
-    // 32-bit x86 has no scalar 64-bit conversion; SIMDe's own fallback uses a
-    // C cast here too.
-    alignas(32) double lanes[4];
-    _mm256_storeu_pd(lanes, v);
-    return _mm256_setr_epi64x(
-        static_cast<int64_t>(lanes[0]), static_cast<int64_t>(lanes[1]),
-        static_cast<int64_t>(lanes[2]), static_cast<int64_t>(lanes[3]));
-#endif
 }
 
 // Same story for int64 -> double: no packed AVX2 conversion. The scalar
@@ -223,7 +218,7 @@ struct AlpAvx2Kernel<double> {
         const __m256d vupper = _mm256_set1_pd(ALP_DOUBLE_ENCODING_UPPER_LIMIT);
         const __m256i vnegzero =
             _mm256_set1_epi64x(static_cast<int64_t>(0x8000000000000000ULL));
-        const __m256i vall = _mm256_set1_epi32(-1);
+        const __m256i vall = _mm256_set1_epi64x(-1);
 
         uint32_t ex_count = 0;
         uint32_t i = 0;
@@ -411,6 +406,7 @@ struct AlpAvx2UnpackKernel<uint64_t> {
 }  // namespace alp
 }  // namespace storage
 
+#endif  // __x86_64__
 #endif  // TSFILE_X86_AVX2_DISPATCH
 
 #endif  // ENCODING_ALP_AVX2_H

@@ -239,7 +239,7 @@ TEST(AlpSimdeTest, UnpackMatchesReferenceAcrossBitWidths) {
     }
 }
 
-#ifdef TSFILE_X86_AVX2_DISPATCH
+#ifdef ALP_AVX2_DISPATCH
 
 // The AlpSimdeTest cases above run through the dispatched entry points, so on
 // an AVX2 CPU they exercise the native kernels. These tests compare the AVX2
@@ -314,7 +314,8 @@ static void ExpectAvx2MatchesSimdeForPair(const std::vector<T>& values,
     const uint32_t count = static_cast<uint32_t>(values.size());
     std::vector<T> simde_decoded(count);
     std::vector<T> avx2_decoded(count);
-    const uint8_t* bitmap_ptr = simde_count == 0 ? nullptr : &simde_bitmap[0];
+    const uint8_t* bitmap_ptr =
+        simde_bitmap.empty() ? nullptr : &simde_bitmap[0];
     const T* exception_ptr = simde_count == 0 ? nullptr : &simde_exceptions[0];
     ASSERT_EQ(ALP_OK,
               AlpSimdeKernel<T>::DecodeValues(
@@ -507,7 +508,7 @@ TEST(AlpAvx2Test, DecodeMalformedStatusMatchesSimde) {
                                  encoded, 4, 0, 0, bitmap, exceptions, 2, out));
 }
 
-#endif  // TSFILE_X86_AVX2_DISPATCH
+#endif  // ALP_AVX2_DISPATCH
 
 #endif  // ENABLE_SIMD
 

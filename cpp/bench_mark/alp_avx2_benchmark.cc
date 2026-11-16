@@ -55,7 +55,7 @@ using storage::alp::AlpPackBits;
 using storage::alp::AlpSimdeKernel;
 using storage::alp::AlpSimdeUnpackKernel;
 using storage::alp::AlpTypeTraits;
-#ifdef TSFILE_X86_AVX2_DISPATCH
+#ifdef ALP_AVX2_DISPATCH
 using storage::alp::avx2_detail::AlpAvx2Kernel;
 using storage::alp::avx2_detail::AlpAvx2UnpackKernel;
 #endif
@@ -195,7 +195,7 @@ void BenchEncode(const std::string& pattern, const std::vector<T>& values) {
     std::vector<T> avx2_exceptions(count, T());
     uint32_t simde_exception_count = 0;
     uint32_t avx2_exception_count = 0;
-#ifndef TSFILE_X86_AVX2_DISPATCH
+#ifndef ALP_AVX2_DISPATCH
     (void)avx2_exception_count;
 #endif
     const double simde_ns = TimeNsPerValue(
@@ -210,7 +210,7 @@ void BenchEncode(const std::string& pattern, const std::vector<T>& values) {
 
     double avx2_ns = 0.0;
     bool ok = true;
-#ifdef TSFILE_X86_AVX2_DISPATCH
+#ifdef ALP_AVX2_DISPATCH
     if (common::cpu_has_avx2()) {
         avx2_ns = TimeNsPerValue(
             [&]() {
@@ -270,20 +270,20 @@ void BenchDecode(const std::string& pattern, const std::vector<T>& values) {
         [&]() {
             AlpSimdeKernel<T>::DecodeValues(
                 &encoded[0], count, factor, exponent, &bitmap[0],
-                exception_count == 0 ? NULL : &exceptions[0], exception_count,
-                &simde_out[0]);
+                exception_count == 0 ? nullptr : &exceptions[0],
+                exception_count, &simde_out[0]);
         },
         count);
 
     double avx2_ns = 0.0;
     bool ok = true;
-#ifdef TSFILE_X86_AVX2_DISPATCH
+#ifdef ALP_AVX2_DISPATCH
     if (common::cpu_has_avx2()) {
         avx2_ns = TimeNsPerValue(
             [&]() {
                 AlpAvx2Kernel<T>::DecodeValues(
                     &encoded[0], count, factor, exponent, &bitmap[0],
-                    exception_count == 0 ? NULL : &exceptions[0],
+                    exception_count == 0 ? nullptr : &exceptions[0],
                     exception_count, &avx2_out[0]);
             },
             count);
@@ -331,7 +331,7 @@ void BenchUnpack(uint8_t bit_width, uint32_t count) {
 
     double avx2_ns = 0.0;
     bool ok = true;
-#ifdef TSFILE_X86_AVX2_DISPATCH
+#ifdef ALP_AVX2_DISPATCH
     if (common::cpu_has_avx2()) {
         avx2_ns = TimeNsPerValue(
             [&]() {
@@ -380,7 +380,7 @@ int main() {
     std::cout << "ENABLE_SIMD is OFF; nothing to benchmark." << std::endl;
     return 0;
 #else
-#ifdef TSFILE_X86_AVX2_DISPATCH
+#ifdef ALP_AVX2_DISPATCH
     if (!common::cpu_has_avx2()) {
         std::cout << "CPU has no AVX2; only the SIMDe column is measured."
                   << std::endl;
