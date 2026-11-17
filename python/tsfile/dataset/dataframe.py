@@ -185,17 +185,18 @@ def _merge_table_model_entries(
 
     field_columns = _union_field_columns(existing.field_columns, incoming.field_columns)
 
-    # A name cannot be both a tag and a field of the same table: the
+    # A readable field name cannot also be a tag of the same table: the
     # persistent index keys columns by (table, name), so a duplicate would make
-    # series lookups ambiguous. This is a namespace conflict within one table,
-    # not a schema-version difference, so it is the one case still rejected.
+    # series lookups ambiguous. Non-numeric fields never become columns here
+    # (they are neither exposed nor indexed), so they are not part of that
+    # namespace and are ignored instead of rejected.
     tag_names = set(tag_columns)
     for name in field_columns:
         if name in tag_names:
             raise ValueError(
                 f"Column '{name}' of table '{table_name}' in '{file_path}' is a "
-                "TAG in some TsFiles and a FIELD in others. A column name cannot "
-                "be both a tag and a field of the same table."
+                "TAG in some TsFiles and a readable FIELD in others. A column "
+                "name cannot be both a tag and a field of the same table."
             )
 
     return TableEntry(

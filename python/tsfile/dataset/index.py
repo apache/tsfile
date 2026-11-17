@@ -485,7 +485,14 @@ class MappedDatasetIndex:
 
 
 def index_path_for(paths: Sequence[str]) -> str:
-    canonical_paths = sorted(os.path.abspath(path) for path in paths)
+    """Cache identity of one load set.
+
+    The caller's source order is part of the identity: a merged table's
+    first-seen field order -- and every positional selection derived from it --
+    follows load order, so a reversed load set must get its own index instead
+    of reusing one built in a different order.
+    """
+    canonical_paths = [os.path.abspath(path) for path in paths]
     common = os.path.commonpath(canonical_paths)
     if not os.path.isdir(common):
         common = os.path.dirname(common)
@@ -503,6 +510,9 @@ def index_matches_paths(
     path: str, paths: Sequence[str], trust_index: bool = True
 ) -> bool:
     """Match the file set, checking source generations only when untrusted."""
+    # The stored file records are canonical (sorted); only the cache identity
+    # above encodes the caller's load order, so this comparison stays
+    # order-independent.
     expected = sorted(os.path.abspath(item) for item in paths)
     try:
         with MappedDatasetIndex(path) as index:

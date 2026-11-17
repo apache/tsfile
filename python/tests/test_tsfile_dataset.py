@@ -1364,6 +1364,37 @@ def test_dataset_unions_disjoint_field_sets_across_shards(
         np.testing.assert_equal(np.asarray(aligned.values), np.array([[1.0, 2.0, 3.0]]))
 
 
+def test_dataset_index_cache_follows_load_order(tmp_path):
+    # The persistent index is cached per load order, because the union's field
+    # order is first-seen. Reversing the order must build its own index rather
+    # than reuse one whose columns follow the other order, and repeating an
+    # order must still reuse that order's index.
+    temperature = tmp_path / "temperature.tsfile"
+    humidity = tmp_path / "humidity.tsfile"
+    _write_table_rows_file(
+        temperature,
+        [_WEATHER_DEVICE_TAG, _WEATHER_TEMPERATURE],
+        {"time": [0], "device": ["device_a"], "temperature": [1.0]},
+    )
+    _write_table_rows_file(
+        humidity,
+        [_WEATHER_DEVICE_TAG, _WEATHER_HUMIDITY],
+        {"time": [1], "device": ["device_a"], "humidity": [2.0]},
+    )
+
+    for paths, fields in (
+        ([str(temperature), str(humidity)], ["temperature", "humidity"]),
+        ([str(humidity), str(temperature)], ["humidity", "temperature"]),
+        ([str(temperature), str(humidity)], ["temperature", "humidity"]),
+    ):
+        with TsFileDataFrame(paths, show_progress=False, use_index=True) as tsdf:
+            entry = tsdf._index.table_entries["weather"]
+            assert entry.field_columns == tuple(fields)
+            assert tsdf.list_timeseries() == [
+                f"weather.device_a.{field}" for field in fields
+            ]
+
+
 def test_dataset_unions_overlapping_field_subsets_for_different_devices(
     tmp_path, dataframe_use_index
 ):
@@ -1687,6 +1718,57 @@ def test_dataset_rejects_different_tag_prefix(tmp_path, dataframe_use_index):
             TsFileDataFrame(paths, show_progress=False, use_index=dataframe_use_index)
 
 
+def test_dataset_ignores_nonnumeric_field_sharing_a_tag_name(
+    tmp_path, dataframe_use_index
+):
+    # Only readable fields join the column namespace: a non-numeric field with
+    # a tag's name is never exposed or indexed, so it does not conflict with
+    # the tag. The merge keeps the tag and ignores the field's values.
+    path1 = tmp_path / "tag-region.tsfile"
+    path2 = tmp_path / "string-field-region.tsfile"
+    _write_table_rows_file(
+        path1,
+        [
+            _WEATHER_DEVICE_TAG,
+            ColumnSchema("region", TSDataType.STRING, ColumnCategory.TAG),
+            _WEATHER_TEMPERATURE,
+        ],
+        {
+            "time": [0],
+            "device": ["device_a"],
+            "region": ["east"],
+            "temperature": [1.0],
+        },
+    )
+    _write_table_rows_file(
+        path2,
+        [
+            _WEATHER_DEVICE_TAG,
+            ColumnSchema("region", TSDataType.STRING, ColumnCategory.FIELD),
+            _WEATHER_TEMPERATURE,
+        ],
+        {
+            "time": [1],
+            "device": ["device_b"],
+            "region": ["west"],
+            "temperature": [2.0],
+        },
+    )
+
+    with TsFileDataFrame(
+        [str(path1), str(path2)],
+        show_progress=False,
+        use_index=dataframe_use_index,
+    ) as tsdf:
+        assert tsdf.list_timeseries() == [
+            "weather.device_a.east.temperature",
+            "weather.device_b.temperature",
+        ]
+        metadata = tsdf.list_timeseries_metadata()
+        assert metadata.loc["weather.device_a.east.temperature", "region"] == "east"
+        assert pd.isna(metadata.loc["weather.device_b.temperature", "region"])
+
+
 def test_dataset_rejects_tag_and_field_with_same_name(tmp_path, dataframe_use_index):
     # One name cannot be both a tag and a field of the same table, because the
     # persistent index keys columns by (table, name) and a duplicate would make
@@ -1719,7 +1801,7 @@ def test_dataset_rejects_tag_and_field_with_same_name(tmp_path, dataframe_use_in
 
     with pytest.raises(
         ValueError,
-        match="Column 'region' of table 'weather'.*TAG in some TsFiles and a FIELD",
+        match="Column 'region' of table 'weather'.*TAG in some TsFiles and a readable FIELD",
     ):
         TsFileDataFrame(
             [str(path1), str(path2)],
