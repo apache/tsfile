@@ -25,7 +25,7 @@ import heapq
 import os
 import sys
 from types import SimpleNamespace
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -122,30 +122,90 @@ def _series_lookup_hint(name: str) -> str:
     return f"Series not found: '{name}'. Use df.list_timeseries() to inspect available series."
 
 
-def _validate_table_schema(
-    existing: TableEntry, incoming: TableEntry, file_path: str
-) -> None:
-    """Reject same-name tables whose complete ordered schema differs."""
-    if (
-        existing.schema_columns
-        and incoming.schema_columns
-        and existing.schema_columns == incoming.schema_columns
-    ):
-        return
-    if (
-        not existing.schema_columns
-        and not incoming.schema_columns
-        and existing.tag_columns == incoming.tag_columns
-        and existing.tag_types == incoming.tag_types
-        and existing.field_columns == incoming.field_columns
-        and existing.field_types == incoming.field_types
-    ):
-        return
+def _union_field_columns(first: Iterable[str], second: Iterable[str]) -> List[str]:
+    """First-seen union of two field-column name sequences."""
+    merged: List[str] = []
+    seen = set()
+    for columns in (first, second):
+        for name in columns:
+            if name not in seen:
+                seen.add(name)
+                merged.append(name)
+    return merged
 
-    raise ValueError(
-        f"Incompatible schema for table '{incoming.table_name}' in '{file_path}'. "
-        f"Expected columns={list(existing.schema_columns)} but found "
-        f"columns={list(incoming.schema_columns)}."
+
+def _merge_table_model_entries(
+    existing: TableEntry, incoming: TableEntry, file_path: str
+) -> TableEntry:
+    """Union two per-file table-model schemas into one global table.
+
+    A TsFile registers only the columns it actually wrote, and independently
+    written files may come from different schema snapshots, so the same table
+    legitimately spans files with different column sets. The dataset never
+    interprets an authored schema: reads go through each file's own catalog,
+    and the global view only needs the table name, the positional tag values
+    that identify a device, the field names it can expose, and where every
+    (device, field) shard lives. The merge is therefore a union -- no FIELD
+    declaration is compared, validated, or carried forward:
+
+    - TAG columns are positional; a device is keyed by its ordered tag
+      *values*, never by column names. Files may only *append* trailing tags
+      (devices from files without them read the new tag as null), so the tag
+      list a file shares with earlier ones must name the same columns. A
+      different name at the same position means the same table name refers to
+      a different tag layout -- IoTDB never reorders tags -- and merging by
+      position would conflate unrelated devices, so it is rejected.
+    - FIELD columns are the union of the readable fields in first-seen order.
+      A device/field absent from a file simply has no shard and reads back as
+      NaN.
+
+    ``field_types`` and ``schema_columns`` are left empty, so persistent-index
+    construction derives column types from the physical data instead of a
+    declaration (``dataset/index.py`` has that fallback, plus its own
+    cross-shard physical-type check).
+    """
+    table_name = existing.table_name
+    shared_tag_count = min(len(existing.tag_columns), len(incoming.tag_columns))
+    for position in range(shared_tag_count):
+        existing_name = existing.tag_columns[position]
+        incoming_name = incoming.tag_columns[position]
+        if existing_name != incoming_name:
+            raise ValueError(
+                f"Table '{table_name}' in '{file_path}' declares tag column "
+                f"'{incoming_name}' at position {position} but earlier TsFiles "
+                f"declare '{existing_name}'. TsFiles of one table must agree on "
+                "the tag columns they share; a different name means the table "
+                "was recreated with a different tag layout, and merging by "
+                "position would conflate unrelated devices."
+            )
+    tag_columns = tuple(existing.tag_columns) + tuple(
+        incoming.tag_columns[shared_tag_count:]
+    )
+    tag_types = tuple(existing.tag_types) + tuple(incoming.tag_types[shared_tag_count:])
+
+    field_columns = _union_field_columns(existing.field_columns, incoming.field_columns)
+
+    # A readable field name cannot also be a tag of the same table: the
+    # persistent index keys columns by (table, name), so a duplicate would make
+    # series lookups ambiguous. Non-numeric fields never become columns here
+    # (they are neither exposed nor indexed), so they are not part of that
+    # namespace and are ignored instead of rejected.
+    tag_names = set(tag_columns)
+    for name in field_columns:
+        if name in tag_names:
+            raise ValueError(
+                f"Column '{name}' of table '{table_name}' in '{file_path}' is a "
+                "TAG in some TsFiles and a readable FIELD in others. A column "
+                "name cannot be both a tag and a field of the same table."
+            )
+
+    return TableEntry(
+        table_name=table_name,
+        tag_columns=tag_columns,
+        tag_types=tag_types,
+        field_columns=tuple(field_columns),
+        field_types=(),
+        schema_columns=(),
     )
 
 
@@ -166,12 +226,7 @@ def _merge_tree_table_entries(existing: TableEntry, incoming: TableEntry) -> Tab
     else:
         tag_columns, tag_types = existing.tag_columns, existing.tag_types
 
-    field_columns = list(existing.field_columns)
-    seen = set(field_columns)
-    for name in incoming.field_columns:
-        if name not in seen:
-            seen.add(name)
-            field_columns.append(name)
+    field_columns = _union_field_columns(existing.field_columns, incoming.field_columns)
 
     return TableEntry(
         table_name=existing.table_name,
@@ -216,7 +271,11 @@ def _register_reader(
                 existing_entry, table_entry
             )
         else:
-            _validate_table_schema(existing_entry, table_entry, file_path)
+            # Table-model files may register only the columns they physically
+            # wrote, so union this file's table into the cross-file view.
+            index.table_entries[table_entry.table_name] = _merge_table_model_entries(
+                existing_entry, table_entry, file_path
+            )
 
     for device_id, device_entry in enumerate(catalog.device_entries):
         table_entry = catalog.table_entries[device_entry.table_id]
@@ -246,9 +305,10 @@ def _register_reader(
     # Register every (device, field) pair the reader physically holds. The
     # logical series is keyed by the GLOBAL field index (resolved by measurement
     # name against the merged table), while the per-shard tuple keeps the
-    # reader-local field index for the read path. This lets tree shards with
-    # different field subsets/orders merge without mis-mapping measurements
-    # (for table model the global and local indices always coincide).
+    # reader-local field index for the read path. This lets shards with
+    # different field subsets/orders merge without mis-mapping measurements:
+    # tree files synthesize their own measurement order, and table-model files
+    # may register only the columns they wrote.
     for device_id, field_idx in catalog.series_stats_by_ref:
         device_entry = catalog.device_entries[device_id]
         reader_table_entry = catalog.table_entries[device_entry.table_id]

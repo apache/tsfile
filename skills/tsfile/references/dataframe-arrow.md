@@ -70,6 +70,18 @@ subset view to close shared readers. Boolean dataset selection is positional:
 build the mask from `ds[...]`, as above; use `list_timeseries_metadata()` for
 named inspection rather than as the mask source.
 
+Table-model files may register only the columns they actually wrote, so the
+same table can span files with different column sets. The dataset unions the
+FIELD columns in first-seen order and reads a device/field missing from a file
+as NaN. TAG columns are positional: files may append trailing tags, and devices
+from files without them read back with a null tag, but files must agree on the
+tag columns they share — a different name at the same position means the table
+name points at a different tag layout and is rejected. A name that is a TAG in
+one file and a readable (numeric) FIELD in another is rejected as well;
+non-numeric fields are never exposed or indexed, so they do not take part in
+that check. FIELD declarations are never compared otherwise. Duplicate
+timestamps for one logical series across files remain rejected.
+
 `use_index=True` builds/reuses an index (default `False`). Indexed mode assumes
 immutable sources (`trust_index=True`); use `False` for generation checks and
 stale-index rebuilds. It also accepts `max_prepared_series`, `descriptor_cache_size`,
