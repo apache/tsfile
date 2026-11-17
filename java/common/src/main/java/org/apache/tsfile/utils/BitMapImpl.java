@@ -21,6 +21,8 @@ package org.apache.tsfile.utils;
 
 import org.apache.tsfile.i18n.Messages;
 
+import java.nio.ByteBuffer;
+
 abstract class BitMapImpl {
 
   protected int size;
@@ -38,6 +40,8 @@ abstract class BitMapImpl {
   abstract int getByteArrayLength();
 
   abstract byte getByte(int index);
+
+  abstract void serializeTo(ByteBuffer buffer, int byteCount);
 
   abstract boolean isMarked(int position);
 

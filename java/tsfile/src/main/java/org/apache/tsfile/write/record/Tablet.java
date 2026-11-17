@@ -682,8 +682,7 @@ public class Tablet implements Accountable {
         } else {
           size = Math.addExact(size, Byte.BYTES);
           size = Math.addExact(size, Integer.BYTES);
-          size = Math.addExact(size, Integer.BYTES);
-          size = Math.addExact(size, BitMap.getSizeOfBytes(rowSize));
+          size = Math.addExact(size, bitMaps[i].serializedSize(rowSize));
         }
       }
     }
@@ -790,9 +789,7 @@ public class Tablet implements Accountable {
         ReadWriteIOUtils.write(BytesUtils.boolToByte(hasNull), buffer);
         if (hasNull) {
           ReadWriteIOUtils.write(rowSize, buffer);
-          final byte[] bytes = bitMaps[i].getTruncatedByteArray(rowSize);
-          ReadWriteIOUtils.write(bytes.length, buffer);
-          buffer.put(bytes);
+          bitMaps[i].serializeTo(buffer, rowSize);
         }
       }
     }
