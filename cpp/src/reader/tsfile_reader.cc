@@ -337,6 +337,11 @@ int TsFileReader::prepare_table_series(
     if (RET_FAIL(device_iterator.next(device_meta))) {
         return ret;
     }
+    // next() transfers ownership of the node; destroy it on every exit path.
+    // The iterator only destroys nodes it still holds, and its arena releases
+    // raw storage without running destructors.
+    std::shared_ptr<MetaIndexNode> owned_device_node(
+        device_meta.second, MetaIndexNode::self_deleter);
     if (RET_FAIL(device_iterator.has_next(has_next))) {
         return ret;
     }

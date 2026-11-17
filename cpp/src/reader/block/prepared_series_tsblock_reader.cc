@@ -171,6 +171,29 @@ int PreparedSeriesTsBlockReader::has_next(bool& has_next) {
         if (ret != common::E_OK) {
             return ret;
         }
+        // A page boundary can leave the block short of its capacity, while the
+        // regular table reader keeps filling it from the next page. Continue
+        // decoding into the same block so cached queries keep the caller's
+        // batch_size block boundaries.
+        while (block_ != nullptr && block_->get_row_count() > 0 &&
+               block_->get_row_count() < desired_rows) {
+            const uint32_t rows_before = block_->get_row_count();
+            int more = ssi_->get_next(block_, true);
+            if (more == common::E_NO_MORE_DATA) {
+                break;
+            }
+            if (more != common::E_OK) {
+                return more;
+            }
+            if (block_ == nullptr) {
+                break;
+            }
+            if (block_->get_row_count() == rows_before) {
+                // No row was appended; stop instead of spinning if the reader
+                // cannot make progress on the same block.
+                break;
+            }
+        }
         if (block_ != nullptr && block_->get_row_count() > 0) {
             if (remaining_limit_ > 0) {
                 remaining_limit_ -= static_cast<int>(block_->get_row_count());
