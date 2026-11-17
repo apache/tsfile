@@ -1418,9 +1418,9 @@ def test_dataset_unions_overlapping_field_subsets_for_different_devices(
 
 
 def test_dataset_unions_tag_columns_with_null_padding(tmp_path, dataframe_use_index):
-    # TAG columns define device identity: a file written before a trailing tag
-    # existed keeps its shorter device ids, and the dataset pads the missing
-    # tag values with null.
+    # Device identity is the ordered tuple of tag *values*, not the tag column
+    # names: a file written before a trailing tag existed keeps its shorter
+    # device ids, and the dataset pads the missing tag values with null.
     region_only = tmp_path / "region.tsfile"
     region_and_site = tmp_path / "region_site.tsfile"
     _write_table_rows_file(
@@ -1468,6 +1468,75 @@ def test_dataset_unions_tag_columns_with_null_padding(tmp_path, dataframe_use_in
             assert metadata.loc["weather.east.s1.temperature", "site"] == "s1"
 
 
+def test_dataset_unions_incremental_tag_appends_across_three_files(
+    tmp_path, dataframe_use_index
+):
+    # The merge is incremental: the third file is merged against an entry that
+    # already unions two files, so an appended tag must survive the second
+    # merge instead of the later file's shorter tag list winning.
+    first = tmp_path / "one_tag.tsfile"
+    second = tmp_path / "two_tags.tsfile"
+    third = tmp_path / "three_tags.tsfile"
+    _write_table_rows_file(
+        first,
+        [
+            ColumnSchema("region", TSDataType.STRING, ColumnCategory.TAG),
+            _WEATHER_TEMPERATURE,
+        ],
+        {"time": [0], "region": ["east"], "temperature": [1.0]},
+    )
+    _write_table_rows_file(
+        second,
+        [
+            ColumnSchema("region", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("site", TSDataType.STRING, ColumnCategory.TAG),
+            _WEATHER_TEMPERATURE,
+        ],
+        {"time": [1], "region": ["east"], "site": ["s1"], "temperature": [2.0]},
+    )
+    _write_table_rows_file(
+        third,
+        [
+            ColumnSchema("region", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("site", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("zone", TSDataType.STRING, ColumnCategory.TAG),
+            _WEATHER_HUMIDITY,
+        ],
+        {
+            "time": [2],
+            "region": ["east"],
+            "site": ["s1"],
+            "zone": ["z1"],
+            "humidity": [3.0],
+        },
+    )
+
+    expected = {
+        "weather.east.temperature": (0, 1.0),
+        "weather.east.s1.temperature": (1, 2.0),
+        "weather.east.s1.z1.humidity": (2, 3.0),
+    }
+    for paths in (
+        [str(first), str(second), str(third)],
+        [str(third), str(second), str(first)],
+    ):
+        with TsFileDataFrame(
+            paths, show_progress=False, use_index=dataframe_use_index
+        ) as tsdf:
+            assert set(tsdf.list_timeseries()) == set(expected)
+            for name, (timestamp, value) in expected.items():
+                series = tsdf[name]
+                np.testing.assert_equal(series.timestamps, np.array([timestamp]))
+                np.testing.assert_equal(series[:], np.array([value]))
+            metadata = tsdf.list_timeseries_metadata()
+            assert list(metadata.columns)[-3:] == ["region", "site", "zone"]
+            assert pd.isna(metadata.loc["weather.east.temperature", "site"])
+            assert pd.isna(metadata.loc["weather.east.temperature", "zone"])
+            assert pd.isna(metadata.loc["weather.east.s1.temperature", "zone"])
+            assert metadata.loc["weather.east.s1.z1.humidity", "site"] == "s1"
+            assert metadata.loc["weather.east.s1.z1.humidity", "zone"] == "z1"
+
+
 def test_dataset_unions_nonnumeric_declared_columns_without_exposing_them(
     tmp_path, dataframe_use_index
 ):
@@ -1510,6 +1579,17 @@ def test_dataset_unions_nonnumeric_declared_columns_without_exposing_them(
         assert tsdf.list_timeseries() == ["weather.device_a.temperature"]
         entry = tsdf._index.table_entries["weather"]
         assert entry.field_columns == ("temperature",)
+        if dataframe_use_index:
+            # The persisted index defines a merged table's columns as its tags
+            # plus the readable fields only; declared non-numeric columns are
+            # not carried over.
+            assert [(name, role) for name, _, role in entry.schema_columns] == [
+                ("device", int(ColumnCategory.TAG)),
+                ("temperature", int(ColumnCategory.FIELD)),
+            ]
+        else:
+            # The in-memory merged entry carries no declaration at all.
+            assert entry.schema_columns == ()
 
 
 def test_dataset_skips_declared_field_without_values(tmp_path, dataframe_use_index):

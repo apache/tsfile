@@ -25,7 +25,7 @@ import heapq
 import os
 import sys
 from types import SimpleNamespace
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -122,6 +122,18 @@ def _series_lookup_hint(name: str) -> str:
     return f"Series not found: '{name}'. Use df.list_timeseries() to inspect available series."
 
 
+def _union_field_columns(first: Iterable[str], second: Iterable[str]) -> List[str]:
+    """First-seen union of two field-column name sequences."""
+    merged: List[str] = []
+    seen = set()
+    for columns in (first, second):
+        for name in columns:
+            if name not in seen:
+                seen.add(name)
+                merged.append(name)
+    return merged
+
+
 def _merge_table_model_entries(
     existing: TableEntry, incoming: TableEntry, file_path: str
 ) -> TableEntry:
@@ -171,12 +183,7 @@ def _merge_table_model_entries(
     )
     tag_types = tuple(existing.tag_types) + tuple(incoming.tag_types[shared_tag_count:])
 
-    field_columns = list(existing.field_columns)
-    seen = set(field_columns)
-    for name in incoming.field_columns:
-        if name not in seen:
-            seen.add(name)
-            field_columns.append(name)
+    field_columns = _union_field_columns(existing.field_columns, incoming.field_columns)
 
     # A name cannot be both a tag and a field of the same table: the
     # persistent index keys columns by (table, name), so a duplicate would make
@@ -218,12 +225,7 @@ def _merge_tree_table_entries(existing: TableEntry, incoming: TableEntry) -> Tab
     else:
         tag_columns, tag_types = existing.tag_columns, existing.tag_types
 
-    field_columns = list(existing.field_columns)
-    seen = set(field_columns)
-    for name in incoming.field_columns:
-        if name not in seen:
-            seen.add(name)
-            field_columns.append(name)
+    field_columns = _union_field_columns(existing.field_columns, incoming.field_columns)
 
     return TableEntry(
         table_name=existing.table_name,
