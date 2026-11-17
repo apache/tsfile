@@ -21,16 +21,35 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <cstdint>
+#include <cstdio>
 #include <limits>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
+#include "common/global.h"
+#include "common/record.h"
+#include "common/schema.h"
 #include "common/statistic.h"
+#include "reader/expression.h"
+#include "reader/tsfile_reader.h"
+#include "writer/tsfile_writer.h"
+
+#if defined(_WIN32)
+#include <process.h>
+#define TIME_OP_GETPID _getpid
+#else
+#include <unistd.h>
+#define TIME_OP_GETPID getpid
+#endif
 
 namespace storage {
 namespace {
+
+using namespace common;
 
 using Range = std::pair<int64_t, int64_t>;
 
@@ -204,8 +223,9 @@ TEST(TimeOperatorTest, TimeNotEqSemantics) {
     EXPECT_TRUE(neq.satisfy(4, 0));
     EXPECT_FALSE(neq.satisfy(3, common::String("ignored")));
     EXPECT_TRUE(neq.satisfy_start_end_time(1, 2));
-    EXPECT_FALSE(neq.satisfy_start_end_time(3, 5));
-    EXPECT_FALSE(neq.satisfy_start_end_time(1, 3));
+    EXPECT_FALSE(neq.satisfy_start_end_time(3, 3));
+    EXPECT_TRUE(neq.satisfy_start_end_time(3, 5));
+    EXPECT_TRUE(neq.satisfy_start_end_time(1, 3));
     EXPECT_TRUE(neq.contain_start_end_time(4, 5));
     EXPECT_TRUE(neq.contain_start_end_time(1, 2));
     EXPECT_FALSE(neq.contain_start_end_time(1, 4));
@@ -317,6 +337,75 @@ TEST(TimeOperatorTest, BatchHandlesVectorWidthAndTail) {
     TimeBetween between(2, 4, /*not_between=*/false);
     EXPECT_EQ(run_batch(between, five_times),
               (std::vector<bool>{false, true, true, false, false}));
+}
+
+std::string unique_time_operator_file() {
+    static std::atomic<uint64_t> counter{0};
+    return "time_operator_query_" + std::to_string(TIME_OP_GETPID()) + "_" +
+           std::to_string(counter.fetch_add(1)) + ".tsfile";
+}
+
+// Regression: TimeNotEq::satisfy_start_end_time() used to return false when
+// the excluded value was either end of the block range. Chunk readers skip a
+// block on false, so `time != 3` dropped every row of the block starting at 3.
+TEST(TimeOperatorTest, TimeNotEqDoesNotSkipOverlappingBlocks) {
+    ASSERT_EQ(libtsfile_init(), E_OK);
+    const std::string file = unique_time_operator_file();
+    const std::string device = "root.time_operator";
+    const std::string measurement = "v";
+    std::remove(file.c_str());
+
+    {
+        TsFileWriter writer;
+        ASSERT_EQ(writer.open(file), E_OK);
+        MeasurementSchema schema(measurement, INT64);
+        ASSERT_EQ(writer.register_timeseries(device, schema), E_OK);
+        for (int64_t t = 3; t <= 302; ++t) {
+            TsRecord record(t, device);
+            record.add_point(measurement, static_cast<int64_t>(t));
+            ASSERT_EQ(writer.write_record(record), E_OK);
+        }
+        ASSERT_EQ(writer.flush(), E_OK);
+        ASSERT_EQ(writer.close(), E_OK);
+    }
+
+    {
+        TsFileReader reader;
+        ASSERT_EQ(reader.open(file), E_OK);
+        Path path(device + "." + measurement);
+        std::vector<Path> paths{path};
+        ResultSet* result = nullptr;
+        ASSERT_EQ(reader.query(QueryExpression::create(
+                                   paths, new Expression(SERIES_EXPR, path,
+                                                         new TimeNotEq(3))),
+                               result),
+                  E_OK);
+        ASSERT_NE(result, nullptr);
+
+        int64_t expected_time = 4;
+        int rows = 0;
+        bool has_next = false;
+        while (true) {
+            ASSERT_EQ(result->next(has_next), E_OK);
+            if (!has_next) {
+                break;
+            }
+            RowRecord* record = result->get_row_record();
+            ASSERT_NE(record, nullptr);
+            ASSERT_EQ(record->get_timestamp(), expected_time);
+            ASSERT_EQ(record->get_field(1)->value_.lval_, expected_time);
+            ++expected_time;
+            ++rows;
+        }
+        EXPECT_EQ(rows, 299);
+        EXPECT_EQ(expected_time, 303);
+
+        reader.destroy_query_data_set(result);
+        ASSERT_EQ(reader.close(), E_OK);
+    }
+
+    std::remove(file.c_str());
+    libtsfile_destroy();
 }
 
 }  // namespace

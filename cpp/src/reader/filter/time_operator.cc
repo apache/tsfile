@@ -233,7 +233,11 @@ bool TimeNotEq::satisfy(int64_t time, common::String value) {
 }
 
 bool TimeNotEq::satisfy_start_end_time(int64_t start_time, int64_t end_time) {
-    return value_ != end_time && value_ != start_time;
+    // "Could any time in [start, end] satisfy the filter?" Only a
+    // single-point range can be excluded completely; any wider range contains
+    // a timestamp different from value_, and chunk readers skip the whole
+    // block when this returns false.
+    return start_time != end_time || value_ != start_time;
 }
 
 bool TimeNotEq::contain_start_end_time(int64_t start_time, int64_t end_time) {
