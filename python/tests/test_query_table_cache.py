@@ -361,3 +361,44 @@ def test_cached_result_resolves_bare_column_names():
 
         assert lookup(cached) in (True, False)
         assert lookup(cached) == lookup(uncached)
+
+
+def test_wide_projection_keeps_regular_path(tmp_path):
+    # get_timeseries_indexes() bulk-loads 16+ measurements; the cache prepares
+    # one column at a time, so wide projections must not use it.
+    path = str(tmp_path / "cache_wide.tsfile")
+    fields = [f"f{i}" for i in range(16)]
+    names = ["device"] + fields
+    types = [TSDataType.STRING] + [TSDataType.DOUBLE] * len(fields)
+    schema = TableSchema(
+        "wide",
+        [ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG)]
+        + [
+            ColumnSchema(name, TSDataType.DOUBLE, ColumnCategory.FIELD)
+            for name in fields
+        ],
+    )
+    with TsFileTableWriter(path, schema) as writer:
+        tablet = Tablet(names, types, 10)
+        for i in range(10):
+            tablet.add_timestamp(i, i)
+            tablet.add_value_by_name("device", i, "d0")
+            for name in fields:
+                tablet.add_value_by_name(name, i, float(i))
+        writer.write_table(tablet)
+
+    def batches(cache_size):
+        with fresh_reader(cache_size, path) as reader:
+            with reader.query_table(
+                "wide", fields, tag_filter=tag_eq("device", "d0"), batch_size=4
+            ) as result:
+                out = []
+                while True:
+                    batch = result.read_arrow_batch()
+                    if batch is None:
+                        break
+                    out.append(batch.to_pydict())
+                assert reader.prepared_query_cache_size() == 0
+                return out
+
+    assert batches(None) == batches(0)

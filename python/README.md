@@ -250,8 +250,9 @@ field columns on the reader. Repeated queries for the same
 column is served by `query_prepared`, several aligned columns by
 `query_prepared_multi`. The cache is an LRU bounded by
 `TSFILE_QUERY_CACHE_SIZE` (default `1024`; `0` disables it), and results are
-unchanged. Queries that also select a TAG column, row-by-row queries, and
-filters that select zero or several devices keep the regular path.
+unchanged. Queries that also select a TAG column, row-by-row queries, filters
+that select zero or several devices, and projections of 16 or more field
+columns keep the regular path.
 
 ```python
 reader = TsFileReader("data.tsfile")

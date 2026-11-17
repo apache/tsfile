@@ -94,7 +94,8 @@ with TsFileReader("data.tsfile") as reader:
   reuse prepared series through a per-reader LRU
   (`TSFILE_QUERY_CACHE_SIZE`, default `1024`, `0` disables). TAG-column
   selections, row-by-row mode (`batch_size <= 0`) and filters matching zero or
-  several devices keep the regular path. For explicit control,
+  several devices keep the regular path, as do projections of 16 or more field
+  columns. For explicit control,
   `prepare_table_series(table, column, tag_filter)` resolves one column and
   returns a handle for `query_prepared`; `query_prepared_multi([...])` serves
   several aligned columns. Both accept `block_rows` to bound each returned

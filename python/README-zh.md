@@ -191,7 +191,8 @@ with fsspec.open("s3://bucket/example.tsfile", "rb") as source:
 对同一 (表, tag 过滤条件, 列组合) 的重复查询不再重新解析设备与 timeseries 索引；
 单列走 `query_prepared`，多列走 `query_prepared_multi`。缓存是按
 `TSFILE_QUERY_CACHE_SIZE` 限制的 LRU（默认 `1024`，`0` 关闭），查询结果不变。
-同时选择 TAG 列、行模式查询、以及过滤命中 0 个或多个设备的情况保持原路径。
+同时选择 TAG 列、行模式查询、以及过滤命中 0 个或多个设备的情况保持原路径；
+列数达到 16 个及以上的宽投影同样走原路径。
 
 ```python
 reader = TsFileReader("data.tsfile")

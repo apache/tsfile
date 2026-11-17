@@ -60,6 +60,12 @@ def _query_cache_size():
 # the caller instead of silently falling back to a second read.
 _CACHE_FALLBACK_CODES = frozenset((4, 27, 40, 44, 45, 49, 50))
 
+# TsFileIOReader::get_timeseries_indexes() bulk-loads a device's indexes for 16
+# or more measurements. The cache prepares one column at a time, so a wide
+# projection would reload the device index per column and never reach that
+# path; keep those queries on the regular path.
+_PREPARED_CACHE_MAX_COLUMNS = 16
+
 cdef class ResultSetPy:
     """
     Get data from a query result. When reader run a query, a query handler will return.
@@ -421,7 +427,9 @@ cdef class TsFileReaderPy:
 
         Batch queries whose tag filter selects exactly one device reuse cached
         prepared series, so repeated point queries skip the device and
-        timeseries-index lookup. Any number of field columns is supported; a
+        timeseries-index lookup. Any number of field columns is supported, but
+        projections of 16 or more columns keep the regular path (the cache
+        prepares one column at a time and cannot use the bulk index load). A
         query that also selects a TAG column, or whose filter selects several
         devices, keeps the regular path. The cache size is set by
         ``TSFILE_QUERY_CACHE_SIZE`` (default 1024, 0 disables it).
@@ -434,7 +442,8 @@ cdef class TsFileReaderPy:
         cdef TagFilterHandle c_tag_filter = NULL
         cdef ResultSetPy pyresult
         if (self._prepared_query_cache_size > 0 and batch_size > 0
-                and len(column_names) > 0 and tag_filter is not None):
+                and 0 < len(column_names) < _PREPARED_CACHE_MAX_COLUMNS
+                and tag_filter is not None):
             key = self._prepared_query_key(table_name, column_names, tag_filter)
             if key is not None:
                 prepared = self._prepared_query_for(key, tag_filter)
@@ -452,6 +461,7 @@ cdef class TsFileReaderPy:
                         # by dropping the cache's reference: another thread may
                         # still be inside a native call that borrows it.
                         self._prepared_query_cache[key] = None
+                        self._trim_prepared_query_cache()
                     else:
                         pyresult.metadata.set_table_name(table_name)
                         # Prepared result sets are created with tree-model name
@@ -543,12 +553,15 @@ cdef class TsFileReaderPy:
         # or several devices, or a requested column is not a stored field, so
         # the regular query path stays in charge.
         self._prepared_query_cache[key] = prepared
-        while len(self._prepared_query_cache) > self._prepared_query_cache_size:
-            # Eviction drops the cache's reference only. Explicitly closing a
-            # handle here could free it under a concurrent native call that
-            # borrowed the same entry with the GIL released.
-            self._prepared_query_cache.popitem(last=False)
+        self._trim_prepared_query_cache()
         return prepared
+
+    cdef void _trim_prepared_query_cache(self):
+        # Eviction drops the cache's reference only. Explicitly closing a
+        # handle here could free it under a concurrent native call that
+        # borrowed the same entry with the GIL released.
+        while len(self._prepared_query_cache) > self._prepared_query_cache_size:
+            self._prepared_query_cache.popitem(last=False)
 
     def _prepare_series_group(self, table_name, column_names, tag_filter):
         """Prepare every requested column of one single-device query."""
