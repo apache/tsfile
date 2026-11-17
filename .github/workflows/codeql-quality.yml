@@ -1,0 +1,68 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+# Maintainability/reliability sweep over the default branch. Kept out of
+# codeql.yml so pull requests keep the fast default suite, and uploaded under
+# its own analysis category so it never overwrites the security scan results.
+name: CodeQL Quality
+
+on:
+  schedule:
+    # Daily, off-peak UTC. Public repositories lose the schedule after 60 days
+    # without activity; push a commit or re-enable it if the runs stop.
+    - cron: '37 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ (matrix.language == 'c-cpp' && 'ubuntu-22.04') || 'ubuntu-latest' }}
+    timeout-minutes: ${{ 360 }}
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - language: c-cpp
+          build-mode: autobuild
+        - language: java
+          build-mode: none
+        - language: python
+          build-mode: none
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v7
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v4.38.2
+      with:
+        languages: ${{ matrix.language }}
+        build-mode: ${{ matrix.build-mode }}
+        config-file: ./.github/codeql/codeql-quality-config.yml
+        # Superset of the default suite: also runs maintainability/reliability queries.
+        queries: security-and-quality
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v4.38.2
+      with:
+        category: "/language:${{matrix.language}}/quality"
