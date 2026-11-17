@@ -31,16 +31,16 @@
 
 ### 在 Maven 中添加 TsFile 依赖
 
-当前发布版本是 `2.1.0`，可以这样引用
+当前发布版本是 `2.5.0`，可以这样引用
 
 ```xml  
 <dependencies>
     <dependency>
       <groupId>org.apache.tsfile</groupId>
       <artifactId>tsfile</artifactId>
-      <version>2.1.0</version>
+      <version>2.5.0</version>
     </dependency>
-<dependencies>
+</dependencies>
 ```
 
 
@@ -60,25 +60,25 @@
 2. 注册时间序列
     
    ```java
-   List<MeasurementSchema> schema1 = new ArrayList<>();
-   schemas.add(new MeasurementSchema("电压", TSDataType.FLOAT));
-   schemas.add(new MeasurementSchema("电流", TSDataType.FLOAT));
+   List<IMeasurementSchema> schema1 = new ArrayList<>();
+   schema1.add(new MeasurementSchema("电压", TSDataType.FLOAT));
+   schema1.add(new MeasurementSchema("电流", TSDataType.FLOAT));
    tsFileWriter.registerTimeseries(new Path("太阳能板1"), schema1);
    
-   List<MeasurementSchema> schema2 = new ArrayList<>();
-   schemas.add(new MeasurementSchema("电压", TSDataType.FLOAT));
-   schemas.add(new MeasurementSchema("电流", TSDataType.FLOAT));
-   schemas.add(new MeasurementSchema("风速", TSDataType.FLOAT));
+   List<IMeasurementSchema> schema2 = new ArrayList<>();
+   schema2.add(new MeasurementSchema("电压", TSDataType.FLOAT));
+   schema2.add(new MeasurementSchema("电流", TSDataType.FLOAT));
+   schema2.add(new MeasurementSchema("风速", TSDataType.FLOAT));
    tsFileWriter.registerTimeseries(new Path("风机1"), schema2);
    ```
 
 3. 写入数据
   
     ```java
-   TSRecord tsRecord = new TSRecord(1, "太阳能板1");
-   tsRecord.addTuple(DataPoint.getDataPoint(TSDataType.FLOAT, "电压", 1.1f));
-   tsRecord.addTuple(DataPoint.getDataPoint(TSDataType.FLOAT, "电流", 2.2f));
-   tsFileWriter.write(tsRecord);
+   TSRecord tsRecord = new TSRecord("太阳能板1", 1);
+   tsRecord.addTuple(DataPoint.getDataPoint(TSDataType.FLOAT, "电压", "1.1"));
+   tsRecord.addTuple(DataPoint.getDataPoint(TSDataType.FLOAT, "电流", "2.2"));
+   tsFileWriter.writeRecord(tsRecord);
    ```
 
 4. 调用`close`方法来关闭文件，关闭后才能进行查询。
@@ -102,15 +102,15 @@
 
    ```java
    TsFileSequenceReader reader = new TsFileSequenceReader(path);
-   TsFileReader tsFileReader = new TsFileReader(reader)；
+   TsFileReader tsFileReader = new TsFileReader(reader);
    ```
 
 2. 构造查询条件
 
    ```java
       ArrayList<Path> paths = new ArrayList<>();
-      paths.add(new Path("太阳能板1", "电压"));
-      paths.add(new Path("太阳能板1", "电流"));
+      paths.add(new Path("太阳能板1", "电压", true));
+      paths.add(new Path("太阳能板1", "电流", true));
    
       IExpression timeFilter = BinaryExpression.and(
       new GlobalTimeExpression(TimeFilterApi.gtEq(1L)),
@@ -122,7 +122,7 @@
 3. 查询数据
 
    ```java
-   QueryDataSet queryDataSet = readTsFile.query(queryExpression);
+   QueryDataSet queryDataSet = tsFileReader.query(queryExpression);
    while (queryDataSet.hasNext()) {
         queryDataSet.next();
    }

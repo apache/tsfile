@@ -20,6 +20,7 @@
 #include "cwrapper/tsfile_cwrapper.h"
 
 #include <fcntl.h>
+#include <file/memory_random_access_write_file.h>
 #include <file/write_file.h>
 #include <reader/qds_without_timegenerator.h>
 #include <writer/tsfile_table_writer.h>
@@ -146,6 +147,11 @@ int set_global_compression(uint8_t compression) {
     return common::set_global_compression(compression);
 }
 
+int set_allow_non_decreasing_timestamps(bool enabled) {
+    common::set_allow_non_decreasing_timestamps(enabled);
+    return common::E_OK;
+}
+
 ERRNO tsfile_set_file_read_backend(int32_t backend) {
     switch (backend) {
         case TSFILE_READ_BACKEND_AUTO:
@@ -162,6 +168,32 @@ ERRNO tsfile_set_file_read_backend(int32_t backend) {
 
 TsFileReadBackend tsfile_get_file_read_backend() {
     return static_cast<TsFileReadBackend>(common::get_file_read_backend());
+}
+
+ERRNO tsfile_set_parallel_read_enabled(int32_t enabled) {
+    common::set_parallel_read_enabled(enabled != 0);
+    return common::E_OK;
+}
+
+int tsfile_get_parallel_read_enabled() {
+    return common::get_parallel_read_enabled() ? 1 : 0;
+}
+
+ERRNO tsfile_set_parallel_write_enabled(int32_t enabled) {
+    common::set_parallel_write_enabled(enabled != 0);
+    return common::E_OK;
+}
+
+int tsfile_get_parallel_write_enabled() {
+    return common::get_parallel_write_enabled() ? 1 : 0;
+}
+
+ERRNO tsfile_set_thread_count(int32_t count) {
+    return common::set_thread_count(count);
+}
+
+int32_t tsfile_get_thread_count() {
+    return common::g_config_value_.thread_count_;
 }
 
 WriteFile write_file_new(const char* pathname, ERRNO* err_code) {
@@ -193,6 +225,56 @@ WriteFile write_file_new(const char* pathname, ERRNO* err_code) {
     }
     *err_code = ret;
     return file;
+}
+
+WriteFile write_file_new_memory(ERRNO* err_code) {
+    if (err_code == nullptr) {
+        return nullptr;
+    }
+    // Same lazy initialization as write_file_new(): a writer built on this
+    // handle must not see the zero-initialized global config of a process
+    // that has not touched any other API yet.
+    init_tsfile_config();
+    storage::MemoryRandomAccessWriteFile* file =
+        new (std::nothrow) storage::MemoryRandomAccessWriteFile();
+    if (file == nullptr) {
+        *err_code = common::E_OOM;
+        return nullptr;
+    }
+    *err_code = common::E_OK;
+    return file;
+}
+
+ERRNO write_file_get_buffer(WriteFile write_file, uint8_t** buffer,
+                            uint32_t* length) {
+    if (buffer == nullptr || length == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    *buffer = nullptr;
+    *length = 0;
+    if (write_file == nullptr) {
+        return common::E_INVALID_ARG;
+    }
+    auto* sink = static_cast<storage::RandomAccessWriteFile*>(write_file);
+    auto* mem = dynamic_cast<storage::MemoryRandomAccessWriteFile*>(sink);
+    if (mem == nullptr) {
+        return common::E_NOT_SUPPORT;
+    }
+    const std::vector<char>& data = mem->data();
+    if (data.empty()) {
+        return common::E_OK;
+    }
+    if (data.size() > 0xFFFFFFFFULL) {
+        return common::E_OVERFLOW;
+    }
+    void* copy = malloc(data.size());
+    if (copy == nullptr) {
+        return common::E_OOM;
+    }
+    std::memcpy(copy, data.data(), data.size());
+    *buffer = static_cast<uint8_t*>(copy);
+    *length = static_cast<uint32_t>(data.size());
+    return common::E_OK;
 }
 
 TsFileWriter tsfile_writer_new(WriteFile file, TableSchema* schema,
@@ -228,7 +310,8 @@ TsFileWriter tsfile_writer_new(WriteFile file, TableSchema* schema,
             new storage::TableSchema(schema->table_name, column_schemas));
         std::unique_ptr<storage::TsFileTableWriter> table_writer(
             new storage::TsFileTableWriter(
-                static_cast<storage::WriteFile*>(file), table_schema.get()));
+                static_cast<storage::RandomAccessWriteFile*>(file),
+                table_schema.get()));
         *err_code = table_writer->get_error();
         if (*err_code != common::E_OK) {
             return nullptr;
@@ -275,8 +358,8 @@ TsFileWriter tsfile_writer_new_with_memory_threshold(WriteFile file,
             new storage::TableSchema(schema->table_name, column_schemas));
         std::unique_ptr<storage::TsFileTableWriter> table_writer(
             new storage::TsFileTableWriter(
-                static_cast<storage::WriteFile*>(file), table_schema.get(),
-                memory_threshold));
+                static_cast<storage::RandomAccessWriteFile*>(file),
+                table_schema.get(), memory_threshold));
         *err_code = table_writer->get_error();
         if (*err_code != common::E_OK) {
             return nullptr;
@@ -2364,7 +2447,7 @@ void free_column_schema(ColumnSchema schema) { free(schema.column_name); }
 void tsfile_free_buffer(void* buffer) { free(buffer); }
 
 void free_write_file(WriteFile* write_file) {
-    auto f = static_cast<storage::WriteFile*>(*write_file);
+    auto f = static_cast<storage::RandomAccessWriteFile*>(*write_file);
     delete f;
     *write_file = nullptr;
 }
@@ -2504,9 +2587,8 @@ ERRNO _tsfile_writer_write_ts_record(TsFileWriter writer, TsRecord data) {
 ERRNO _tsfile_writer_close(TsFileWriter writer) {
     auto* w = static_cast<storage::TsFileWriter*>(writer);
     int ret = w->close();
-    if (ret != common::E_OK) {
-        return ret;
-    }
+    // Release the writer even when close() failed: the handle must not leak,
+    // and destroy() is the documented cleanup path for a failed close.
     delete w;
     return ret;
 }

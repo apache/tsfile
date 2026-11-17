@@ -31,6 +31,8 @@
 @REM     e.g. to debug Maven itself, use
 @REM set MAVEN_OPTS=-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=8000
 @REM MAVEN_SKIP_RC - flag to disable loading of mavenrc files
+@REM CMAKE_BUILD_PARALLEL_LEVEL - parallel jobs for the C++ (CMake) build; set to
+@REM     the host core count when unset
 @REM ----------------------------------------------------------------------------
 
 @REM Begin all REM lines with '@' in case MAVEN_BATCH_ECHO is 'on'
@@ -153,6 +155,10 @@ if exist %WRAPPER_JAR% (
     )
 )
 @REM End of extension
+
+@REM Let the native (C++) build use every core unless the caller pinned a level.
+@REM Guard on NUMBER_OF_PROCESSORS so the variable is never defined but empty.
+if not defined CMAKE_BUILD_PARALLEL_LEVEL if defined NUMBER_OF_PROCESSORS set "CMAKE_BUILD_PARALLEL_LEVEL=%NUMBER_OF_PROCESSORS%"
 
 @REM Provide a "standardized" way to retrieve the CLI args that will
 @REM work with both Windows and non-Windows executions.

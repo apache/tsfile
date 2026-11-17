@@ -33,6 +33,78 @@ class DeviceQueryTask;
 class MeasurementColumnContext;
 class IdColumnContext;
 
+// One output TsBlock shared by every device a reader visits. A device-ordered
+// scan builds the same time+value layout for each series; allocating a fresh
+// block (and faulting in its per-column buffers) per device is a large share of
+// the query cost once the table is wide, so the layout is kept and only rebuilt
+// when the column count or value types change.
+class ReusableTsBlock {
+   public:
+    ReusableTsBlock() {}
+    ~ReusableTsBlock() { release(); }
+    ReusableTsBlock(const ReusableTsBlock&) = delete;
+    ReusableTsBlock& operator=(const ReusableTsBlock&) = delete;
+
+    // Returns a block matching `wanted` (time + value columns), reusing the
+    // previous buffers when the shape matches. The caller resets it before use.
+    common::TsBlock* acquire(const common::TupleDesc& wanted,
+                             uint32_t max_rows) {
+        bool rebuild = block_ == nullptr || max_rows_ != max_rows ||
+                       desc_.get_column_count() != wanted.get_column_count();
+        if (!rebuild) {
+            for (uint32_t i = 0; i < wanted.get_column_count(); i++) {
+                if (desc_[i].data_type_ != wanted[i].data_type_) {
+                    rebuild = true;
+                    break;
+                }
+            }
+        }
+        if (rebuild) {
+            release();
+            for (uint32_t i = 0; i < wanted.get_column_count(); i++) {
+                desc_.push_back(wanted[i]);
+            }
+            max_rows_ = max_rows;
+            block_ = new common::TsBlock(&desc_, max_rows_);
+            if (block_->init() != common::E_OK) {
+                delete block_;
+                block_ = nullptr;
+            }
+#ifdef ENABLE_TEST
+            ++build_count_;
+#endif
+            return block_;
+        }
+        // Same layout: refresh names in place, the block points at desc_.
+        for (uint32_t i = 0; i < wanted.get_column_count(); i++) {
+            desc_[i] = wanted[i];
+        }
+        return block_;
+    }
+
+    void release() {
+        if (block_ != nullptr) {
+            delete block_;
+            block_ = nullptr;
+        }
+        desc_.release();
+        max_rows_ = 0;
+    }
+
+#ifdef ENABLE_TEST
+    // Blocks allocated so far; a reuse of a matching layout does not count.
+    size_t TEST_build_count() const { return build_count_; }
+#endif
+
+   private:
+    common::TupleDesc desc_;
+    common::TsBlock* block_ = nullptr;
+    uint32_t max_rows_ = 0;
+#ifdef ENABLE_TEST
+    size_t build_count_ = 0;
+#endif
+};
+
 class SingleDeviceTsBlockReader : public TsBlockReader {
    public:
     explicit SingleDeviceTsBlockReader(DeviceQueryTask* device_query_task,
@@ -50,6 +122,9 @@ class SingleDeviceTsBlockReader : public TsBlockReader {
              Filter* time_filter, Filter* field_filter, int row_offset,
              int row_limit);
     void close() override;
+
+    // Borrow a block that can be reused across devices (see ReusableTsBlock).
+    void set_reusable_block(ReusableTsBlock* block) { reusable_block_ = block; }
 
     int get_remaining_offset() const { return remaining_offset_; }
     int get_remaining_limit() const { return remaining_limit_; }
@@ -103,6 +178,10 @@ class SingleDeviceTsBlockReader : public TsBlockReader {
     SelectionMask aligned_filter_mask_;
     uint32_t aligned_filter_next_row_ = 0;
     bool aligned_filter_mask_valid_ = false;
+    // Output block owned by the enclosing device-ordered reader and handed to
+    // this device's aligned multi-value reader, so the per-column buffers
+    // survive across devices. Null when this reader owns nothing (standalone).
+    ReusableTsBlock* reusable_block_ = nullptr;
 };
 
 class MeasurementColumnContext {
@@ -205,7 +284,8 @@ class VectorMeasurementColumnContext final : public MeasurementColumnContext {
              Filter* time_filter,
              std::vector<std::vector<int32_t>>& pos_in_result,
              common::PageArena& pa, AlignedFieldFilter* field_filter = nullptr,
-             int ssi_offset = 0, int ssi_limit = -1);
+             int ssi_offset = 0, int ssi_limit = -1,
+             ReusableTsBlock* reusable_block = nullptr);
     int get_next_tsblock(bool alloc_mem) override;
     int get_current_time(int64_t& time) override;
     int get_current_value(char*& value, uint32_t& len) override;

@@ -32,10 +32,11 @@
 本目录包含 TsFile 的 Python 实现版本。Python 版本基于 C++ 版本构建，并通过 Cython 包将 TsFile 的读写能力集成到 Python 环境中。用户可以像在 Pandas 中使用 read_csv 和 write_csv 一样，方便地读取和写入 TsFile。
 
 源代码位于 `./tsfile` 目录。
-以 `.pyx` 和 `.pyd` 结尾的文件为使用 Cython 编写的封装代码。
-`tsfile/tsfile.py` 中定义了一些对用户开放的接口。
+以 `.pyx` 结尾的文件为使用 Cython 编写的封装代码；`tsfile/__init__.py` 导出的公共 API
+以及纯 Python 模块（`constants.py`、`schema.py`、`tablet.py`、`tsfile_table_writer.py`
+和 `dataset/` 包）定义了面向用户的接口。
 
-你可以在 `./examples/examples.py` 中找到读写示例。
+你可以在 `examples/example.py` 中找到读写示例。
 
 ---
 

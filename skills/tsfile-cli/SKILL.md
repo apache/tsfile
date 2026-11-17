@@ -60,7 +60,7 @@ does not replace the Java batch and format-aware import tools.
 | `stats` | FIELD statistics, null counts, and `stats_source` | maybe |
 | `count` | per-column row/entity/value counts; no summary row | maybe |
 | `head` | first N rows (default 10, `-n`) | yes |
-| `cat` | all matching rows (streamed; `table` format buffers) | yes |
+| `cat` | all matching rows (buffered) | yes |
 | `sketch` | physical layout text with offsets and chunk/page details | no FIELD decode |
 | `export` | writes one object file or a numbered multi-object directory | yes |
 
@@ -91,8 +91,9 @@ opts: -f table|ndjson|csv  (default table, including pipes)
 - `ndjson` emits one JSON object per line. INT64/TIMESTAMP values are decimal
   strings; BOOLEAN/INT32/FLOAT/DOUBLE are bare values, and NULL/NaN/Inf become
   JSON `null`. CSV includes a header and quotes cells using RFC 4180 rules.
-- The aligned `table` format buffers rows and renders control characters as
-  visible escapes. Prefer `csv` or `ndjson` for large dumps and pipelines.
+- Row commands buffer complete output in memory, including CSV/NDJSON/export;
+  bound large reads with `-n` and time/TAG filters. Aligned `table` output also
+  uses a temporary spool and renders control characters as visible escapes.
 
 ## Sketch and export
 
@@ -127,14 +128,20 @@ TYPE  ∈ { BOOLEAN, INT32, INT64, FLOAT, DOUBLE, STRING, TEXT, TIMESTAMP, DATE,
 - The CSV header must contain `time` and exactly the declared TAG/FIELD names;
   rows are mapped by header name rather than physical column order.
 - `--encoding` and `--compression` may override the bound defaults by data type.
+- CLI rejects explicit ALP, GORILLA_V1, and BOOLEAN/FLOAT/DOUBLE RLE overrides;
+  ALP reads work but `schema` shows `UNKNOWN`. LZMA2 requires an enabled build.
 - `--stdin` or `-i <input.csv>` is required; TSV, `--columns`, `--no-header`, and
   `--header-match` are not supported.
 - Unquoted `\N` denotes NULL. Empty STRING/TEXT cells are empty strings;
   quoted `"\N"` is literal text. `DATE` cells are `YYYY-MM-DD`, and
   `TIMESTAMP`/`time` use strict decimal int64 values.
+- CSV STRING/TEXT with a leading backslash needs one extra: `\\path` becomes
+  `\path`, including inside quotes. CSV output uses the same rule; headers
+  and non-text columns are unaffected.
 - A failed import leaves no partial output; success is silent unless `-v` is used.
-- **timestamps must be strictly increasing per device** (device = tag-column values); rows for
-  different tags may interleave/reuse timestamps. Out-of-order input → error with line number.
+- **timestamps must be strictly increasing per device** (device = tag-column values);
+  different tags may interleave/reuse timestamps. The CLI has no duplicate-time
+  opt-in; out-of-order input reports its line number.
 - `-v` writes a post-commit summary and resolved column physical settings to stderr.
 
 Tree-model / JSON / programmatic writes → C++ SDK `cpp/examples/cpp_examples/demo_write.cpp`

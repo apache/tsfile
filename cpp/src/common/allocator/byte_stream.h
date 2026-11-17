@@ -1241,25 +1241,37 @@ class SerializationUtil {
         str = nullptr;
         int ret = common::E_OK;
         int32_t len = 0;
-        int32_t read_len = 0;
         if (RET_FAIL(read_var_int(len, in))) {
             return ret;
         } else {
             if (len == storage::NO_STR_TO_READ) {
                 return ret;
+            } else if (len < 0) {
+                return E_OUT_OF_RANGE;
+            } else if (len == 0) {
+                str = new std::string();
+            } else if (static_cast<uint64_t>(len) > in.remaining_size()) {
+                // Reject a corrupt length before resize() zero-fills it: a
+                // bad 4-byte field could otherwise request a 2 GiB string
+                // that is thrown away as soon as the read fails.
+                return E_BUF_NOT_ENOUGH;
             } else {
-                char* tmp_buf =
-                    static_cast<char*>(mem_alloc(len, in.get_mid()));
-                if (tmp_buf == nullptr) return E_OOM;
-                if (RET_FAIL(in.read_buf(tmp_buf, len, read_len))) {
-                    mem_free(tmp_buf);
+                // Read straight into the string's own buffer instead of a
+                // temporary mem_alloc'd buffer that is copied and freed right
+                // away. One allocation per segment instead of three.
+                std::string* tmp_str = new std::string();
+                tmp_str->resize(static_cast<size_t>(len));
+                uint32_t read_len = 0;
+                if (RET_FAIL(
+                        in.read_buf(reinterpret_cast<uint8_t*>(&(*tmp_str)[0]),
+                                    static_cast<uint32_t>(len), read_len))) {
+                    delete tmp_str;
                     return ret;
-                } else if (len != read_len) {
-                    mem_free(tmp_buf);
+                } else if (static_cast<uint32_t>(len) != read_len) {
+                    delete tmp_str;
                     ret = E_BUF_NOT_ENOUGH;
                 } else {
-                    str = new std::string(tmp_buf, len);
-                    mem_free(tmp_buf);
+                    str = tmp_str;
                 }
             }
         }

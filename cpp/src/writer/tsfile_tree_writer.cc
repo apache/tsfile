@@ -23,7 +23,7 @@
 
 namespace storage {
 
-TsFileTreeWriter::TsFileTreeWriter(storage::WriteFile* writer_file,
+TsFileTreeWriter::TsFileTreeWriter(storage::RandomAccessWriteFile* writer_file,
                                    uint64_t memory_threshold) {
     tsfile_writer_ = std::make_shared<TsFileWriter>();
     tsfile_writer_->init(writer_file);

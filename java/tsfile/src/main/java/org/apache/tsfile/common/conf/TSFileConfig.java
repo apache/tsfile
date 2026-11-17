@@ -258,6 +258,14 @@ public class TSFileConfig implements Serializable {
 
   private boolean lz4UseJni = true;
 
+  /**
+   * When true, writing a timestamp equal to the previously written timestamp is accepted; only a
+   * strictly decreasing timestamp is rejected as out-of-order. Duplicate timestamps are preserved
+   * as separate rows (no write-time deduplication). Default is false, which rejects both equal and
+   * decreasing timestamps, matching the historical behavior.
+   */
+  private boolean allowNonDecreasingTimestamps = false;
+
   /** customizedProperties, this should be empty by default. */
   private Properties customizedProperties = new Properties();
 
@@ -528,6 +536,14 @@ public class TSFileConfig implements Serializable {
 
   public void setEndian(String endian) {
     this.endian = endian;
+  }
+
+  public boolean isAllowNonDecreasingTimestamps() {
+    return allowNonDecreasingTimestamps;
+  }
+
+  public void setAllowNonDecreasingTimestamps(boolean allowNonDecreasingTimestamps) {
+    this.allowNonDecreasingTimestamps = allowNonDecreasingTimestamps;
   }
 
   public boolean isUseKerberos() {

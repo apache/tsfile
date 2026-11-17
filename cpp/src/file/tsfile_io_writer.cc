@@ -26,6 +26,7 @@
 #include <limits>
 #include <memory>
 
+#include "common/constant/tsfile_constant.h"
 #include "common/device_id.h"
 #include "common/global.h"
 #include "common/logger/elog.h"
@@ -34,6 +35,12 @@
 using namespace common;
 
 namespace storage {
+
+// Definition for the in-class `static constexpr` used as the write-stream
+// page size.  Before C++17 a static constexpr data member needs an
+// out-of-class definition when it is odr-used (e.g. bound to a reference
+// by a test assertion); without one the link fails.
+constexpr uint32_t TsFileIOWriter::WRITE_STREAM_PAGE_SIZE;
 
 #if 0
 #define OFFSET_DEBUG(msg)                \
@@ -47,12 +54,22 @@ int64_t TsFileIOWriter::get_meta_size() const {
     return meta_allocator_.get_total_used_bytes();
 }
 
-int TsFileIOWriter::init(WriteFile* write_file) {
+int TsFileIOWriter::init(RandomAccessWriteFile* write_file) {
     int ret = E_OK;
     const uint32_t page_size = 1024;
     meta_allocator_.init(page_size, MOD_TSFILE_WRITER_META);
     chunk_meta_count_ = 0;
     file_ = write_file;
+    // Record the writer's timestamp policy so downstream readers (e.g. an
+    // IoTDB load) can tell that series in this file may contain duplicate
+    // timestamps. Only written when the flag is on, so flag-off files keep
+    // their metadata byte-for-byte unchanged.
+    if (common::g_config_value_.allow_non_decreasing_timestamps_) {
+        tsfile_properties_[TSFILE_PROP_ALLOW_NON_DECREASING_TIMESTAMPS] =
+            TsFilePropertyValue(
+                reinterpret_cast<const uint8_t*>(TSFILE_PROP_VALUE_TRUE.data()),
+                static_cast<uint32_t>(TSFILE_PROP_VALUE_TRUE.size()));
+    }
     // Re-arm destroy() for the new lifecycle.  Without this, a writer that
     // was destroy()'d and then init()'d again would leak the fresh
     // meta_allocator_/write_stream_/file_ on its next destroy().
@@ -108,7 +125,7 @@ void TsFileIOWriter::destroy() {
 int TsFileIOWriter::add_tsfile_property(const std::string& key,
                                         const uint8_t* value,
                                         uint32_t value_len) {
-    if (file_ == nullptr || file_->get_fd() < 0) {
+    if (file_ == nullptr || !file_->is_opened()) {
         return common::E_FILE_WRITE_ERR;
     }
     if (value_len > 0 && value == nullptr) {
@@ -125,7 +142,7 @@ int TsFileIOWriter::add_tsfile_property(const std::string& key,
 
 int TsFileIOWriter::add_tsfile_property(const std::string& key,
                                         const std::vector<uint8_t>& value) {
-    if (file_ == nullptr || file_->get_fd() < 0) {
+    if (file_ == nullptr || !file_->is_opened()) {
         return common::E_FILE_WRITE_ERR;
     }
     if (key.size() > static_cast<size_t>(std::numeric_limits<int32_t>::max()) ||
@@ -297,7 +314,7 @@ int TsFileIOWriter::end_flush_chunk_group(bool is_aligned) {
 
 int TsFileIOWriter::end_file() {
     int ret = E_OK;
-    if (file_->get_fd() == -1) {
+    if (file_ == nullptr || !file_->is_opened()) {
         return E_OK;
     }
     OFFSET_DEBUG("before end file");

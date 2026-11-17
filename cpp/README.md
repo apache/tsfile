@@ -115,6 +115,11 @@ To build tsfile, use Maven which automatically detects and uses the appropriate 
 mvn clean verify -P with-cpp
 ```
 
+Compilation runs one job per CPU core under `./mvnw` (the wrapper exports
+`CMAKE_BUILD_PARALLEL_LEVEL`); a plain `mvn` invocation falls back to 4 jobs.
+Set `-Dcmake.build.parallel.level=N` or `CMAKE_BUILD_PARALLEL_LEVEL` to choose
+the job count, and `bash build.sh -j=N` for the direct CMake build.
+
 **Toolchain Selection:**
 
 Maven will automatically select the compiler based on your platform:
@@ -340,14 +345,26 @@ cmake .. -DENABLE_THREADS=OFF  # disable — all thread code is stripped at comp
 ```cpp
 #include "common/global.h"
 
-// Enable or disable parallel write at runtime (auto-disabled on single-core machines)
-storage::set_parallel_write_enabled(true);
+// Enable or disable the parallel write / read paths at runtime.  The flags are
+// consulted on every write and when a query opens its iterators.
+common::set_parallel_write_enabled(true);
+common::set_parallel_read_enabled(true);
 
-// Set the number of worker threads (must be called before creating TsFileWriter)
-storage::set_write_thread_count(4);
+// Resize the global worker pool (1..64).  Takes effect immediately when the
+// library has been initialized; do not call it while any reader, writer or
+// result set is in use.
+common::set_thread_count(4);
 ```
 
-By default, parallel write is enabled when the machine has more than one CPU core, and the thread count is set to the number of hardware cores (capped at 64).
+The C API exposes the same switches as
+`tsfile_set_parallel_read_enabled()`, `tsfile_set_parallel_write_enabled()` and
+`tsfile_set_thread_count()` (plus the matching getters); the Python binding
+has `set_parallel_read_enabled()`, `set_parallel_write_enabled()` and
+`set_thread_count()`.
+
+Parallel read and write are enabled by default with a 6-thread pool.  With
+`ENABLE_THREADS=OFF` the setters only record the values and the parallel paths
+are compiled out.
 
 ### Local File Read Backend
 

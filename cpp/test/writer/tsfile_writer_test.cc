@@ -32,6 +32,7 @@
 #include <unistd.h>
 #endif
 
+#include "common/global.h"
 #include "common/path.h"
 #include "common/record.h"
 #include "common/schema.h"
@@ -329,6 +330,67 @@ TEST_F(TsFileWriterTest, MultiFlushWriteAndRead) {
     }
     ASSERT_EQ(read_rows, row_count);
     reader.destroy_query_data_set(qds);
+    ASSERT_EQ(reader.close(), E_OK);
+}
+
+// The I/O writer drains its pending bytes one stream page at a time, so a
+// chunk larger than one page is written as a chain of write() calls.  These
+// sizes produce 1-, 2- and 3-page chains with partial tails, which checks that
+// the chain is flushed in order.  (A chunk ending exactly on a page boundary is
+// covered by ByteStreamConsumerTest.DrainsExactPageMultiplesAndPartialTails,
+// since the per-chunk metadata overhead makes row counts alone unable to land
+// on the boundary.)
+TEST_F(TsFileWriterTest, WriteChunkSpanningMultipleWriteStreamPages) {
+    const std::vector<int64_t> row_counts = {1000, 8191,  8192,
+                                             8193, 16384, 20000};
+    // Keep at least one case spanning several pages even if the page size or
+    // the value width changes: the largest payload alone must exceed one page
+    // (per-chunk metadata only adds bytes on top of this).
+    EXPECT_LT(storage::TsFileIOWriter::WRITE_STREAM_PAGE_SIZE,
+              row_counts.back() * static_cast<int64_t>(sizeof(int64_t)));
+    std::vector<std::string> select_list;
+    for (size_t i = 0; i < row_counts.size(); ++i) {
+        const std::string device = "device_" + std::to_string(i);
+        const std::string measurement = "value";
+        ASSERT_EQ(tsfile_writer_->register_timeseries(
+                      device, storage::MeasurementSchema(
+                                  measurement, common::TSDataType::INT64,
+                                  common::TSEncoding::PLAIN,
+                                  common::CompressionType::UNCOMPRESSED)),
+                  E_OK);
+        select_list.push_back(device + "." + measurement);
+        for (int64_t row = 0; row < row_counts[i]; ++row) {
+            TsRecord record(row, device);
+            record.add_point(measurement, row);
+            ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
+        }
+        ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    for (size_t i = 0; i < row_counts.size(); ++i) {
+        SCOPED_TRACE(::testing::Message() << "rows=" << row_counts[i]
+                                          << ", select=" << select_list[i]);
+        storage::ResultSet* tmp_qds = nullptr;
+        std::vector<std::string> columns{select_list[i]};
+        ASSERT_EQ(reader.query(columns, 0, row_counts[i] - 1, tmp_qds), E_OK);
+        auto* qds = static_cast<QDSWithoutTimeGenerator*>(tmp_qds);
+        int64_t read_rows = 0;
+        bool has_next = false;
+        while (true) {
+            ASSERT_EQ(qds->next(has_next), E_OK);
+            if (!has_next) {
+                break;
+            }
+            ASSERT_EQ(qds->get_value<int64_t>(1), read_rows);
+            ASSERT_EQ(qds->get_value<int64_t>(2), read_rows);
+            ++read_rows;
+        }
+        ASSERT_EQ(read_rows, row_counts[i]);
+        reader.destroy_query_data_set(qds);
+    }
     ASSERT_EQ(reader.close(), E_OK);
 }
 
@@ -2416,5 +2478,215 @@ TEST_F(TsFileWriterTest, AlignedRecordPointOrderDoesNotMatter) {
     }
     EXPECT_EQ(cur_row, row_num);
     reader.destroy_query_data_set(qds);
+    ASSERT_EQ(reader.close(), E_OK);
+}
+
+namespace {
+// The allow_non_decreasing_timestamps_ flag is process-global; restore it to
+// false even when an ASSERT_* aborts a test early.
+class ScopedAllowNonDecreasingTimestamps {
+   public:
+    explicit ScopedAllowNonDecreasingTimestamps(bool value) {
+        common::set_allow_non_decreasing_timestamps(value);
+    }
+    ~ScopedAllowNonDecreasingTimestamps() {
+        common::set_allow_non_decreasing_timestamps(false);
+    }
+};
+}  // namespace
+
+// With the flag on, equal timestamps must be accepted on the aligned batch
+// path (TimePageWriter::write_batch) and read back as separate rows.
+TEST_F(TsFileWriterTest, AllowNonDecreasingAlignedTabletWriteAndRead) {
+    ScopedAllowNonDecreasingTimestamps guard(true);
+    std::string device_name = "device_dup_aligned";
+    std::vector<MeasurementSchema> schema_vec;
+    schema_vec.emplace_back("v0", INT64, PLAIN, UNCOMPRESSED);
+    schema_vec.emplace_back("v1", INT64, PLAIN, UNCOMPRESSED);
+    {
+        std::vector<MeasurementSchema*> reg;
+        for (auto& s : schema_vec) reg.push_back(new MeasurementSchema(s));
+        ASSERT_EQ(tsfile_writer_->register_aligned_timeseries(device_name, reg),
+                  E_OK);
+    }
+
+    const int row_num = 4;
+    const int64_t times[row_num] = {10, 11, 11, 12};
+    Tablet tablet(device_name,
+                  std::make_shared<std::vector<MeasurementSchema>>(schema_vec),
+                  row_num);
+    for (int i = 0; i < row_num; ++i) {
+        ASSERT_EQ(tablet.add_timestamp(i, times[i]), E_OK);
+        ASSERT_EQ(tablet.add_value(i, 0u, static_cast<int64_t>(i)), E_OK);
+        ASSERT_EQ(tablet.add_value(i, 1u, static_cast<int64_t>(i * 2)), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->write_tablet_aligned(tablet), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    std::vector<storage::Path> select_list;
+    select_list.emplace_back(device_name + ".v0");
+    select_list.emplace_back(device_name + ".v1");
+    storage::QueryExpression* qe =
+        storage::QueryExpression::create(select_list, nullptr);
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    storage::ResultSet* tmp_qds = nullptr;
+    ASSERT_EQ(reader.query(qe, tmp_qds), E_OK);
+    ASSERT_NE(tmp_qds, nullptr);
+
+    bool has_next = false;
+    int64_t cur_row = 0;
+    while (IS_SUCC(tmp_qds->next(has_next)) && has_next) {
+        auto* rec = tmp_qds->get_row_record();
+        ASSERT_NE(rec, nullptr);
+        EXPECT_EQ(rec->get_timestamp(), times[cur_row]);
+        EXPECT_EQ(field_to_string(rec->get_field(1)), std::to_string(cur_row));
+        EXPECT_EQ(field_to_string(rec->get_field(2)),
+                  std::to_string(cur_row * 2));
+        ++cur_row;
+    }
+    EXPECT_EQ(cur_row, row_num);
+    reader.destroy_query_data_set(tmp_qds);
+    ASSERT_EQ(reader.close(), E_OK);
+}
+
+// With the flag on, equal timestamps must be accepted on the aligned row path
+// (TimePageWriter::write) and read back as separate rows.
+TEST_F(TsFileWriterTest, AllowNonDecreasingAlignedRecordWriteAndRead) {
+    ScopedAllowNonDecreasingTimestamps guard(true);
+    std::string device_name = "device_dup_aligned_record";
+    std::vector<MeasurementSchema> schema_vec;
+    schema_vec.emplace_back("v0", INT64, PLAIN, UNCOMPRESSED);
+    {
+        std::vector<MeasurementSchema*> reg;
+        reg.push_back(new MeasurementSchema(schema_vec[0]));
+        ASSERT_EQ(tsfile_writer_->register_aligned_timeseries(device_name, reg),
+                  E_OK);
+    }
+
+    const int64_t times[4] = {5, 6, 6, 7};
+    for (int i = 0; i < 4; ++i) {
+        TsRecord record(times[i], device_name);
+        record.add_point("v0", static_cast<int64_t>(i));
+        ASSERT_EQ(tsfile_writer_->write_record_aligned(record), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    std::vector<storage::Path> select_list;
+    select_list.emplace_back(device_name + ".v0");
+    storage::QueryExpression* qe =
+        storage::QueryExpression::create(select_list, nullptr);
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    storage::ResultSet* tmp_qds = nullptr;
+    ASSERT_EQ(reader.query(qe, tmp_qds), E_OK);
+    ASSERT_NE(tmp_qds, nullptr);
+
+    bool has_next = false;
+    int64_t cur_row = 0;
+    while (IS_SUCC(tmp_qds->next(has_next)) && has_next) {
+        auto* rec = tmp_qds->get_row_record();
+        ASSERT_NE(rec, nullptr);
+        EXPECT_EQ(rec->get_timestamp(), times[cur_row]);
+        ++cur_row;
+    }
+    EXPECT_EQ(cur_row, 4);
+    reader.destroy_query_data_set(tmp_qds);
+    ASSERT_EQ(reader.close(), E_OK);
+}
+
+// Strictly decreasing timestamps must still be rejected with the flag on.
+TEST_F(TsFileWriterTest, AllowNonDecreasingStillRejectsStrictlyDecreasing) {
+    ScopedAllowNonDecreasingTimestamps guard(true);
+    std::string device_name = "device_dup_decreasing";
+    std::vector<MeasurementSchema> schema_vec;
+    schema_vec.emplace_back("v0", INT64, PLAIN, UNCOMPRESSED);
+    {
+        std::vector<MeasurementSchema*> reg;
+        reg.push_back(new MeasurementSchema(schema_vec[0]));
+        ASSERT_EQ(tsfile_writer_->register_aligned_timeseries(device_name, reg),
+                  E_OK);
+    }
+
+    const int row_num = 3;
+    const int64_t times[row_num] = {10, 11, 10};
+    Tablet tablet(device_name,
+                  std::make_shared<std::vector<MeasurementSchema>>(schema_vec),
+                  row_num);
+    for (int i = 0; i < row_num; ++i) {
+        ASSERT_EQ(tablet.add_timestamp(i, times[i]), E_OK);
+        ASSERT_EQ(tablet.add_value(i, 0u, static_cast<int64_t>(i)), E_OK);
+    }
+    EXPECT_NE(tsfile_writer_->write_tablet_aligned(tablet), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+}
+
+// With the flag off (default), equal timestamps must still be rejected.
+TEST_F(TsFileWriterTest, EqualTimestampsRejectedAlignedWhenFlagOff) {
+    ScopedAllowNonDecreasingTimestamps guard(false);
+    std::string device_name = "device_dup_flag_off";
+    std::vector<MeasurementSchema> schema_vec;
+    schema_vec.emplace_back("v0", INT64, PLAIN, UNCOMPRESSED);
+    {
+        std::vector<MeasurementSchema*> reg;
+        reg.push_back(new MeasurementSchema(schema_vec[0]));
+        ASSERT_EQ(tsfile_writer_->register_aligned_timeseries(device_name, reg),
+                  E_OK);
+    }
+
+    const int row_num = 3;
+    const int64_t times[row_num] = {10, 11, 11};
+    Tablet tablet(device_name,
+                  std::make_shared<std::vector<MeasurementSchema>>(schema_vec),
+                  row_num);
+    for (int i = 0; i < row_num; ++i) {
+        ASSERT_EQ(tablet.add_timestamp(i, times[i]), E_OK);
+        ASSERT_EQ(tablet.add_value(i, 0u, static_cast<int64_t>(i)), E_OK);
+    }
+    EXPECT_NE(tsfile_writer_->write_tablet_aligned(tablet), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+}
+
+// With the flag on, equal timestamps must be accepted on the non-aligned row
+// path (TimePageWriter::write) and read back as separate rows.
+TEST_F(TsFileWriterTest, AllowNonDecreasingNonAlignedRecordWriteAndRead) {
+    ScopedAllowNonDecreasingTimestamps guard(true);
+    std::string device_name = "device_dup_non_aligned";
+    ASSERT_EQ(
+        tsfile_writer_->register_timeseries(
+            device_name, MeasurementSchema("v0", INT64, PLAIN, UNCOMPRESSED)),
+        E_OK);
+
+    const int64_t times[4] = {0, 1, 1, 2};
+    for (int i = 0; i < 4; ++i) {
+        TsRecord record(times[i], device_name);
+        record.add_point("v0", static_cast<int64_t>(i));
+        ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    std::vector<storage::Path> select_list;
+    select_list.emplace_back(device_name + ".v0");
+    storage::QueryExpression* qe =
+        storage::QueryExpression::create(select_list, nullptr);
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    storage::ResultSet* tmp_qds = nullptr;
+    ASSERT_EQ(reader.query(qe, tmp_qds), E_OK);
+    ASSERT_NE(tmp_qds, nullptr);
+
+    bool has_next = false;
+    int64_t cur_row = 0;
+    while (IS_SUCC(tmp_qds->next(has_next)) && has_next) {
+        auto* rec = tmp_qds->get_row_record();
+        ASSERT_NE(rec, nullptr);
+        EXPECT_EQ(rec->get_timestamp(), times[cur_row]);
+        ++cur_row;
+    }
+    EXPECT_EQ(cur_row, 4);
+    reader.destroy_query_data_set(tmp_qds);
     ASSERT_EQ(reader.close(), E_OK);
 }

@@ -877,7 +877,9 @@ struct DeviceMetaIndexEntry : IMetaIndexEntry {
     int deserialize_from(common::ByteStream& in,
                          common::PageArena* pa) override {
         int ret = common::E_OK;
-        device_id_ = std::make_shared<StringArrayDeviceID>("init");
+        // Default-construct (no "init" segment) so deserialize() does not
+        // allocate and then immediately free a placeholder string.
+        device_id_ = std::make_shared<StringArrayDeviceID>();
         if (RET_FAIL(device_id_->deserialize(in))) {
         } else if (RET_FAIL(common::SerializationUtil::read_i64(offset_, in))) {
         }

@@ -35,7 +35,7 @@
 #include "common/tablet.h"
 
 namespace storage {
-class WriteFile;
+class RandomAccessWriteFile;
 class ChunkWriter;
 class TsFileIOWriter;
 class RestorableTsFileIOWriter;
@@ -60,7 +60,10 @@ class TsFileWriter {
 
     int open(const std::string& file_path, int flags, mode_t mode);
     int open(const std::string& file_path);
-    int init(storage::WriteFile* write_file);
+    int init(storage::RandomAccessWriteFile* write_file);
+    /** Like init(RandomAccessWriteFile*) but the writer takes ownership of
+     * @p write_file and deletes it on destroy(). */
+    int init(std::unique_ptr<storage::RandomAccessWriteFile> write_file);
     int init(storage::RestorableTsFileIOWriter* rw);
 
     void set_generate_table_schema(bool generate_table_schema);
@@ -198,7 +201,7 @@ class TsFileWriter {
     split_tablet_by_device(const Tablet& tablet);
 
    private:
-    storage::WriteFile* write_file_;
+    storage::RandomAccessWriteFile* write_file_;
     storage::TsFileIOWriter* io_writer_;
     // device_id -> MeasurementSchemaGroup
     DeviceSchemasMap schemas_;
@@ -226,6 +229,14 @@ class TsFileWriter {
     // writers) are hard to drive deterministically, but the contract —
     // flush/close refuse — can be unit-tested directly.
     friend class TsFileWriterUnrecoverableTest;
+
+    // After recovery (enforce_recovered_last_time_order_), returns true when
+    // `timestamp` must be rejected because it would land at or before a
+    // flushed chunk's end_time for this device. With
+    // allow_non_decreasing_timestamps_ enabled only strictly decreasing
+    // timestamps are rejected; otherwise equality is rejected too.
+    bool recovered_last_time_order_violated(
+        const std::shared_ptr<IDeviceID>& device_id, int64_t timestamp) const;
 
     int write_column_batch(storage::ChunkWriter* chunk_writer,
                            const Tablet& tablet, int col_idx,

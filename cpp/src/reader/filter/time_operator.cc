@@ -56,11 +56,14 @@ bool TimeBetween::satisfy(Statistic* statistic) {
 }
 
 bool TimeBetween::satisfy(int64_t time, int64_t value) {
-    return (value1_ <= time) && (time <= value2_) ^ not_;
+    // Parenthesize the range test: `^` binds tighter than `&&`, so without
+    // the inner parentheses NOT BETWEEN rejects times below value1_ instead
+    // of accepting every time outside the interval.
+    return ((value1_ <= time) && (time <= value2_)) ^ not_;
 }
 
 bool TimeBetween::satisfy(int64_t time, common::String value) {
-    return (value1_ <= time) && (time <= value2_) ^ not_;
+    return ((value1_ <= time) && (time <= value2_)) ^ not_;
 }
 
 bool TimeBetween::satisfy_start_end_time(int64_t start_time, int64_t end_time) {
@@ -230,7 +233,11 @@ bool TimeNotEq::satisfy(int64_t time, common::String value) {
 }
 
 bool TimeNotEq::satisfy_start_end_time(int64_t start_time, int64_t end_time) {
-    return value_ != end_time && value_ != start_time;
+    // "Could any time in [start, end] satisfy the filter?" Only a
+    // single-point range can be excluded completely; any wider range contains
+    // a timestamp different from value_, and chunk readers skip the whole
+    // block when this returns false.
+    return start_time != end_time || value_ != start_time;
 }
 
 bool TimeNotEq::contain_start_end_time(int64_t start_time, int64_t end_time) {

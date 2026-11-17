@@ -101,10 +101,12 @@ class RestorableTsFileIOWriter : public TsFileIOWriter {
     TsFileIOWriter* get_tsfile_io_writer();
 
     /**
-     * Get the WriteFile for TsFileWriter::init(). Only valid when can_write().
-     * Caller must not destroy the returned pointer.
+     * Get the sink for TsFileWriter::init(). Only valid when can_write().
+     * Caller must not destroy the returned pointer.  Recovery always uses a
+     * local file: self_check reads the existing bytes back by path, so the
+     * sink cannot be a non-local RandomAccessWriteFile backend.
      */
-    WriteFile* get_write_file();
+    RandomAccessWriteFile* get_write_file();
 
     std::string get_file_path() const;
 

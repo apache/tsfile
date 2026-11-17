@@ -146,6 +146,9 @@ public enum TSEncoding {
       case 14:
         return TSEncoding.CAMEL;
       default:
+        // Encoding ids above CAMEL (15 = ALP) are written by the C++/Python
+        // implementations only; see compat/compatibility-matrix.csv. A file
+        // containing such a chunk opens, but reading that series fails here.
         throw new IllegalArgumentException(Messages.format("error.common.invalid_input", encoding));
     }
   }

@@ -128,6 +128,9 @@ public class RestorableTsFileIOWriter extends TsFileIOWriter {
     this.out = FSFactoryProducer.getFileOutputFactory().getTsFileOutput(file.getPath(), true);
     this.param = param != null && param.isTdePageAead() ? param.copy() : param;
     setEncryptParam(this.param);
+    // Appending may still introduce duplicate timestamps; record the policy so
+    // the rewritten metadata states how readers must interpret the file.
+    registerInterpretationProperties();
 
     // file doesn't exist
     if (file.length() == 0) {

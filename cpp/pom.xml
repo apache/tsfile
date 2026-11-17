@@ -42,6 +42,14 @@
         -->
         <tsfile.sanitizer.checks>address,undefined</tsfile.sanitizer.checks>
         <build.test>ON</build.test>
+        <!--
+            Parallelism for the CMake build. ./mvnw exports
+            CMAKE_BUILD_PARALLEL_LEVEL with the host core count, which the
+            profile below forwards here; this value is the fallback for a plain
+            `mvn` invocation. Override either way with
+            -Dcmake.build.parallel.level=N.
+        -->
+        <cmake.build.parallel.level>4</cmake.build.parallel.level>
         <tsfile.build.shared>ON</tsfile.build.shared>
         <tsfile.dependency.source>BUNDLED</tsfile.dependency.source>
         <tsfile.dependency.offline>OFF</tsfile.dependency.offline>
@@ -163,6 +171,15 @@
                                 generators such as the Makefile generators.
                             -->
                             <config>${build.type}</config>
+                            <!--
+                                CMake's build command runs the native tool serially
+                                unless a jobs count is given; see
+                                cmake.build.parallel.level.
+                            -->
+                            <options>
+                                <option>--parallel</option>
+                                <option>${cmake.build.parallel.level}</option>
+                            </options>
                         </configuration>
                     </execution>
                     <!-- Execute the tests -->
@@ -231,6 +248,23 @@
         </plugins>
     </build>
     <profiles>
+        <!--
+            ./mvnw exports CMAKE_BUILD_PARALLEL_LEVEL with the host core count.
+            Maven resolves plugin configuration before the build starts, so a
+            plugin execution cannot publish the value; it has to come from the
+            model. Without the variable, cmake.build.parallel.level applies.
+        -->
+        <profile>
+            <id>build-parallelism-from-env</id>
+            <activation>
+                <property>
+                    <name>env.CMAKE_BUILD_PARALLEL_LEVEL</name>
+                </property>
+            </activation>
+            <properties>
+                <cmake.build.parallel.level>${env.CMAKE_BUILD_PARALLEL_LEVEL}</cmake.build.parallel.level>
+            </properties>
+        </profile>
         <profile>
             <id>jenkins-build</id>
             <!-- This is needed by the groovy hack script -->

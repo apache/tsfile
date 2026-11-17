@@ -32,7 +32,7 @@
 
 This directory contains the Python implementation of TsFile. The Python version is built on the CPP version and uses the Cython package to integrate TsFile's read and write capabilities into the Python environment. Users can read and write TsFile as easily as they use read_csv and write_csv in Pandas.
 
-The source code can be found in the `./tsfile` directory. Files ending with `.pyx` and `.pyd` are wrapper code written in Cython. The `tsfile/tsfile.py` defines some user interfaces. You can find some examples of reading and writing in the `.examples/examples.py`.
+The source code can be found in the `./tsfile` directory. Files ending with `.pyx` are Cython wrapper code, and `tsfile/__init__.py` exports the public API together with the pure-Python modules (`constants.py`, `schema.py`, `tablet.py`, `tsfile_table_writer.py`, and the `dataset/` package). You can find an example of reading and writing in `examples/example.py`.
 
 
 ## How to make contributions
@@ -178,6 +178,28 @@ set_tsfile_config({"file_read_backend_": FileReadBackend.AUTO})
 The setting only affects readers opened afterward. Do not modify or truncate a
 file while it is open through the memory-mapped backend.
 
+## Parallel read, write and worker pool
+
+```python
+from tsfile import (
+    get_parallel_read_enabled,
+    set_parallel_read_enabled,
+    set_parallel_write_enabled,
+    set_thread_count,
+)
+
+set_parallel_read_enabled(False)   # applies to subsequent reads
+set_parallel_write_enabled(True)
+set_thread_count(4)                # 1..64; applies immediately
+print(get_parallel_read_enabled())
+```
+
+The switches and the worker pool are read without synchronization, so set them
+before starting queries or writes. `set_thread_count()` must not be called while
+a reader, writer or result set is in use. All three values are also available
+through `get_tsfile_config()` / `set_tsfile_config()` as
+`parallel_read_enabled_`, `parallel_write_enabled_` and `thread_count_`.
+
 ## Seekable binary file objects
 
 `TsFileReader` also accepts a seekable binary file object. This allows remote
@@ -197,6 +219,28 @@ The object must provide `seek()`, `tell()`, and explicitly sized binary
 `read(size)` operations. The caller owns the object: `TsFileReader` keeps it
 alive while in use, preserves its cursor position, and does not close it.
 The local `FileReadBackend` setting does not apply to file objects.
+
+`TsFileWriter` accepts a writable binary file object as well, which lets a
+TsFile be written straight to an object store:
+
+```python
+import fsspec
+from tsfile import TsFileWriter
+
+with fsspec.open("s3://bucket/output.tsfile", "wb") as target:
+    with TsFileWriter(target) as writer:
+        writer.register_table(table_schema)
+        writer.write_table(tablet)
+```
+
+`TsFileTableWriter` (the schema-bound table writer) accepts a writable file
+object in the same way.
+
+The target must provide `write()` and `tell()`. When it is seekable its
+existing content is discarded; a forward-only stream (for example a pipe) is
+accepted only while it is positioned at 0. A failing `flush()` is reported as
+`FileSyncError` instead of being ignored. As with the reader, the caller owns
+the object and closes it.
 
 ## Repeated point queries
 

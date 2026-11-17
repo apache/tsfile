@@ -41,6 +41,14 @@ static const std::string TIME_COLUMN_NAME = "time";
 static const unsigned char VALUE_COLUMN_MASK = 0x40;
 static const int NO_STR_TO_READ = -1;
 
+// File-level property written when the writer is created with
+// allow_non_decreasing_timestamps_ enabled. Its presence (value "true") tells
+// downstream readers that the file may contain duplicate timestamps, so they
+// must not assume strictly increasing times within a series.
+static const std::string TSFILE_PROP_ALLOW_NON_DECREASING_TIMESTAMPS =
+    "allowNonDecreasingTimestamps";
+static const std::string TSFILE_PROP_VALUE_TRUE = "true";
+
 // Identifier characters: ASCII alphanumerics / underscore plus any non-ASCII
 // (high) byte. The \x80-\xFF byte range covers UTF-8 lead/continuation bytes
 // (e.g. CJK characters) and is accepted by every std::regex implementation;

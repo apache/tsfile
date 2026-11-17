@@ -21,6 +21,7 @@
 #include <gtest/gtest.h>
 #include <sys/stat.h>
 
+#include <atomic>
 #include <cmath>
 #include <cstring>
 #include <fstream>
@@ -43,6 +44,12 @@
 #include "reader/block/single_device_tsblock_reader.h"
 #include "reader/filter/time_operator.h"
 #include "reader/qds_without_timegenerator.h"
+
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
 #include "reader/tsfile_series_scan_iterator.h"
 #include "writer/chunk_writer.h"
 #include "writer/tsfile_writer.h"
@@ -89,7 +96,8 @@ class TsFileReaderTest : public ::testing::Test {
         flags |= O_BINARY;
 #endif
         mode_t mode = 0666;
-        EXPECT_EQ(tsfile_writer_->open(file_name_, flags, mode), common::E_OK);
+        // Without an open writer the body below crashes instead of reporting.
+        ASSERT_EQ(tsfile_writer_->open(file_name_, flags, mode), common::E_OK);
     }
 
     void TearDown() override {
@@ -103,8 +111,12 @@ class TsFileReaderTest : public ::testing::Test {
 
    public:
     static std::string generate_random_string(int length) {
-        std::mt19937 gen(static_cast<unsigned int>(
-            std::chrono::system_clock::now().time_since_epoch().count()));
+        // Seed from random_device, not the clock: cases of one suite run as
+        // separate processes in a shared directory (ctest --parallel), and a
+        // time-seeded generator can hand two of them the same name, leaving
+        // one open() to fail with E_ALREADY_EXIST.
+        std::random_device rd;
+        std::mt19937 gen(rd());
         std::uniform_int_distribution<> dis(0, 61);
 
         const std::string chars =
@@ -118,6 +130,18 @@ class TsFileReaderTest : public ::testing::Test {
             random_string += chars[dis(gen)];
         }
 
+        // CTest runs test cases in parallel processes, and two of them can
+        // seed the generator in the same clock tick.  Without a per-process
+        // unique suffix one process can remove the file another is using,
+        // which surfaced as E_ALREADY_EXIST from TsFileWriter::open.
+#ifdef _WIN32
+        const auto process_id = static_cast<uint64_t>(_getpid());
+#else
+        const auto process_id = static_cast<uint64_t>(getpid());
+#endif
+        static std::atomic<uint64_t> counter{0};
+        random_string += "_" + std::to_string(process_id) + "_" +
+                         std::to_string(counter.fetch_add(1));
         return random_string;
     }
 

@@ -96,11 +96,11 @@ Exit codes: `0` success, `1` usage/argument error, `2` file open/corrupt,
 | `count` | Object/column counts; no synthetic summary row |
 | `sketch` | Print the physical file sketch, optionally to `-o` |
 | `head` | First N rows (default 10; use `-n`) |
-| `cat` | All matching rows, streamed (`table` format buffers to align columns) |
+| `cat` | All matching rows, buffered before publishing |
 | `export` | Export one object to `-o`, or multiple objects to `--output-dir`, using `--type` |
 
-The metadata commands (`ls` / `schema` / `meta` / `stats` / `count`) answer most questions
-without decoding data pages.
+Use `ls`, `schema`, and `meta` for metadata-only discovery. `stats` can scan
+when statistics are unavailable, and table-model `count` scans rows.
 
 Shared options:
 
@@ -114,14 +114,17 @@ Shared options:
 | `--tag-filter C OP [V]` | Table TAG predicate for row reads; `OP` is `eq`, `neq`, `regexp`, `is-null`, or `not-null` |
 | `--tag-match all\|any` | Required when more than one `--tag-filter` is supplied |
 
-`ndjson` output emits one JSON object per line; numbers/booleans are bare, other values are
-quoted, nulls are `null`, and non-finite floats become `null`. CSV output follows RFC 4180.
+`ndjson` output emits one JSON object per line; INT64/TIMESTAMP values are decimal
+strings, BOOLEAN/INT32/FLOAT/DOUBLE are bare values, nulls are `null`, and
+non-finite floats become `null`. CSV output follows RFC 4180.
 CSV nulls are unquoted `\N`; empty strings are quoted as `""`. Non-null STRING/TEXT
 values beginning with `\` gain one extra leading `\`, using the same encoding rule
-as CSV input described below. Timestamps are raw int64 values. The `table` format
-uses a temporary spool to align columns with bounded memory; prefer `csv`/`ndjson`
-when temporary disk use is undesirable. `sketch`
-does not accept `--format`.
+as CSV input described below. Timestamps are raw int64 values. Row commands
+currently stage the complete formatted result in memory before publishing it,
+including CSV/NDJSON and `export`. The `table` formatter additionally uses a
+temporary spool to align columns; this does not bound memory for the complete
+output path. Use row, time, and TAG bounds for large reads. `sketch` does not
+accept `--format`.
 
 Text output preserves well-formed UTF-8 and replaces malformed UTF-8 in names
 and text with U+FFFD (`�`). This also applies to sketch output and export
@@ -164,6 +167,11 @@ tsfile-cli write --table <name> [--tag <name> STRING]... --field <name> <TYPE>..
 By default each column uses the engine's default encoding and compression for its type.
 `--encoding` and `--compression` override by canonical data type, applying to every declared
 TAG/FIELD of that type; they do not target individual columns and do not affect `time`.
+
+The CLI currently rejects explicit ALP, GORILLA_V1, and BOOLEAN/FLOAT/DOUBLE RLE
+overrides even though the SDK supports them. ALP files can be read, but `schema`
+currently displays their encoding as `UNKNOWN`. Native build options also
+control compression availability; LZMA2 is opt-in.
 
 | Option | Meaning |
 |---|---|
@@ -226,18 +234,17 @@ the skill just means placing it there — either project-level or user-level:
 
 ```bash
 # project-level (this repository only)
-mkdir -p .claude/skills/tsfile-cli
-cp cpp/tools/skills/tsfile-cli/SKILL.md .claude/skills/tsfile-cli/SKILL.md
+mkdir -p .claude/skills
+cp -R cpp/tools/skills/tsfile-cli .claude/skills/
 
 # or user-level (available in all your projects)
-mkdir -p ~/.claude/skills/tsfile-cli
-cp cpp/tools/skills/tsfile-cli/SKILL.md ~/.claude/skills/tsfile-cli/SKILL.md
+mkdir -p ~/.claude/skills
+cp -R cpp/tools/skills/tsfile-cli ~/.claude/skills/
 ```
 
-> The installed `SKILL.md` must begin with its YAML front-matter (`--- … ---`) for the
-> assistant to detect it. The in-repo copy carries an Apache license header comment above
-> the front-matter; if discovery fails, delete that leading `<!-- … -->` block from the
-> installed copy so `---` is the first line.
+Copy the entire directory: `SKILL.md` loads the bundled `references/` files.
+The current entrypoint already begins with YAML front-matter and keeps its
+Apache license as YAML comments; no header removal is needed.
 
 Start a new assistant session afterward. The skill then activates automatically when you
 ask to inspect or import a `.tsfile`; you can also invoke it explicitly (e.g. "use the

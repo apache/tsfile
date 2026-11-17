@@ -117,10 +117,10 @@ void TsFileWriter::destroy() {
     record_count_since_last_flush_ = 0;
 }
 
-int TsFileWriter::init(WriteFile* write_file) {
+int TsFileWriter::init(RandomAccessWriteFile* write_file) {
     if (write_file == nullptr) {
         return E_INVALID_ARG;
-    } else if (!write_file->file_opened()) {
+    } else if (!write_file->is_opened()) {
         return E_INVALID_ARG;
     }
     write_file_ = write_file;
@@ -151,6 +151,31 @@ int TsFileWriter::init(WriteFile* write_file) {
 // table_schema_map_ in do_check_schema_table when a new device appears.
 // All new MeasurementSchemaGroup/MeasurementSchema are freed in destroy().
 // -----------------------------------------------------------------------------
+int TsFileWriter::init(std::unique_ptr<RandomAccessWriteFile> write_file) {
+    if (!write_file || !write_file->is_opened()) {
+        return E_INVALID_ARG;
+    }
+    // A previously adopted sink would be overwritten by init(); release it
+    // once the new one is in place (a writer can be re-initialized).
+    RandomAccessWriteFile* previous =
+        write_file_created_ ? write_file_ : nullptr;
+    // Keep the unique_ptr owning the sink until init() succeeds; if it throws
+    // (e.g. while allocating TsFileIOWriter) the sink is still released.
+    RandomAccessWriteFile* raw = write_file.get();
+    const int ret = init(raw);
+    if (ret != E_OK) {
+        return ret;
+    }
+    write_file.release();
+    if (previous != nullptr && previous != raw) {
+        delete previous;
+    }
+    // init(raw) stored the pointer without taking ownership; transfer it now
+    // so destroy() deletes it exactly once.
+    write_file_created_ = true;
+    return E_OK;
+}
+
 int TsFileWriter::init(RestorableTsFileIOWriter* rw) {
     if (rw == nullptr || !rw->can_write()) {
         return E_INVALID_ARG;
@@ -785,18 +810,28 @@ int TsFileWriter::check_memory_size_and_may_flush_chunks() {
     return ret;
 }
 
+bool TsFileWriter::recovered_last_time_order_violated(
+    const std::shared_ptr<IDeviceID>& device_id, int64_t timestamp) const {
+    if (!enforce_recovered_last_time_order_) {
+        return false;
+    }
+    auto schema_it = schemas_.find(device_id);
+    if (schema_it == schemas_.end() || schema_it->second == nullptr) {
+        return false;
+    }
+    return common::g_config_value_.allow_non_decreasing_timestamps_
+               ? timestamp < schema_it->second->last_time_
+               : timestamp <= schema_it->second->last_time_;
+}
+
 int TsFileWriter::write_record(const TsRecord& record) {
     if (UNLIKELY(unrecoverable_)) return E_DATA_INCONSISTENCY;
     int ret = E_OK;
     auto device_id = std::make_shared<StringArrayDeviceID>(record.device_id_);
     // After recovery, refuse writes whose timestamp would land at or before
     // any already-flushed chunk's end_time for this device.
-    if (enforce_recovered_last_time_order_) {
-        auto schema_it = schemas_.find(device_id);
-        if (schema_it != schemas_.end() && schema_it->second != nullptr &&
-            record.timestamp_ <= schema_it->second->last_time_) {
-            return E_OUT_OF_ORDER;
-        }
+    if (recovered_last_time_order_violated(device_id, record.timestamp_)) {
+        return E_OUT_OF_ORDER;
     }
     // std::vector<ChunkWriter*> chunk_writers;
     SimpleVector<ChunkWriter*> chunk_writers;
@@ -834,12 +869,8 @@ int TsFileWriter::write_record_aligned(const TsRecord& record) {
     if (UNLIKELY(unrecoverable_)) return E_DATA_INCONSISTENCY;
     int ret = E_OK;
     auto device_id = std::make_shared<StringArrayDeviceID>(record.device_id_);
-    if (enforce_recovered_last_time_order_) {
-        auto schema_it = schemas_.find(device_id);
-        if (schema_it != schemas_.end() && schema_it->second != nullptr &&
-            record.timestamp_ <= schema_it->second->last_time_) {
-            return E_OUT_OF_ORDER;
-        }
+    if (recovered_last_time_order_violated(device_id, record.timestamp_)) {
+        return E_OUT_OF_ORDER;
     }
     SimpleVector<ValueChunkWriter*> value_chunk_writers;
     SimpleVector<common::TSDataType> data_types;
@@ -1056,13 +1087,9 @@ int TsFileWriter::write_tablet_aligned(const Tablet& tablet) {
     auto device_id =
         std::make_shared<StringArrayDeviceID>(tablet.insert_target_name_);
     const uint32_t total_rows = tablet.get_cur_row_size();
-    if (enforce_recovered_last_time_order_ && total_rows > 0 &&
-        tablet.timestamps_ != nullptr) {
-        auto schema_it = schemas_.find(device_id);
-        if (schema_it != schemas_.end() && schema_it->second != nullptr &&
-            tablet.timestamps_[0] <= schema_it->second->last_time_) {
-            return E_OUT_OF_ORDER;
-        }
+    if (total_rows > 0 && tablet.timestamps_ != nullptr &&
+        recovered_last_time_order_violated(device_id, tablet.timestamps_[0])) {
+        return E_OUT_OF_ORDER;
     }
     SimpleVector<ValueChunkWriter*> value_chunk_writers;
     TimeChunkWriter* time_chunk_writer = nullptr;
@@ -1206,13 +1233,9 @@ int TsFileWriter::write_tablet(const Tablet& tablet) {
     // and would let uninitialized timestamps/values past the live range leak
     // into the chunk.
     const uint32_t total_rows = tablet.get_cur_row_size();
-    if (enforce_recovered_last_time_order_ && total_rows > 0 &&
-        tablet.timestamps_ != nullptr) {
-        auto schema_it = schemas_.find(device_id);
-        if (schema_it != schemas_.end() && schema_it->second != nullptr &&
-            tablet.timestamps_[0] <= schema_it->second->last_time_) {
-            return E_OUT_OF_ORDER;
-        }
+    if (total_rows > 0 && tablet.timestamps_ != nullptr &&
+        recovered_last_time_order_violated(device_id, tablet.timestamps_[0])) {
+        return E_OUT_OF_ORDER;
     }
     SimpleVector<ChunkWriter*> chunk_writers;
     SimpleVector<common::TSDataType> data_types;
@@ -1336,14 +1359,10 @@ int TsFileWriter::write_table(Tablet& tablet) {
             // Recovery: refuse any segment whose first timestamp would land
             // at or before a flushed chunk's end_time for this device. This
             // mirrors the per-record / per-tablet check on the tree path.
-            if (enforce_recovered_last_time_order_ && tablet.timestamps_ &&
-                ei > si) {
-                auto schema_it = schemas_.find(device_id);
-                if (schema_it != schemas_.end() &&
-                    schema_it->second != nullptr &&
-                    tablet.timestamps_[si] <= schema_it->second->last_time_) {
-                    return E_OUT_OF_ORDER;
-                }
+            if (tablet.timestamps_ && ei > si &&
+                recovered_last_time_order_violated(device_id,
+                                                   tablet.timestamps_[si])) {
+                return E_OUT_OF_ORDER;
             }
             auto idx_it = device_ctx_index.find(device_id);
             if (idx_it == device_ctx_index.end()) {
@@ -1565,14 +1584,10 @@ int TsFileWriter::write_table(Tablet& tablet) {
             if (end_idx == 0) continue;
 
             const uint32_t si = static_cast<uint32_t>(start_idx);
-            if (enforce_recovered_last_time_order_ && tablet.timestamps_ &&
-                end_idx > start_idx) {
-                auto schema_it = schemas_.find(device_id);
-                if (schema_it != schemas_.end() &&
-                    schema_it->second != nullptr &&
-                    tablet.timestamps_[si] <= schema_it->second->last_time_) {
-                    return E_OUT_OF_ORDER;
-                }
+            if (tablet.timestamps_ && end_idx > start_idx &&
+                recovered_last_time_order_violated(device_id,
+                                                   tablet.timestamps_[si])) {
+                return E_OUT_OF_ORDER;
             }
             MeasurementNamesFromTablet mnames_getter(tablet);
             SimpleVector<ChunkWriter*> chunk_writers;

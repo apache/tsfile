@@ -77,6 +77,10 @@ enum TSEncoding : uint8_t {
     SPRINTZ = 12,
     RLBE = 13,
     CAMEL = 14,
+    // C++/Python-only for now: the Java implementation has no ALP decoder.
+    // Java can open a file containing an ALP chunk, but any query that reads
+    // that series fails.  Do not enable ALP for files shared with Java.
+    ALP = 15,
     INVALID_ENCODING = 255
 };
 
@@ -101,7 +105,7 @@ enum CompressionType : uint8_t {
 };
 
 extern TSFILE_API const char* s_data_type_names[12];
-extern TSFILE_API const char* s_encoding_names[15];
+extern TSFILE_API const char* s_encoding_names[16];
 extern TSFILE_API const char* s_compression_names[10];
 }  // namespace common
 
@@ -159,7 +163,7 @@ FORCE_INLINE bool parse_data_type_name(const std::string& s, TSDataType& out) {
 }
 
 FORCE_INLINE const char* get_encoding_name(TSEncoding encoding) {
-    ASSERT(encoding >= PLAIN && encoding <= CAMEL);
+    ASSERT(encoding >= PLAIN && encoding <= ALP);
     return s_encoding_names[encoding];
 }
 

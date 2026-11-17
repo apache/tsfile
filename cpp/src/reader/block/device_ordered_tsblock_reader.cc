@@ -72,6 +72,7 @@ int DeviceOrderedTsBlockReader::has_next(bool& has_next) {
         if (current_reader_ == nullptr) {
             return common::E_OOM;
         }
+        current_reader_->set_reusable_block(&reusable_block_);
         if (RET_FAIL(current_reader_->init(task, block_size_, time_filter_,
                                            field_filter_, remaining_offset_,
                                            remaining_limit_))) {

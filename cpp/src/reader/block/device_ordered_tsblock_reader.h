@@ -58,6 +58,10 @@ class DeviceOrderedTsBlockReader : public TsBlockReader {
     Filter* field_filter_ = nullptr;
     int remaining_offset_ = 0;
     int remaining_limit_ = -1;
+    // Output block shared by the per-device readers this iterator creates.
+    // Each device otherwise allocates (and faults in) its own block and column
+    // buffers; the layout is identical across devices, so one block is enough.
+    ReusableTsBlock reusable_block_;
 };
 }  // namespace storage
 

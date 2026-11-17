@@ -49,6 +49,9 @@ struct ChunkPageInfo {
     uint32_t time_uncompressed_size = 0;
     int32_t row_begin = 0;  // inclusive
     int32_t row_end = 0;    // exclusive
+    // Row index of this page's first retained row in the chunk reader's output
+    // stream. Filled by build_page_plan() once the whole plan is known.
+    int32_t out_row_begin = 0;
     std::vector<int64_t> value_file_offsets;
     std::vector<uint32_t> value_compressed_sizes;
     std::vector<uint32_t> value_uncompressed_sizes;
@@ -65,6 +68,17 @@ struct PageDecodedState {
     common::PageArena predecode_pa;
     int32_t predecoded_count = 0;
     int32_t predecoded_read_pos = 0;
+    // Non-null when the page was decoded straight into the destination TsBlock
+    // column buffer (see AlignedChunkReader::prepare_direct_decode()). Aliases
+    // memory owned by the Vector; predecoded_values stays empty in that case.
+    char* direct_values = nullptr;
+
+    // Where this slot's fixed-length values live: the direct view when present,
+    // otherwise the slot's own buffer.
+    char* values() {
+        return direct_values != nullptr ? direct_values
+                                        : predecoded_values.data();
+    }
 };
 
 // Per-value-column state for multi-value AlignedChunkReader.
@@ -177,6 +191,15 @@ class AlignedChunkReader : public IChunkReader {
 
     bool is_multi_value_mode() const { return multi_value_mode_; }
 
+#ifdef ENABLE_TEST
+    // Pages scattered by the bulk-copy path so far (FULL_PASS pages and
+    // BOUNDARY pages a contiguous time filter proves fully matched).
+    size_t TEST_bulk_page_count() const { return bulk_page_count_; }
+    // Leading pages of the current plan that decode straight into the
+    // destination block's column buffers (see prepare_direct_decode()).
+    size_t TEST_direct_page_end() const { return direct_page_end_; }
+#endif
+
 #ifdef ENABLE_THREADS
     // Set external thread pool for parallel decode (not owned).
     void set_decode_pool(common::ThreadPool* pool) { decode_pool_ = pool; }
@@ -274,6 +297,7 @@ class AlignedChunkReader : public IChunkReader {
                               common::RowAppender& row_appender, Filter* filter,
                               common::PageArena* pa);
     int build_page_plan(Filter* filter, int& row_offset);
+    bool prepare_direct_decode(common::TsBlock* tsblock, Filter* filter);
     void build_filter_column_mask();
     int evaluate_page_field_mask(size_t page_idx);
     int decode_output_columns_for_page(size_t page_idx);
@@ -345,6 +369,22 @@ class AlignedChunkReader : public IChunkReader {
     std::vector<bool> filter_column_mask_;
     SelectionMask current_page_field_mask_;
     bool current_page_field_mask_valid_ = false;
+
+    // Direct decode: pages [0, direct_page_end_) are decoded straight into the
+    // destination Vector memory instead of a per-page staging buffer. See
+    // prepare_direct_decode().
+    size_t direct_page_end_ = 0;
+    int32_t direct_base_row_ = 0;
+    common::TsBlock* direct_tsblock_ = nullptr;
+    // Per value column: byte offset in the Vector's buffer where the next
+    // decoded value goes. TsBlock columns store non-null values compactly
+    // (RowIterator advances offsets only for non-null rows), so this advances
+    // by the non-null count of each page, not by its row index.
+    std::vector<size_t> direct_col_off_;
+
+#ifdef ENABLE_TEST
+    size_t bulk_page_count_ = 0;
+#endif
 
 #ifdef ENABLE_THREADS
     common::ThreadPool* decode_pool_ = nullptr;  // borrowed, not owned

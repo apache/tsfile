@@ -53,8 +53,12 @@ typedef struct ConfigValue {
     TSEncoding double_encoding_type_;
     TSEncoding string_encoding_type_;
     CompressionType default_compression_type_;
-    bool parallel_read_enabled_;
-    bool parallel_write_enabled_;
+    // Unlike the fields above, these two keep their in-class default instead
+    // of being assigned by init_config_value(): a caller may configure the
+    // parallel paths before the first reader/writer triggers lazy library
+    // initialization, and the init-time assignment would silently reset them.
+    bool parallel_read_enabled_ = true;
+    bool parallel_write_enabled_ = true;
     // Size of the single global worker pool (common::g_thread_pool_) shared by
     // the parallel write and parallel read paths.  The pool is (re)created from
     // this value in init_common().  Like sync_on_close_/encrypt_flag_ it keeps
@@ -68,6 +72,13 @@ typedef struct ConfigValue {
     // throughput: writes return success as soon as data is in the page cache.
     // Only set to false if the caller drives its own fsync policy.
     bool sync_on_close_ = true;
+    // When true, a timestamp equal to the previous one is accepted; only a
+    // strictly decreasing timestamp is rejected with E_OUT_OF_ORDER. Equal
+    // timestamps are preserved as separate rows (no write-time dedup). Like
+    // thread_count_/sync_on_close_ it keeps its in-class default rather than
+    // being reset by init_config_value(), so a setter called before
+    // libtsfile_init() is not clobbered.
+    bool allow_non_decreasing_timestamps_ = false;
 } ConfigValue;
 
 extern void init_config_value();

@@ -166,17 +166,9 @@ if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
 endif ()
 
-if (NOT DEFINED CMAKE_BUILD_PARALLEL_LEVEL)
-    include(ProcessorCount)
-    ProcessorCount(N)
-    if (N EQUAL 0)
-        set(N 1)
-    endif ()
-    set(CMAKE_BUILD_PARALLEL_LEVEL ${N} CACHE STRING "Number of parallel build jobs")
-    message("CMAKE BUILD PARALLEL LEVEL: ${CMAKE_BUILD_PARALLEL_LEVEL} (auto-detected)")
-else ()
-    message("CMAKE BUILD PARALLEL LEVEL: ${CMAKE_BUILD_PARALLEL_LEVEL} (from environment)")
-endif ()
+# Build parallelism is set by the driver, not here: `cmake --build` honors only the
+# CMAKE_BUILD_PARALLEL_LEVEL environment variable (never a cache variable of that
+# name), so the Maven build passes --parallel and build.sh passes -j instead.
 
 message("CMAKE BUILD TYPE " ${CMAKE_BUILD_TYPE})
 # Tune Release builds for the build-host CPU (-march=native). OFF by default:
@@ -303,7 +295,7 @@ endif ()
 option(BUILD_TOOLS "Build the tsfile command-line tools" ON)
 message("cmake using: BUILD_TOOLS=${BUILD_TOOLS}")
 
-option(BUILD_BENCHMARK "Build the read-backend benchmark" OFF)
+option(BUILD_BENCHMARK "Build the file-backend benchmarks" OFF)
 message("cmake using: BUILD_BENCHMARK=${BUILD_BENCHMARK}")
 
 option(ENABLE_ANTLR4 "Enable ANTLR4 runtime" ON)
@@ -472,6 +464,43 @@ if (BUILD_BENCHMARK)
             ${PROJECT_SRC_DIR})
     target_link_libraries(read_backend_benchmark PRIVATE
             tsfile Threads::Threads)
+
+    add_executable(write_backend_benchmark
+            bench_mark/bench_mark_src/write_backend_benchmark.cc)
+    target_include_directories(write_backend_benchmark PRIVATE
+            ${PROJECT_SRC_DIR})
+    target_link_libraries(write_backend_benchmark PRIVATE
+            tsfile Threads::Threads)
+
+    add_executable(alp_vs_gorilla_benchmark
+            bench_mark/alp_vs_gorilla_benchmark.cc)
+    target_include_directories(alp_vs_gorilla_benchmark PRIVATE
+            ${PROJECT_SRC_DIR})
+    target_link_libraries(alp_vs_gorilla_benchmark PRIVATE
+            tsfile Threads::Threads)
+
+    add_executable(gorilla_v1_batch_decode_benchmark
+            bench_mark/gorilla_v1_batch_decode_benchmark.cc)
+    target_include_directories(gorilla_v1_batch_decode_benchmark PRIVATE
+            ${PROJECT_SRC_DIR})
+    target_link_libraries(gorilla_v1_batch_decode_benchmark PRIVATE
+            tsfile Threads::Threads)
+
+    add_executable(sprintz_batch_decode_benchmark
+            bench_mark/sprintz_batch_decode_benchmark.cc)
+    target_include_directories(sprintz_batch_decode_benchmark PRIVATE
+            ${PROJECT_SRC_DIR})
+    target_link_libraries(sprintz_batch_decode_benchmark PRIVATE
+            tsfile Threads::Threads)
+
+    if (ENABLE_SIMD)
+        add_executable(alp_avx2_benchmark
+                bench_mark/alp_avx2_benchmark.cc)
+        target_include_directories(alp_avx2_benchmark PRIVATE
+                ${PROJECT_SRC_DIR})
+        target_link_libraries(alp_avx2_benchmark PRIVATE
+                tsfile Threads::Threads)
+    endif ()
 endif ()
 if (BUILD_TOOLS)
     add_subdirectory(tools)

@@ -68,6 +68,8 @@ Repository checks:
    null, time, text, date, and binary values.
 6. Close writers, readers, and result sets to finalize file structures and
    release native resources.
+7. Java cannot query ALP series. Duplicate timestamps are opt-in; check the
+   file's timestamp-policy property and the consumer's ordering requirements.
 
 ## Troubleshooting Order
 

@@ -34,6 +34,13 @@ Use this reference only for the C wrapper around the C++ implementation. Read
   typed `tablet_add_value_by_name_*` functions.
 - Write: `tsfile_writer_write`.
 - Reader/query: `tsfile_reader_new`, `tsfile_query_table`.
+- Runtime: `tsfile_set_parallel_read_enabled`, `tsfile_set_parallel_write_enabled`,
+  `tsfile_set_thread_count` and matching getters; defaults enabled, enabled, 6.
+  Counts must be `1..64`; do not resize an in-use pool (see `cpp-build-write.md`).
+- Local reads: `tsfile_set_file_read_backend` / `tsfile_get_file_read_backend`;
+  use the declared `TSFILE_READ_BACKEND_*` values (see `advanced-apis.md`).
+- Timestamp policy: `set_allow_non_decreasing_timestamps(bool)` (no `tsfile_`
+  prefix), default false; configure before creating writers (see `advanced-apis.md`).
 - Cleanup: use the matching close and `free_*` functions demonstrated by the
   maintained examples.
 

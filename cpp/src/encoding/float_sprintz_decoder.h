@@ -36,15 +36,16 @@ namespace storage {
 
 class FloatSprintzDecoder : public SprintzDecoder {
    public:
-    FloatSprintzDecoder() : fire_pred_(2), predict_scheme_("fire") {
+    FloatSprintzDecoder()
+        : pre_value_(0),
+          current_value_(0.0f),
+          current_buffer_(block_size_ + 1),
+          convert_buffer_(block_size_),
+          packer_(0),
+          pack_buf_(block_size_ * sizeof(int32_t) + 8, 0),
+          fire_pred_(2),
+          predict_scheme_("fire") {
         SprintzDecoder::reset();
-        current_buffer_.resize(block_size_ + 1);
-        convert_buffer_.resize(block_size_);
-        pre_value_ = 0;
-        current_value_ = 0.0f;
-        current_count_ = 0;
-        decode_size_ = 0;
-        is_block_read_ = false;
         std::fill(current_buffer_.begin(), current_buffer_.end(), 0.0f);
         std::fill(convert_buffer_.begin(), convert_buffer_.end(), 0);
         fire_pred_.reset();
@@ -106,6 +107,14 @@ class FloatSprintzDecoder : public SprintzDecoder {
         return ret;
     }
 
+    int read_batch_float(float* out, int capacity, int& actual,
+                         common::ByteStream& in) override {
+        // has_remaining() compares current_count_ against decode_size_, so a
+        // pending block is readable to its end and needs no data gate.
+        return batch_read(out, capacity, actual, current_buffer_.data(), in,
+                          false, sizeof(uint32_t) + 1);
+    }
+
    protected:
     int decode_block(common::ByteStream& input) override {
         // read header bitWidth
@@ -122,7 +131,7 @@ class FloatSprintzDecoder : public SprintzDecoder {
         if ((bit_width_ & (1 << 7)) != 0) {
             decode_size_ = bit_width_ & ~(1 << 7);
             FloatGorillaDecoder decoder;
-            for (size_t i = 0; i < decode_size_; ++i) {
+            for (int i = 0; i < decode_size_; ++i) {
                 if (RET_FAIL(decoder.read_float(current_buffer_[i], input))) {
                     return ret;
                 }
@@ -138,19 +147,19 @@ class FloatSprintzDecoder : public SprintzDecoder {
             common::SerializationUtil::read_float(pre_value_, input);
             current_buffer_[0] = pre_value_;
             // read packed data
-            // +8 zero bytes: the SIMD unpack gathers 8 bytes per value and
-            // may read up to 7 bytes past the packed group.
-            std::vector<uint8_t> pack_buf(bit_width_ + 8, 0);
             uint32_t read_len = 0;
-            input.read_buf(reinterpret_cast<char*>(pack_buf.data()), bit_width_,
-                           read_len);
-            packer_ = std::make_shared<Int32Packer>(bit_width_);
-            std::vector<int32_t> tmp_buffer(block_size_);
-            packer_->unpack_8values(pack_buf.data(), 0, tmp_buffer.data());
-            // move into convert_buffer_
-            for (int i = 0; i < block_size_; ++i) {
-                convert_buffer_[i] = tmp_buffer[i];
+            input.read_buf(reinterpret_cast<char*>(pack_buf_.data()),
+                           bit_width_, read_len);
+            // The SIMD unpack gathers 8 bytes per value and may read up to 7
+            // bytes past the packed group. Zero everything the read did not
+            // fill so a reused buffer never carries a previous block's bytes
+            // into the padding or into a short read's tail.
+            if (read_len < pack_buf_.size()) {
+                std::memset(pack_buf_.data() + read_len, 0,
+                            pack_buf_.size() - read_len);
             }
+            packer_.set_width(bit_width_);
+            packer_.unpack_8values(pack_buf_.data(), 0, convert_buffer_.data());
             ret = recalculate();
         }
         is_block_read_ = true;
@@ -227,13 +236,11 @@ class FloatSprintzDecoder : public SprintzDecoder {
    private:
     float pre_value_;
     float current_value_;
-    size_t current_count_;
-    size_t decode_size_;
-    bool is_block_read_ = false;
 
     std::vector<float> current_buffer_;
     std::vector<int32_t> convert_buffer_;
-    std::shared_ptr<Int32Packer> packer_;
+    Int32Packer packer_;
+    std::vector<uint8_t> pack_buf_;
     IntFire fire_pred_;
     std::string predict_scheme_;
 };
