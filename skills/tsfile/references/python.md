@@ -90,6 +90,15 @@ with TsFileReader("data.tsfile") as reader:
 - Current bindings expose `query_table` and `query_table_by_row`; do not reuse
   older `get_table_names` or `read_table` examples without checking the target
   version.
+- Repeated batch `query_table` calls whose tag filter selects exactly one device
+  reuse prepared series through a per-reader LRU
+  (`TSFILE_QUERY_CACHE_SIZE`, default `1024`, `0` disables). TAG-column
+  selections, row-by-row mode (`batch_size <= 0`) and filters matching zero or
+  several devices keep the regular path. For explicit control,
+  `prepare_table_series(table, column, tag_filter)` resolves one column and
+  returns a handle for `query_prepared`; `query_prepared_multi([...])` serves
+  several aligned columns. Both accept `block_rows` to bound each returned
+  TsBlock (it does not limit rows returned).
 - Schema collections may be lists or mappings depending on the binding layer;
   normalize them before reusable iteration.
 - Use context managers for readers, writers, and results.
