@@ -95,10 +95,12 @@ import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
@@ -110,6 +112,7 @@ import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -1090,6 +1093,201 @@ public class TsFileSequenceReader implements AutoCloseable {
       }
     }
     return timeseriesMetadataList;
+  }
+
+  /**
+   * Reads the {@link TimeseriesMetadata} of the given measurements of a device, visiting each
+   * measurement leaf group that holds a requested measurement at most once.
+   *
+   * @param deviceMetadataIndexNodeOffset measurement metadata index node offset of an external
+   *     TsFile; null to locate the device through the table metadata index
+   * @param measurements measurements to read, in any order
+   * @param ignoreNotExistDevice whether to return an empty map instead of throwing when the device
+   *     is not recorded in the file metadata
+   * @return the metadata of the measurements found in this file; absent measurements are missing
+   *     from the map
+   */
+  public Map<String, TimeseriesMetadata> readTimeseriesMetadata(
+      IDeviceID device,
+      long[] deviceMetadataIndexNodeOffset,
+      Collection<String> measurements,
+      boolean ignoreNotExistDevice,
+      LongConsumer ioSizeRecorder)
+      throws IOException {
+    return readTimeseriesMetadata(
+        device,
+        deviceMetadataIndexNodeOffset,
+        measurements,
+        null,
+        ignoreNotExistDevice,
+        ioSizeRecorder);
+  }
+
+  /**
+   * Reads the {@link TimeseriesMetadata} of the measurements that share a leaf group with one of
+   * {@code measurements}. Leaf groups that no searched measurement maps into are not read, and each
+   * visited leaf group is read once.
+   *
+   * @param measurements measurements that select the leaf groups to visit
+   * @param returnedMeasurements measurements to deserialize from the visited groups; null means
+   *     {@code measurements}. It may contain measurements outside {@code measurements}, which is
+   *     how a caller warms the metadata cache with the siblings of a single requested measurement
+   * @return the metadata of the returned measurements found in this file; absent measurements are
+   *     missing from the map
+   */
+  public Map<String, TimeseriesMetadata> readTimeseriesMetadata(
+      IDeviceID device,
+      long[] deviceMetadataIndexNodeOffset,
+      Collection<String> measurements,
+      Set<String> returnedMeasurements,
+      boolean ignoreNotExistDevice,
+      LongConsumer ioSizeRecorder)
+      throws IOException {
+    if (measurements.isEmpty()) {
+      return Collections.emptyMap();
+    }
+    MetadataIndexNode measurementIndexNode =
+        getMeasurementMetadataIndexNode(device, deviceMetadataIndexNodeOffset, ioSizeRecorder);
+    if (measurementIndexNode == null) {
+      if (ignoreNotExistDevice) {
+        return Collections.emptyMap();
+      }
+      throw new IOException(
+          Messages.format("error.read.device_not_in_metadata_file", device, file));
+    }
+    List<String> sortedMeasurements = new ArrayList<>(new TreeSet<>(measurements));
+    Set<String> returned =
+        returnedMeasurements == null ? new HashSet<>(sortedMeasurements) : returnedMeasurements;
+    Map<String, TimeseriesMetadata> result = new HashMap<>();
+    readMeasurementsInIndexNode(
+        measurementIndexNode, sortedMeasurements, returned, result, ioSizeRecorder);
+    return result;
+  }
+
+  public Map<String, TimeseriesMetadata> readTimeseriesMetadata(
+      IDeviceID device, Collection<String> measurements, boolean ignoreNotExistDevice)
+      throws IOException {
+    return readTimeseriesMetadata(device, null, measurements, null, ignoreNotExistDevice, null);
+  }
+
+  private MetadataIndexNode getMeasurementMetadataIndexNode(
+      IDeviceID device, long[] deviceMetadataIndexNodeOffset, LongConsumer ioSizeRecorder)
+      throws IOException {
+    if (deviceMetadataIndexNodeOffset != null) {
+      ByteBuffer buffer =
+          readData(
+              deviceMetadataIndexNodeOffset[0], deviceMetadataIndexNodeOffset[1], ioSizeRecorder);
+      return deserializeMeasurementMetadataIndexNode(buffer);
+    }
+    readFileMetadata(ioSizeRecorder);
+    MetadataIndexNode deviceIndexNode =
+        tsFileMetaData.getTableMetadataIndexNode(device.getTableName());
+    Pair<IMetadataIndexEntry, Long> deviceEntry =
+        getMetadataAndEndOffsetOfDeviceNode(deviceIndexNode, device, true, ioSizeRecorder);
+    if (deviceEntry == null) {
+      return null;
+    }
+    ByteBuffer buffer = readData(deviceEntry.left.getOffset(), deviceEntry.right, ioSizeRecorder);
+    if (deviceIndexNode.getNodeType().equals(MetadataIndexNodeType.LEAF_MEASUREMENT)) {
+      return deviceIndexNode;
+    }
+    return deserializeMeasurementMetadataIndexNode(buffer);
+  }
+
+  private MetadataIndexNode deserializeMeasurementMetadataIndexNode(ByteBuffer buffer)
+      throws IOException {
+    try {
+      return deserializeConfig.measurementMetadataIndexNodeBufferDeserializer.deserialize(
+          buffer, deserializeConfig);
+    } catch (Exception e) {
+      logger.error(METADATA_INDEX_NODE_DESERIALIZE_ERROR, file);
+      throw e;
+    }
+  }
+
+  private void readMeasurementsInIndexNode(
+      MetadataIndexNode node,
+      List<String> sortedMeasurements,
+      Set<String> requested,
+      Map<String, TimeseriesMetadata> result,
+      LongConsumer ioSizeRecorder)
+      throws IOException {
+    List<Pair<IMetadataIndexEntry, Long>> entries =
+        node.getChildIndexEntries(sortedMeasurements, false);
+    int groupStart = 0;
+    for (int i = 1; i <= sortedMeasurements.size(); i++) {
+      if (i < sortedMeasurements.size() && entries.get(i) == entries.get(groupStart)) {
+        continue;
+      }
+      Pair<IMetadataIndexEntry, Long> entry = entries.get(groupStart);
+      if (entry != null) {
+        if (node.getNodeType().equals(MetadataIndexNodeType.LEAF_MEASUREMENT)) {
+          readLeafMeasurementGroup(entry, requested, result, ioSizeRecorder);
+        } else {
+          ByteBuffer buffer = readData(entry.left.getOffset(), entry.right, ioSizeRecorder);
+          readMeasurementsInIndexNode(
+              deserializeMeasurementMetadataIndexNode(buffer),
+              sortedMeasurements.subList(groupStart, i),
+              requested,
+              result,
+              ioSizeRecorder);
+        }
+      }
+      groupStart = i;
+    }
+  }
+
+  private void readLeafMeasurementGroup(
+      Pair<IMetadataIndexEntry, Long> entry,
+      Set<String> requested,
+      Map<String, TimeseriesMetadata> result,
+      LongConsumer ioSizeRecorder)
+      throws IOException {
+    long startOffset = entry.left.getOffset();
+    long endOffset = entry.right;
+    if (endOffset - startOffset < Integer.MAX_VALUE) {
+      ByteBuffer buffer = readData(startOffset, endOffset, ioSizeRecorder);
+      while (buffer.hasRemaining()) {
+        TimeseriesMetadata metadata = deserializeTimeseriesMetadata(buffer);
+        if (requested.contains(metadata.getMeasurementId())) {
+          result.put(metadata.getMeasurementId(), metadata);
+        }
+      }
+      return;
+    }
+    // a group larger than Integer.MAX_VALUE cannot be held in one buffer
+    if (ioSizeRecorder != null) {
+      ioSizeRecorder.accept(endOffset - startOffset);
+    }
+    synchronized (this) {
+      tsFileInput.position(startOffset);
+      while (tsFileInput.position() < endOffset) {
+        TimeseriesMetadata metadata = deserializeTimeseriesMetadata(tsFileInput);
+        if (requested.contains(metadata.getMeasurementId())) {
+          result.put(metadata.getMeasurementId(), metadata);
+        }
+      }
+    }
+  }
+
+  private TimeseriesMetadata deserializeTimeseriesMetadata(ByteBuffer buffer) throws IOException {
+    try {
+      return TimeseriesMetadata.deserializeFrom(buffer, true);
+    } catch (Exception e) {
+      logger.error(Messages.get("log.read.sequence_reader_tsm_deserialize_error"), file);
+      throw e;
+    }
+  }
+
+  private TimeseriesMetadata deserializeTimeseriesMetadata(TsFileInput input) throws IOException {
+    try {
+      return TimeseriesMetadata.deserializeFrom(input, true);
+    } catch (StopReadTsFileByInterruptException e) {
+      throw e;
+    } catch (Exception e) {
+      logger.error(Messages.get("log.read.sequence_reader_tsm_deserialize_error"), file);
+      throw e;
+    }
   }
 
   /* Get leaf MetadataIndexPair which contains path */

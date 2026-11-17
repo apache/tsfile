@@ -33,10 +33,12 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class MetadataIndexNode {
 
+  private static final double LOG2 = Math.log(2);
   protected static final TSFileConfig config = TSFileDescriptor.getInstance().getConfig();
   protected final List<IMetadataIndexEntry> children;
   protected long endOffset;
@@ -126,7 +128,10 @@ public class MetadataIndexNode {
   }
 
   public Pair<IMetadataIndexEntry, Long> getChildIndexEntry(Comparable key, boolean exactSearch) {
-    int index = binarySearchInChildren(key, exactSearch);
+    return getChildIndexEntry(binarySearchInChildren(key, exactSearch));
+  }
+
+  private Pair<IMetadataIndexEntry, Long> getChildIndexEntry(int index) {
     if (index == -1) {
       return null;
     }
@@ -137,6 +142,33 @@ public class MetadataIndexNode {
       childEndOffset = this.endOffset;
     }
     return new Pair<>(children.get(index), childEndOffset);
+  }
+
+  /**
+   * Searches the floor child entry of every key in one pass. The same pair instance is returned for
+   * consecutive keys that belong to the same child, so callers can group keys by identity.
+   *
+   * @param keys keys sorted in ascending order
+   * @param exactSearch whether to return null instead of the floor child when the key is missing
+   */
+  public List<Pair<IMetadataIndexEntry, Long>> getChildIndexEntries(
+      List<? extends Comparable> keys, boolean exactSearch) {
+    int[] indexes =
+        keys.size() >= children.size()
+                || keys.size() * Math.log(children.size()) / LOG2 > keys.size() + children.size()
+            ? mergeSearchInChildren(keys, exactSearch)
+            : binarySearchInChildren(keys, exactSearch);
+    List<Pair<IMetadataIndexEntry, Long>> pairs = new ArrayList<>(indexes.length);
+    Pair<IMetadataIndexEntry, Long> previousPair = null;
+    int previousIndex = -1;
+    for (int index : indexes) {
+      if (index != previousIndex) {
+        previousPair = getChildIndexEntry(index);
+        previousIndex = index;
+      }
+      pairs.add(previousPair);
+    }
+    return pairs;
   }
 
   int binarySearchInChildren(Comparable key, boolean exactSearch) {
@@ -163,6 +195,67 @@ public class MetadataIndexNode {
     } else {
       return low == 0 ? low : low - 1;
     }
+  }
+
+  int[] binarySearchInChildren(List<? extends Comparable> keys, boolean exactSearch) {
+    int[] results = new int[keys.size()];
+    Arrays.fill(results, -1);
+    int currentLow = 0;
+    int high = children.size() - 1;
+
+    for (int i = 0; i < keys.size(); i++) {
+      Comparable key = keys.get(i);
+      if (currentLow > high) {
+        Arrays.fill(results, i, keys.size(), exactSearch ? -1 : currentLow - 1);
+        return results;
+      }
+
+      int foundIndex = -1;
+      int start = currentLow;
+      int end = high;
+      while (start <= end) {
+        int mid = (start + end) >>> 1;
+        int cmp = children.get(mid).getCompareKey().compareTo(key);
+        if (cmp < 0) {
+          start = mid + 1;
+        } else if (cmp > 0) {
+          end = mid - 1;
+        } else {
+          foundIndex = mid;
+          break;
+        }
+      }
+
+      if (foundIndex >= 0) {
+        results[i] = foundIndex;
+        currentLow = foundIndex + 1;
+      } else {
+        results[i] = exactSearch ? -1 : start - 1;
+        currentLow = start;
+      }
+    }
+    return results;
+  }
+
+  int[] mergeSearchInChildren(List<? extends Comparable> keys, boolean exactSearch) {
+    int[] results = new int[keys.size()];
+    int i = 0;
+    int j = 0;
+    while (i < keys.size() && j < children.size()) {
+      int cmp = keys.get(i).compareTo(children.get(j).getCompareKey());
+      if (cmp == 0) {
+        results[i] = j;
+        i++;
+        j++;
+      } else if (cmp > 0) {
+        j++;
+      } else {
+        results[i] = exactSearch ? -1 : j - 1;
+        i++;
+      }
+    }
+    Arrays.fill(results, i, keys.size(), exactSearch ? -1 : children.size() - 1);
+    return results;
   }
 
   public boolean isDeviceLevel() {

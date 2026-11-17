@@ -21,6 +21,7 @@ package org.apache.tsfile.read;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.constant.TestConstant;
+import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.utils.FileGenerator;
@@ -32,8 +33,10 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class TimeSeriesMetadataReadTest {
@@ -91,6 +94,86 @@ public class TimeSeriesMetadataReadTest {
     Assert.assertEquals(2, timeseriesMetadataList.size());
     for (int i = 5; i < 7; i++) {
       Assert.assertEquals("s" + i, timeseriesMetadataList.get(i - 5).getMeasurementId());
+    }
+  }
+
+  @Test
+  public void testReadTimeseriesMetadataInBatch() throws IOException {
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(FILE_PATH)) {
+      IDeviceID device = new Path("d1", "s1", true).getIDeviceID();
+      Set<String> requested =
+          new HashSet<>(Arrays.asList("s1", "s2", "s3", "s4", "s5", "s6", "s8"));
+
+      Map<String, TimeseriesMetadata> batch =
+          reader.readTimeseriesMetadata(device, requested, false);
+      // s8 does not exist in the file
+      Assert.assertEquals(6, batch.size());
+      Assert.assertNull(batch.get("s8"));
+      for (String measurement : Arrays.asList("s1", "s2", "s3", "s4", "s5", "s6")) {
+        TimeseriesMetadata single = reader.readTimeseriesMetadata(device, measurement, false, null);
+        TimeseriesMetadata batched = batch.get(measurement);
+        Assert.assertNotNull(measurement, single);
+        Assert.assertNotNull(measurement, batched);
+        Assert.assertEquals(measurement, single.getMeasurementId(), batched.getMeasurementId());
+        Assert.assertEquals(
+            measurement, single.getStatistics().getCount(), batched.getStatistics().getCount());
+        Assert.assertEquals(
+            measurement,
+            single.getStatistics().getStartTime(),
+            batched.getStatistics().getStartTime());
+        Assert.assertEquals(
+            measurement, single.getStatistics().getEndTime(), batched.getStatistics().getEndTime());
+        Assert.assertEquals(
+            measurement,
+            single.getChunkMetadataList().size(),
+            batched.getChunkMetadataList().size());
+      }
+
+      // a single searched measurement can warm the cache with its group siblings
+      Map<String, TimeseriesMetadata> withSiblings =
+          reader.readTimeseriesMetadata(
+              device,
+              null,
+              java.util.Collections.singletonList("s1"),
+              new HashSet<>(Arrays.asList("s1", "s2", "s3")),
+              false,
+              null);
+      Assert.assertEquals(new HashSet<>(Arrays.asList("s1", "s2", "s3")), withSiblings.keySet());
+      for (Map.Entry<String, TimeseriesMetadata> entry : withSiblings.entrySet()) {
+        Assert.assertEquals(
+            entry.getKey(),
+            batch.get(entry.getKey()).getStatistics().getCount(),
+            entry.getValue().getStatistics().getCount());
+      }
+
+      // an absent device is tolerated only when ignoreNotExistDevice is set
+      IDeviceID absentDevice = new Path("d_not_exist", "s1", true).getIDeviceID();
+      Assert.assertTrue(reader.readTimeseriesMetadata(absentDevice, requested, true).isEmpty());
+      Assert.assertThrows(
+          IOException.class, () -> reader.readTimeseriesMetadata(absentDevice, requested, false));
+
+      // the offset-addressed variant used by external tsfiles reads the same metadata
+      LazyTsFileDeviceIterator iterator = new LazyTsFileDeviceIterator(reader);
+      IDeviceID current = null;
+      long[] offset = null;
+      while (iterator.hasNext()) {
+        IDeviceID next = iterator.next();
+        if (next.equals(device)) {
+          current = next;
+          offset = iterator.getCurrentDeviceMeasurementNodeOffset();
+          break;
+        }
+      }
+      Assert.assertNotNull(offset);
+      Map<String, TimeseriesMetadata> viaOffset =
+          reader.readTimeseriesMetadata(current, offset, requested, false, null);
+      Assert.assertEquals(batch.keySet(), viaOffset.keySet());
+      for (String measurement : batch.keySet()) {
+        Assert.assertEquals(
+            measurement,
+            batch.get(measurement).getStatistics().getCount(),
+            viaOffset.get(measurement).getStatistics().getCount());
+      }
     }
   }
 }
