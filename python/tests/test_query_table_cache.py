@@ -30,6 +30,8 @@ from tsfile import (
     TSDataType,
     TsFileReader,
     TsFileTableWriter,
+    get_tsfile_config,
+    set_tsfile_config,
     tag_eq,
     tag_gteq,
 )
@@ -55,6 +57,18 @@ DEVICES = {
         "south",
         list(range(10)),
         [None if i % 3 else float(i) for i in range(10)],
+    ),
+    # Null-only tails and heads: value statistics exclude these timestamps, so
+    # a window covering only them must still return the aligned null rows.
+    "dev_tail_null": (
+        "north",
+        list(range(10)),
+        [float(i) for i in range(3)] + [None] * 7,
+    ),
+    "dev_head_null": (
+        "north",
+        list(range(10)),
+        [None] * 7 + [float(i) for i in range(7, 10)],
     ),
 }
 
@@ -110,12 +124,12 @@ def collect(reader, tag, start=None, end=None, columns=("value",), batch_size=8)
         return batches
 
 
-def fresh_reader(cache_size=None):
+def fresh_reader(cache_size=None, path=TSFILE_PATH):
     if cache_size is None:
         os.environ.pop("TSFILE_QUERY_CACHE_SIZE", None)
     else:
         os.environ["TSFILE_QUERY_CACHE_SIZE"] = str(cache_size)
-    return TsFileReader(TSFILE_PATH)
+    return TsFileReader(path)
 
 
 @pytest.fixture(autouse=True)
@@ -254,3 +268,96 @@ def test_compound_tag_filter_is_cacheable():
         for _ in range(3):
             assert query(cached) == expected
         assert cached.prepared_query_cache_size() == 1
+
+
+@pytest.mark.parametrize(
+    "device,windows",
+    [
+        ("dev_tail_null", [(3, 9), (4, 5), (5, 9)]),
+        ("dev_head_null", [(0, 5), (0, 2), (2, 5)]),
+    ],
+)
+def test_null_only_windows_match_uncached(device, windows):
+    # The matching rows exist but every value in them is NULL; the cached path
+    # must not prune them with value-only statistics.
+    with fresh_reader() as cached, fresh_reader(0) as uncached:
+        for start, end in windows:
+            expected = collect(uncached, device, start, end)
+            assert sum(len(batch["time"]) for batch in expected) > 0
+            assert collect(cached, device, start, end) == expected
+
+
+def _write_page_limited_file(path, points=1000, page_points=300):
+    previous = get_tsfile_config()["page_writer_max_point_num_"]
+    set_tsfile_config({"page_writer_max_point_num_": page_points})
+    try:
+        with TsFileTableWriter(path, SCHEMA) as writer:
+            tablet = Tablet(
+                ["region", "device", "value", "other"],
+                [
+                    TSDataType.STRING,
+                    TSDataType.STRING,
+                    TSDataType.DOUBLE,
+                    TSDataType.DOUBLE,
+                ],
+                points,
+            )
+            for i in range(points):
+                tablet.add_timestamp(i, i)
+                tablet.add_value_by_name("region", i, "north")
+                tablet.add_value_by_name("device", i, "dev_a")
+                tablet.add_value_by_name("value", i, float(i))
+                tablet.add_value_by_name("other", i, float(i) * 2.0)
+            writer.write_table(tablet)
+    finally:
+        set_tsfile_config({"page_writer_max_point_num_": previous})
+
+
+@pytest.mark.parametrize("columns", [("value",), ("value", "other")])
+def test_cached_batch_boundaries_match_uncached(tmp_path, columns):
+    path = str(tmp_path / "cache_pages.tsfile")
+    _write_page_limited_file(path)
+
+    def batches(cache_size):
+        with fresh_reader(cache_size, path) as reader:
+            with reader.query_table(
+                TABLE,
+                list(columns),
+                tag_filter=tag_eq("device", "dev_a"),
+                batch_size=128,
+            ) as result:
+                out = []
+                while True:
+                    batch = result.read_arrow_batch()
+                    if batch is None:
+                        break
+                    out.append(batch.to_pydict())
+                return out
+
+    cached = batches(None)
+    uncached = batches(0)
+    # Multiple pages per chunk: the cached path must keep filling each block to
+    # batch_size instead of returning page fragments.
+    assert [len(batch["time"]) for batch in cached] == [
+        len(batch["time"]) for batch in uncached
+    ]
+    assert cached == uncached
+
+
+def test_cached_result_resolves_bare_column_names():
+    # Prepared result sets are created with tree-model name lookup, which
+    # prepends the table name; a cached table result must resolve bare column
+    # names instead of raising ValueError.
+    with fresh_reader() as cached, fresh_reader(0) as uncached:
+
+        def lookup(reader):
+            with reader.query_table(
+                TABLE,
+                ["value"],
+                tag_filter=tag_eq("device", "dev_a"),
+                batch_size=8,
+            ) as result:
+                return result.is_null_by_name("value")
+
+        assert lookup(cached) in (True, False)
+        assert lookup(cached) == lookup(uncached)

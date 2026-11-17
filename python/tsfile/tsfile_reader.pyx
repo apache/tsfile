@@ -448,11 +448,15 @@ cdef class TsFileReaderPy:
                             raise
                         # The prepared form cannot serve this query (for
                         # example a non-aligned multi-column read); remember
-                        # that and use the regular path.
+                        # that and use the regular path. The entry is retired
+                        # by dropping the cache's reference: another thread may
+                        # still be inside a native call that borrows it.
                         self._prepared_query_cache[key] = None
-                        self._close_prepared_entry(prepared)
                     else:
                         pyresult.metadata.set_table_name(table_name)
+                        # Prepared result sets are created with tree-model name
+                        # lookup; a table query must resolve bare column names.
+                        pyresult.is_tree = False
                         return pyresult
         pyresult = ResultSetPy(self)
         if tag_filter is not None:
@@ -507,8 +511,8 @@ cdef class TsFileReaderPy:
 
     def clear_prepared_query_cache(self):
         """Drop every cached prepared table query."""
-        for prepared in self._prepared_query_cache.values():
-            self._close_prepared_entry(prepared)
+        # Clearing drops the cache's references; native handles are released
+        # when no in-flight query borrows them anymore.
         self._prepared_query_cache.clear()
 
     cdef object _prepared_query_key(self, str table_name, object column_names,
@@ -540,8 +544,10 @@ cdef class TsFileReaderPy:
         # the regular query path stays in charge.
         self._prepared_query_cache[key] = prepared
         while len(self._prepared_query_cache) > self._prepared_query_cache_size:
-            _, evicted = self._prepared_query_cache.popitem(last=False)
-            self._close_prepared_entry(evicted)
+            # Eviction drops the cache's reference only. Explicitly closing a
+            # handle here could free it under a concurrent native call that
+            # borrowed the same entry with the GIL released.
+            self._prepared_query_cache.popitem(last=False)
         return prepared
 
     def _prepare_series_group(self, table_name, column_names, tag_filter):
@@ -560,15 +566,6 @@ cdef class TsFileReaderPy:
         if len(prepared) == 1:
             return prepared[0]
         return tuple(prepared)
-
-    cdef void _close_prepared_entry(self, object entry):
-        if entry is None:
-            return
-        if isinstance(entry, tuple):
-            for item in entry:
-                item.close()
-        else:
-            entry.close()
 
     cdef TagFilterHandle _build_c_tag_filter(self, str table_name, object tag_filter):
         """Recursively build C TagFilterHandle from Python TagFilter tree."""
@@ -898,8 +895,8 @@ cdef class TsFileReaderPy:
         if self.reader == NULL:
             return
         if self._prepared_query_cache is not None:
-            for prepared in self._prepared_query_cache.values():
-                self._close_prepared_entry(prepared)
+            # Drop references; any in-flight query keeps its own reference
+            # until the native call returns.
             self._prepared_query_cache.clear()
         # result_set_bak to avoid runtime error.
         result_set_bak = list(self.activate_result_set_list)
