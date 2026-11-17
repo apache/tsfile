@@ -1512,6 +1512,41 @@ def test_dataset_unions_nonnumeric_declared_columns_without_exposing_them(
         assert entry.field_columns == ("temperature",)
 
 
+def test_dataset_skips_declared_field_without_values(tmp_path, dataframe_use_index):
+    # A numeric field one file declares but never writes (all-NaN column) has
+    # no series, hence no physical type. It must stay unreadable and must not
+    # corrupt persistent-index construction (its column packing needs a type).
+    path1 = tmp_path / "declared.tsfile"
+    path2 = tmp_path / "written.tsfile"
+    _write_table_rows_file(
+        path1,
+        [_WEATHER_DEVICE_TAG, _WEATHER_TEMPERATURE, _WEATHER_PRESSURE],
+        {
+            "time": [0],
+            "device": ["device_a"],
+            "temperature": [1.0],
+            "pressure": [np.nan],
+        },
+    )
+    _write_table_rows_file(
+        path2,
+        [_WEATHER_DEVICE_TAG, _WEATHER_TEMPERATURE],
+        {"time": [1], "device": ["device_a"], "temperature": [2.0]},
+    )
+
+    with TsFileDataFrame(
+        [str(path1), str(path2)],
+        show_progress=False,
+        use_index=dataframe_use_index,
+    ) as tsdf:
+        assert tsdf.list_timeseries() == ["weather.device_a.temperature"]
+        np.testing.assert_equal(
+            tsdf["weather.device_a.temperature"][:], np.array([1.0, 2.0])
+        )
+        with pytest.raises(KeyError, match="Series not found"):
+            tsdf["weather.device_a.pressure"][:]
+
+
 def test_dataset_merges_same_field_with_different_types(tmp_path, dataframe_use_index):
     # The dataset does not compare authored declarations: each shard is read
     # through its own catalog and converted to float64, so a same-named field

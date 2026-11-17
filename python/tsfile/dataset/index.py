@@ -583,16 +583,22 @@ def build_sections_from_dataframe(dataframe) -> Mapping[int, bytes]:
                 )
             ]
             first_field_ordinal = len(definitions)
+            # A declared field that no device ever wrote has no series, so it
+            # has no physical type. It cannot be served by the index either --
+            # packing a placeholder type is invalid -- so leave it out.
+            readable_fields = [
+                name
+                for name in table.field_columns
+                if (table_name, name) in field_types
+            ]
             definitions.extend(
-                [
-                    (
-                        first_field_ordinal + ordinal,
-                        name,
-                        field_types.get((table_name, name), -1),
-                        int(ColumnCategory.FIELD),
-                    )
-                    for ordinal, name in enumerate(table.field_columns)
-                ]
+                (
+                    first_field_ordinal + ordinal,
+                    name,
+                    field_types[(table_name, name)],
+                    int(ColumnCategory.FIELD),
+                )
+                for ordinal, name in enumerate(readable_fields)
             )
         for ordinal, name, data_type, role in definitions:
             column_id = len(columns)
