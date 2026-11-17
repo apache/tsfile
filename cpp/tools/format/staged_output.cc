@@ -19,10 +19,12 @@
 
 #include "format/staged_output.h"
 
+#include <iterator>
+
 namespace tsfile_cli {
 
 StagedOutput::StagedOutput() : file_(std::tmpfile()), stream_(this) {
-    setp(buffer_, buffer_ + sizeof(buffer_));
+    setp(buffer_, std::end(buffer_));
     if (file_ == nullptr) stream_.setstate(std::ios::badbit);
 }
 
@@ -34,7 +36,7 @@ int StagedOutput::sync() {
     if (file_ == nullptr) return -1;
     const size_t size = static_cast<size_t>(pptr() - pbase());
     if (std::fwrite(buffer_, 1, size, file_) != size) return -1;
-    setp(buffer_, buffer_ + sizeof(buffer_));
+    setp(buffer_, std::end(buffer_));
     return 0;
 }
 
@@ -48,6 +50,7 @@ StagedOutput::int_type StagedOutput::overflow(int_type ch) {
 }
 
 bool StagedOutput::publish(std::ostream& out) {
+    if (file_ == nullptr) return false;
     stream_.flush();
     if (!stream_.good() || std::fflush(file_) != 0 ||
         std::fseek(file_, 0, SEEK_SET) != 0) {
