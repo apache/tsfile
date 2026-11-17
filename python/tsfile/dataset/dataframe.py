@@ -29,7 +29,6 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ..constants import NUMERIC_DATASET_FIELD_TYPES, ColumnCategory, TSDataType
 from .formatting import format_dataframe_table
 from ._config import resolve_read_options
 from .metadata import (
@@ -52,7 +51,6 @@ SeriesRef = Tuple[object, int, int]
 _QUERY_START = np.iinfo(np.int64).min
 _QUERY_END = np.iinfo(np.int64).max
 _DATACLASS_SLOTS = {"slots": True} if sys.version_info >= (3, 10) else {}
-_NUMERIC_FIELD_TYPE_IDS = frozenset(int(item) for item in NUMERIC_DATASET_FIELD_TYPES)
 # Overlap position reads use chunked k-way merge. Keep the default chunk small
 # enough to avoid large read amplification for `series[i]` / short slices, but
 # large enough to avoid excessive query_by_row round-trips when overlap spans
@@ -124,144 +122,68 @@ def _series_lookup_hint(name: str) -> str:
     return f"Series not found: '{name}'. Use df.list_timeseries() to inspect available series."
 
 
-def _type_name(data_type) -> str:
-    """Render a data type for user-facing errors (``DOUBLE`` rather than ``4``)."""
-    try:
-        return TSDataType(int(data_type)).name
-    except (TypeError, ValueError):
-        return str(data_type)
-
-
-def _column_description(name, data_type) -> str:
-    return f"'{name}' ({_type_name(data_type)})"
-
-
-def _declared_schema_columns(entry: TableEntry) -> List[Tuple[str, int, int]]:
-    """Ordered ``(name, data_type, category)`` columns of one table entry.
-
-    Table-model entries built by the reader always carry ``schema_columns``;
-    the fallback keeps hand-built entries (and older catalogs) usable.
-    """
-    if entry.schema_columns:
-        return [
-            (name, int(data_type), int(category))
-            for name, data_type, category in entry.schema_columns
-        ]
-    columns = [
-        (name, int(data_type), int(ColumnCategory.TAG))
-        for name, data_type in zip(entry.tag_columns, entry.tag_types)
-    ]
-    columns.extend(
-        (name, int(data_type), int(ColumnCategory.FIELD))
-        for name, data_type in zip(entry.field_columns, entry.field_types)
-    )
-    return columns
-
-
 def _merge_table_model_entries(
     existing: TableEntry, incoming: TableEntry, file_path: str
 ) -> TableEntry:
     """Union two per-file table-model schemas into one global table.
 
-    One physical TsFile registers only the columns it actually wrote, so the
-    same table may legitimately span files with different column sets.  TAG
-    columns define device identity positionally -- a device is keyed by its
-    ordered tag *values*, never by tag column names -- so tag columns merge as
-    a prefix union: the shared prefix must keep the same data type (a type
-    change makes the tag values uninterpretable), while a trailing-tag
-    addition is appended and shorter devices read as null.  A same-position
-    tag whose name differs is a renamed column (IoTDB keeps tag ordinals across
-    RENAME COLUMN), so the merged schema keeps the first-seen name and the
-    values still line up position by position.  FIELD columns are unioned in
-    first-seen order -- a device/field absent from a file simply has no shard
-    and reads back as NaN.
+    A TsFile registers only the columns it actually wrote, and independently
+    written files may come from different schema snapshots, so the same table
+    legitimately spans files with different column sets. The dataset never
+    interprets an authored schema: reads go through each file's own catalog,
+    and the global view only needs the table name, the positional tag values
+    that identify a device, the field names it can expose, and where every
+    (device, field) shard lives. The merge is therefore a pure union -- no
+    declaration is compared, validated, or carried forward:
 
-    A same-named FIELD column must keep one data type across every file: a
-    standalone load set has no external "current schema" to reconcile a type
-    change against, so a differing type is rejected.  Non-numeric fields stay
-    in ``schema_columns`` (for the persistent index) but are not part of the
-    numeric ``field_columns`` surface, exactly as for a single file.
+    - TAG columns are positional; a device is keyed by its ordered tag
+      *values*, never by column names. The longer list wins (devices from
+      files without a trailing tag read it as null), and a tag renamed at the
+      same position keeps the first-seen name, which is display-only.
+    - FIELD columns are the union of the readable fields in first-seen order.
+      A device/field absent from a file simply has no shard and reads back as
+      NaN.
+
+    ``field_types`` and ``schema_columns`` are left empty, so persistent-index
+    construction derives column types from the physical data instead of a
+    declaration (``dataset/index.py`` has that fallback, plus its own
+    cross-shard physical-type check).
     """
     table_name = existing.table_name
-    existing_tags = list(zip(existing.tag_columns, existing.tag_types))
-    incoming_tags = list(zip(incoming.tag_columns, incoming.tag_types))
-    shared_tag_count = min(len(existing_tags), len(incoming_tags))
-    for position in range(shared_tag_count):
-        existing_name, existing_type = existing_tags[position]
-        incoming_name, incoming_type = incoming_tags[position]
-        if existing_type != incoming_type:
+    tag_columns = tuple(existing.tag_columns) + tuple(
+        incoming.tag_columns[len(existing.tag_columns) :]
+    )
+    tag_types = tuple(existing.tag_types) + tuple(
+        incoming.tag_types[len(existing.tag_columns) :]
+    )
+
+    field_columns = list(existing.field_columns)
+    seen = set(field_columns)
+    for name in incoming.field_columns:
+        if name not in seen:
+            seen.add(name)
+            field_columns.append(name)
+
+    # A name cannot be both a tag and a field of the same table: the
+    # persistent index keys columns by (table, name), so a duplicate would make
+    # series lookups ambiguous. This is a namespace conflict within one table,
+    # not a schema-version difference, so it is the one case still rejected.
+    tag_names = set(tag_columns)
+    for name in field_columns:
+        if name in tag_names:
             raise ValueError(
-                f"Incompatible tag column at position {position} for table "
-                f"'{table_name}' in '{file_path}': "
-                f"{_column_description(incoming_name, incoming_type)} but earlier "
-                f"TsFiles declare {_column_description(existing_name, existing_type)}. "
-                "Tag columns must keep the same data type across TsFiles; a "
-                "differing type makes the shared device ids uninterpretable."
+                f"Column '{name}' of table '{table_name}' in '{file_path}' is a "
+                "TAG in some TsFiles and a FIELD in others. A column name cannot "
+                "be both a tag and a field of the same table."
             )
-    tag_columns = tuple(name for name, _ in existing_tags) + tuple(
-        name for name, _ in incoming_tags[shared_tag_count:]
-    )
-    tag_types = tuple(data_type for _, data_type in existing_tags) + tuple(
-        data_type for _, data_type in incoming_tags[shared_tag_count:]
-    )
-
-    declared_fields: List[Tuple[str, int]] = []
-    field_type_by_name: Dict[str, int] = {}
-    time_columns: List[Tuple[str, int, int]] = []
-    for entry in (existing, incoming):
-        for name, data_type, category in _declared_schema_columns(entry):
-            if category == int(ColumnCategory.TIME):
-                if entry is existing:
-                    time_columns.append((name, data_type, category))
-                continue
-            if category != int(ColumnCategory.FIELD):
-                continue
-            previous_type = field_type_by_name.get(name)
-            if previous_type is None:
-                field_type_by_name[name] = data_type
-                declared_fields.append((name, data_type))
-            elif previous_type != data_type:
-                raise ValueError(
-                    f"Incompatible field column '{name}' for table "
-                    f"'{table_name}' in '{file_path}': declared "
-                    f"{_type_name(data_type)} here but "
-                    f"{_type_name(previous_type)} in earlier TsFiles. A field "
-                    "column must keep the same data type across TsFiles."
-                )
-
-    tag_column_set = set(tag_columns)
-    for name, _ in declared_fields:
-        if name in tag_column_set:
-            raise ValueError(
-                f"Incompatible column '{name}' for table '{table_name}' in "
-                f"'{file_path}': it is a TAG column in some TsFiles and a FIELD "
-                "column in others. A column cannot change category across TsFiles."
-            )
-
-    numeric_fields = [
-        (name, data_type)
-        for name, data_type in declared_fields
-        if data_type in _NUMERIC_FIELD_TYPE_IDS
-    ]
-    schema_columns = (
-        tuple(time_columns)
-        + tuple(
-            (name, int(data_type), int(ColumnCategory.TAG))
-            for name, data_type in zip(tag_columns, tag_types)
-        )
-        + tuple(
-            (name, data_type, int(ColumnCategory.FIELD))
-            for name, data_type in declared_fields
-        )
-    )
 
     return TableEntry(
         table_name=table_name,
         tag_columns=tag_columns,
         tag_types=tag_types,
-        field_columns=tuple(name for name, _ in numeric_fields),
-        field_types=tuple(TSDataType(data_type) for _, data_type in numeric_fields),
-        schema_columns=schema_columns,
+        field_columns=tuple(field_columns),
+        field_types=(),
+        schema_columns=(),
     )
 
 

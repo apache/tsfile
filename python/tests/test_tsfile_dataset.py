@@ -1508,50 +1508,35 @@ def test_dataset_unions_nonnumeric_declared_columns_without_exposing_them(
         use_index=dataframe_use_index,
     ) as tsdf:
         assert tsdf.list_timeseries() == ["weather.device_a.temperature"]
-        schema_columns = tsdf._index.table_entries["weather"].schema_columns
-        assert [name for name, _, _ in schema_columns] == [
-            "device",
-            "temperature",
-            "status",
-            "note",
-        ]
+        entry = tsdf._index.table_entries["weather"]
+        assert entry.field_columns == ("temperature",)
 
 
-def test_dataset_rejects_same_field_name_with_different_type(
-    tmp_path, dataframe_use_index
-):
+def test_dataset_merges_same_field_with_different_types(tmp_path, dataframe_use_index):
+    # The dataset does not compare authored declarations: each shard is read
+    # through its own catalog and converted to float64, so a same-named field
+    # with different declared types merges. The persistent index still refuses
+    # shards whose *physical* types disagree, exactly as it did before.
     path1 = tmp_path / "double.tsfile"
     path2 = tmp_path / "int64.tsfile"
     _write_weather_file(path1, 0)
     _write_weather_int_temperature_file(path2, 3)
 
-    with pytest.raises(
-        ValueError,
-        match="Incompatible field column 'temperature' for table 'weather'.*INT64.*DOUBLE",
-    ):
-        TsFileDataFrame(
-            [str(path1), str(path2)],
-            show_progress=False,
-            use_index=dataframe_use_index,
-        )
+    if dataframe_use_index:
+        with pytest.raises(ValueError, match="incompatible physical type"):
+            TsFileDataFrame(
+                [str(path1), str(path2)], show_progress=False, use_index=True
+            )
+        return
 
-
-def test_dataset_rejects_same_nonnumeric_field_name_with_different_type(
-    tmp_path, dataframe_use_index
-):
-    path1 = tmp_path / "text-status.tsfile"
-    path2 = tmp_path / "boolean-status.tsfile"
-    _write_numeric_and_text_file(path1)
-    _write_weather_boolean_status_file(path2, 3)
-
-    with pytest.raises(
-        ValueError,
-        match="Incompatible field column 'status' for table 'weather'.*BOOLEAN.*STRING",
-    ):
-        TsFileDataFrame(
-            [str(path1), str(path2)],
-            show_progress=False,
-            use_index=dataframe_use_index,
+    with TsFileDataFrame([str(path1), str(path2)], show_progress=False) as tsdf:
+        assert tsdf.list_timeseries() == [
+            "weather.device_a.temperature",
+            "weather.device_a.humidity",
+        ]
+        np.testing.assert_equal(
+            tsdf["weather.device_a.temperature"][:],
+            np.array([20.0, 21.5, 23.0, 20.0, 21.0]),
         )
 
 
@@ -1640,11 +1625,12 @@ def test_dataset_unions_renamed_and_appended_tag_columns(tmp_path, dataframe_use
         assert pd.isna(metadata.loc["weather.east.temperature", "zone"])
 
 
-def test_dataset_rejects_same_tag_position_with_different_type(
-    tmp_path, dataframe_use_index
-):
-    path1 = tmp_path / "string-region.tsfile"
-    path2 = tmp_path / "text-region.tsfile"
+def test_dataset_rejects_tag_and_field_with_same_name(tmp_path, dataframe_use_index):
+    # The only definition-shape conflict left: one name cannot be both a tag
+    # and a field of the same table, because the persistent index keys columns
+    # by (table, name) and a duplicate would make series lookups ambiguous.
+    path1 = tmp_path / "tag-region.tsfile"
+    path2 = tmp_path / "field-region.tsfile"
     _write_table_rows_file(
         path1,
         [
@@ -1656,18 +1642,15 @@ def test_dataset_rejects_same_tag_position_with_different_type(
     _write_table_rows_file(
         path2,
         [
-            ColumnSchema("region", TSDataType.TEXT, ColumnCategory.TAG),
-            _WEATHER_TEMPERATURE,
+            _WEATHER_DEVICE_TAG,
+            ColumnSchema("region", TSDataType.DOUBLE, ColumnCategory.FIELD),
         ],
-        {"time": [1], "region": ["east"], "temperature": [2.0]},
+        {"time": [1], "device": ["device_a"], "region": [2.0]},
     )
 
     with pytest.raises(
         ValueError,
-        match=(
-            "Incompatible tag column at position 0 for table 'weather'.*"
-            "'region' \\(TEXT\\).*'region' \\(STRING\\)"
-        ),
+        match="Column 'region' of table 'weather'.*TAG in some TsFiles and a FIELD",
     ):
         TsFileDataFrame(
             [str(path1), str(path2)],
