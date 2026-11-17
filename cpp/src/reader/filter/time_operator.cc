@@ -56,11 +56,14 @@ bool TimeBetween::satisfy(Statistic* statistic) {
 }
 
 bool TimeBetween::satisfy(int64_t time, int64_t value) {
-    return (value1_ <= time) && (time <= value2_) ^ not_;
+    // Parenthesize the range test: `^` binds tighter than `&&`, so without
+    // the inner parentheses NOT BETWEEN rejects times below value1_ instead
+    // of accepting every time outside the interval.
+    return ((value1_ <= time) && (time <= value2_)) ^ not_;
 }
 
 bool TimeBetween::satisfy(int64_t time, common::String value) {
-    return (value1_ <= time) && (time <= value2_) ^ not_;
+    return ((value1_ <= time) && (time <= value2_)) ^ not_;
 }
 
 bool TimeBetween::satisfy_start_end_time(int64_t start_time, int64_t end_time) {
