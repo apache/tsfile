@@ -133,13 +133,16 @@ def _merge_table_model_entries(
     interprets an authored schema: reads go through each file's own catalog,
     and the global view only needs the table name, the positional tag values
     that identify a device, the field names it can expose, and where every
-    (device, field) shard lives. The merge is therefore a pure union -- no
+    (device, field) shard lives. The merge is therefore a union -- no FIELD
     declaration is compared, validated, or carried forward:
 
     - TAG columns are positional; a device is keyed by its ordered tag
-      *values*, never by column names. The longer list wins (devices from
-      files without a trailing tag read it as null), and a tag renamed at the
-      same position keeps the first-seen name, which is display-only.
+      *values*, never by column names. Files may only *append* trailing tags
+      (devices from files without them read the new tag as null), so the tag
+      list a file shares with earlier ones must name the same columns. A
+      different name at the same position means the same table name refers to
+      a different tag layout -- IoTDB never reorders tags -- and merging by
+      position would conflate unrelated devices, so it is rejected.
     - FIELD columns are the union of the readable fields in first-seen order.
       A device/field absent from a file simply has no shard and reads back as
       NaN.
@@ -150,12 +153,23 @@ def _merge_table_model_entries(
     cross-shard physical-type check).
     """
     table_name = existing.table_name
+    shared_tag_count = min(len(existing.tag_columns), len(incoming.tag_columns))
+    for position in range(shared_tag_count):
+        existing_name = existing.tag_columns[position]
+        incoming_name = incoming.tag_columns[position]
+        if existing_name != incoming_name:
+            raise ValueError(
+                f"Table '{table_name}' in '{file_path}' declares tag column "
+                f"'{incoming_name}' at position {position} but earlier TsFiles "
+                f"declare '{existing_name}'. TsFiles of one table must agree on "
+                "the tag columns they share; a different name means the table "
+                "was recreated with a different tag layout, and merging by "
+                "position would conflate unrelated devices."
+            )
     tag_columns = tuple(existing.tag_columns) + tuple(
-        incoming.tag_columns[len(existing.tag_columns) :]
+        incoming.tag_columns[shared_tag_count:]
     )
-    tag_types = tuple(existing.tag_types) + tuple(
-        incoming.tag_types[len(existing.tag_columns) :]
-    )
+    tag_types = tuple(existing.tag_types) + tuple(incoming.tag_types[shared_tag_count:])
 
     field_columns = list(existing.field_columns)
     seen = set(field_columns)

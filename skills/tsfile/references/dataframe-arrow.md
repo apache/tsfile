@@ -73,13 +73,13 @@ named inspection rather than as the mask source.
 Table-model files may register only the columns they actually wrote, so the
 same table can span files with different column sets. The dataset unions the
 FIELD columns in first-seen order and reads a device/field missing from a file
-as NaN. TAG columns are positional: extra trailing tags may be added by later
-files, and devices from files without them read back with a null tag. Device
-identity is the ordered tag *values*, not the tag column names, so a tag
-renamed at the same position merges under the first-seen name. The merge never
-compares authored column definitions; the only rejected shape is a name that
-is a TAG in one file and a FIELD in another. Duplicate timestamps for one
-logical series across files remain rejected.
+as NaN. TAG columns are positional: files may append trailing tags, and devices
+from files without them read back with a null tag, but files must agree on the
+tag columns they share — a different name at the same position means the table
+name points at a different tag layout and is rejected. A name that is a TAG in
+one file and a FIELD in another is rejected as well. FIELD declarations are
+never compared. Duplicate timestamps for one logical series across files remain
+rejected.
 
 `use_index=True` builds/reuses an index (default `False`). Indexed mode assumes
 immutable sources (`trust_index=True`); use `False` for generation checks and

@@ -1575,11 +1575,11 @@ def test_dataset_merges_same_field_with_different_types(tmp_path, dataframe_use_
         )
 
 
-def test_dataset_unions_renamed_tag_columns(tmp_path, dataframe_use_index):
-    # IoTDB keeps tag ordinals across RENAME COLUMN, and device identity in the
-    # dataset is the ordered tag *values*, not the tag column names, so a
-    # same-position rename keeps one tag column under the first-seen name and
-    # the devices still line up.
+def test_dataset_rejects_different_tag_prefix(tmp_path, dataframe_use_index):
+    # Positional device identity only works while files agree on the tag
+    # columns they share. A different name at the same position means the table
+    # name points at a different tag layout, so merging would conflate
+    # unrelated devices; this must be rejected in either load order.
     path1 = tmp_path / "region.tsfile"
     path2 = tmp_path / "site.tsfile"
     _write_table_rows_file(
@@ -1599,80 +1599,34 @@ def test_dataset_unions_renamed_tag_columns(tmp_path, dataframe_use_index):
         {"time": [1], "site": ["east"], "temperature": [2.0]},
     )
 
-    # Device identity carries no tag column name, so both files' rows land on
-    # the same device in either load order. Exactly one of the two names
-    # survives: the first-declaring file's. (An index fixes that choice per
-    # file set, so the indexed run may reuse the name from the first order.)
     for paths in ([str(path1), str(path2)], [str(path2), str(path1)]):
-        with TsFileDataFrame(
-            paths, show_progress=False, use_index=dataframe_use_index
-        ) as tsdf:
-            assert tsdf.list_timeseries() == ["weather.east.temperature"]
-            np.testing.assert_equal(
-                tsdf["weather.east.temperature"][:], np.array([1.0, 2.0])
-            )
-            metadata = tsdf.list_timeseries_metadata()
-            surviving_names = set(metadata.columns) & {"region", "site"}
-            assert len(surviving_names) == 1
-            tag_name = surviving_names.pop()
-            assert metadata.loc["weather.east.temperature", tag_name] == "east"
-
-
-def test_dataset_unions_renamed_and_appended_tag_columns(tmp_path, dataframe_use_index):
-    # A rename of the shared prefix combines with a trailing tag added later.
-    path1 = tmp_path / "region.tsfile"
-    path2 = tmp_path / "site_zone.tsfile"
-    _write_table_rows_file(
-        path1,
-        [
-            ColumnSchema("region", TSDataType.STRING, ColumnCategory.TAG),
-            _WEATHER_TEMPERATURE,
-        ],
-        {"time": [0], "region": ["east"], "temperature": [1.0]},
-    )
-    _write_table_rows_file(
-        path2,
-        [
-            ColumnSchema("site", TSDataType.STRING, ColumnCategory.TAG),
-            ColumnSchema("zone", TSDataType.STRING, ColumnCategory.TAG),
-            _WEATHER_TEMPERATURE,
-        ],
-        {
-            "time": [1, 2],
-            "site": ["east", "west"],
-            "zone": ["z1", "z2"],
-            "temperature": [2.0, 3.0],
-        },
-    )
-
-    with TsFileDataFrame(
-        [str(path1), str(path2)],
-        show_progress=False,
-        use_index=dataframe_use_index,
-    ) as tsdf:
-        assert set(tsdf.list_timeseries()) == {
-            "weather.east.temperature",
-            "weather.east.z1.temperature",
-            "weather.west.z2.temperature",
-        }
-        metadata = tsdf.list_timeseries_metadata()
-        assert list(metadata.columns)[-2:] == ["region", "zone"]
-        assert pd.isna(metadata.loc["weather.east.temperature", "zone"])
+        with pytest.raises(
+            ValueError,
+            match="must agree on the tag columns they share",
+        ):
+            TsFileDataFrame(paths, show_progress=False, use_index=dataframe_use_index)
 
 
 def test_dataset_rejects_tag_and_field_with_same_name(tmp_path, dataframe_use_index):
-    # The only definition-shape conflict left: one name cannot be both a tag
-    # and a field of the same table, because the persistent index keys columns
-    # by (table, name) and a duplicate would make series lookups ambiguous.
+    # One name cannot be both a tag and a field of the same table, because the
+    # persistent index keys columns by (table, name) and a duplicate would make
+    # series lookups ambiguous. Here file A's second tag is "region" while
+    # file B exposes "region" as a numeric field under a compatible tag prefix.
     path1 = tmp_path / "tag-region.tsfile"
     path2 = tmp_path / "field-region.tsfile"
     _write_table_rows_file(
         path1,
         [
+            _WEATHER_DEVICE_TAG,
             ColumnSchema("region", TSDataType.STRING, ColumnCategory.TAG),
             _WEATHER_TEMPERATURE,
         ],
-        {"time": [0], "region": ["east"], "temperature": [1.0]},
+        {
+            "time": [0],
+            "device": ["device_a"],
+            "region": ["east"],
+            "temperature": [1.0],
+        },
     )
     _write_table_rows_file(
         path2,
