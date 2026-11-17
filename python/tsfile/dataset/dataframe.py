@@ -29,6 +29,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
+from ..constants import NUMERIC_DATASET_FIELD_TYPES, ColumnCategory, TSDataType
 from .formatting import format_dataframe_table
 from ._config import resolve_read_options
 from .metadata import (
@@ -51,6 +52,7 @@ SeriesRef = Tuple[object, int, int]
 _QUERY_START = np.iinfo(np.int64).min
 _QUERY_END = np.iinfo(np.int64).max
 _DATACLASS_SLOTS = {"slots": True} if sys.version_info >= (3, 10) else {}
+_NUMERIC_FIELD_TYPE_IDS = frozenset(int(item) for item in NUMERIC_DATASET_FIELD_TYPES)
 # Overlap position reads use chunked k-way merge. Keep the default chunk small
 # enough to avoid large read amplification for `series[i]` / short slices, but
 # large enough to avoid excessive query_by_row round-trips when overlap spans
@@ -122,30 +124,138 @@ def _series_lookup_hint(name: str) -> str:
     return f"Series not found: '{name}'. Use df.list_timeseries() to inspect available series."
 
 
-def _validate_table_schema(
-    existing: TableEntry, incoming: TableEntry, file_path: str
-) -> None:
-    """Reject same-name tables whose complete ordered schema differs."""
-    if (
-        existing.schema_columns
-        and incoming.schema_columns
-        and existing.schema_columns == incoming.schema_columns
-    ):
-        return
-    if (
-        not existing.schema_columns
-        and not incoming.schema_columns
-        and existing.tag_columns == incoming.tag_columns
-        and existing.tag_types == incoming.tag_types
-        and existing.field_columns == incoming.field_columns
-        and existing.field_types == incoming.field_types
-    ):
-        return
+def _type_name(data_type) -> str:
+    """Render a data type for user-facing errors (``DOUBLE`` rather than ``4``)."""
+    try:
+        return TSDataType(int(data_type)).name
+    except (TypeError, ValueError):
+        return str(data_type)
 
-    raise ValueError(
-        f"Incompatible schema for table '{incoming.table_name}' in '{file_path}'. "
-        f"Expected columns={list(existing.schema_columns)} but found "
-        f"columns={list(incoming.schema_columns)}."
+
+def _column_description(name, data_type) -> str:
+    return f"'{name}' ({_type_name(data_type)})"
+
+
+def _declared_schema_columns(entry: TableEntry) -> List[Tuple[str, int, int]]:
+    """Ordered ``(name, data_type, category)`` columns of one table entry.
+
+    Table-model entries built by the reader always carry ``schema_columns``;
+    the fallback keeps hand-built entries (and older catalogs) usable.
+    """
+    if entry.schema_columns:
+        return [
+            (name, int(data_type), int(category))
+            for name, data_type, category in entry.schema_columns
+        ]
+    columns = [
+        (name, int(data_type), int(ColumnCategory.TAG))
+        for name, data_type in zip(entry.tag_columns, entry.tag_types)
+    ]
+    columns.extend(
+        (name, int(data_type), int(ColumnCategory.FIELD))
+        for name, data_type in zip(entry.field_columns, entry.field_types)
+    )
+    return columns
+
+
+def _merge_table_model_entries(
+    existing: TableEntry, incoming: TableEntry, file_path: str
+) -> TableEntry:
+    """Union two per-file table-model schemas into one global table.
+
+    One physical TsFile registers only the columns it actually wrote, so the
+    same table may legitimately span files with different column sets.  TAG
+    columns define device identity and must be prefix-compatible: the shared
+    prefix has to match by name and type (a mismatch means the table was
+    dropped and recreated with a different schema), while extra trailing tags
+    are appended and shorter devices read as null.  FIELD columns are unioned
+    in first-seen order -- a device/field absent from a file simply has no
+    shard and reads back as NaN.
+
+    A same-named FIELD column must keep one data type across every file: a
+    standalone load set has no external "current schema" to reconcile a type
+    change against, so a differing type is rejected.  Non-numeric fields stay
+    in ``schema_columns`` (for the persistent index) but are not part of the
+    numeric ``field_columns`` surface, exactly as for a single file.
+    """
+    table_name = existing.table_name
+    existing_tags = list(zip(existing.tag_columns, existing.tag_types))
+    incoming_tags = list(zip(incoming.tag_columns, incoming.tag_types))
+    for position in range(min(len(existing_tags), len(incoming_tags))):
+        existing_name, existing_type = existing_tags[position]
+        incoming_name, incoming_type = incoming_tags[position]
+        if existing_name != incoming_name or existing_type != incoming_type:
+            raise ValueError(
+                f"Incompatible tag column for table '{table_name}' in "
+                f"'{file_path}': position {position} is "
+                f"{_column_description(incoming_name, incoming_type)} but earlier "
+                f"TsFiles declare {_column_description(existing_name, existing_type)}. "
+                "Tag columns must share the same name and type across TsFiles; a "
+                "differing shared prefix means the table was recreated with a new "
+                "schema."
+            )
+    if len(incoming_tags) > len(existing_tags):
+        tag_columns, tag_types = incoming.tag_columns, incoming.tag_types
+    else:
+        tag_columns, tag_types = existing.tag_columns, existing.tag_types
+
+    declared_fields: List[Tuple[str, int]] = []
+    field_type_by_name: Dict[str, int] = {}
+    time_columns: List[Tuple[str, int, int]] = []
+    for entry in (existing, incoming):
+        for name, data_type, category in _declared_schema_columns(entry):
+            if category == int(ColumnCategory.TIME):
+                if entry is existing:
+                    time_columns.append((name, data_type, category))
+                continue
+            if category != int(ColumnCategory.FIELD):
+                continue
+            previous_type = field_type_by_name.get(name)
+            if previous_type is None:
+                field_type_by_name[name] = data_type
+                declared_fields.append((name, data_type))
+            elif previous_type != data_type:
+                raise ValueError(
+                    f"Incompatible field column '{name}' for table "
+                    f"'{table_name}' in '{file_path}': declared "
+                    f"{_type_name(data_type)} here but "
+                    f"{_type_name(previous_type)} in earlier TsFiles. A field "
+                    "column must keep the same data type across TsFiles."
+                )
+
+    tag_column_set = set(tag_columns)
+    for name, _ in declared_fields:
+        if name in tag_column_set:
+            raise ValueError(
+                f"Incompatible column '{name}' for table '{table_name}' in "
+                f"'{file_path}': it is a TAG column in some TsFiles and a FIELD "
+                "column in others. A column cannot change category across TsFiles."
+            )
+
+    numeric_fields = [
+        (name, data_type)
+        for name, data_type in declared_fields
+        if data_type in _NUMERIC_FIELD_TYPE_IDS
+    ]
+    schema_columns = (
+        tuple(time_columns)
+        + tuple(
+            (name, int(data_type), int(ColumnCategory.TAG))
+            for name, data_type in zip(tag_columns, tag_types)
+        )
+        + tuple(
+            (name, data_type, int(ColumnCategory.FIELD))
+            for name, data_type in declared_fields
+        )
+    )
+
+    return TableEntry(
+        table_name=table_name,
+        tag_columns=tag_columns,
+        tag_types=tag_types,
+        field_columns=tuple(name for name, _ in numeric_fields),
+        field_types=tuple(TSDataType(data_type) for _, data_type in numeric_fields),
+        schema_columns=schema_columns,
     )
 
 
@@ -216,7 +326,11 @@ def _register_reader(
                 existing_entry, table_entry
             )
         else:
-            _validate_table_schema(existing_entry, table_entry, file_path)
+            # Table-model files may register only the columns they physically
+            # wrote, so union this file's table into the cross-file view.
+            index.table_entries[table_entry.table_name] = _merge_table_model_entries(
+                existing_entry, table_entry, file_path
+            )
 
     for device_id, device_entry in enumerate(catalog.device_entries):
         table_entry = catalog.table_entries[device_entry.table_id]
@@ -246,9 +360,10 @@ def _register_reader(
     # Register every (device, field) pair the reader physically holds. The
     # logical series is keyed by the GLOBAL field index (resolved by measurement
     # name against the merged table), while the per-shard tuple keeps the
-    # reader-local field index for the read path. This lets tree shards with
-    # different field subsets/orders merge without mis-mapping measurements
-    # (for table model the global and local indices always coincide).
+    # reader-local field index for the read path. This lets shards with
+    # different field subsets/orders merge without mis-mapping measurements:
+    # tree files synthesize their own measurement order, and table-model files
+    # may register only the columns they wrote.
     for device_id, field_idx in catalog.series_stats_by_ref:
         device_entry = catalog.device_entries[device_id]
         reader_table_entry = catalog.table_entries[device_entry.table_id]

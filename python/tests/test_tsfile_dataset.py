@@ -101,6 +101,12 @@ def _write_empty_weather_file(path):
         pass
 
 
+def _write_table_rows_file(path, columns, rows):
+    schema = TableSchema("weather", columns)
+    with TsFileTableWriter(str(path), schema) as writer:
+        writer.write_dataframe(pd.DataFrame(rows))
+
+
 def _write_numeric_and_text_file(path):
     schema = TableSchema(
         "weather",
@@ -137,29 +143,6 @@ def _write_partial_numeric_rows_file(path):
             "device": ["device_a", "device_a"],
             "temperature": [np.nan, 21.0],
             "humidity": [50.0, 51.0],
-        }
-    )
-    with TsFileTableWriter(str(path), schema) as writer:
-        writer.write_dataframe(df)
-
-
-def _write_weather_with_extra_field_file(path, start):
-    schema = TableSchema(
-        "weather",
-        [
-            ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG),
-            ColumnSchema("temperature", TSDataType.DOUBLE, ColumnCategory.FIELD),
-            ColumnSchema("humidity", TSDataType.DOUBLE, ColumnCategory.FIELD),
-            ColumnSchema("pressure", TSDataType.DOUBLE, ColumnCategory.FIELD),
-        ],
-    )
-    df = pd.DataFrame(
-        {
-            "time": [start, start + 1],
-            "device": ["device_a", "device_a"],
-            "temperature": [20.0, 21.0],
-            "humidity": [50.0, 51.0],
-            "pressure": [1000.0, 1001.0],
         }
     )
     with TsFileTableWriter(str(path), schema) as writer:
@@ -1272,20 +1255,266 @@ def test_no_index_subset_rejects_reads_after_root_close(subset_lifecycle_dataset
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def test_dataset_rejects_incompatible_table_schemas_across_shards(
+_WEATHER_DEVICE_TAG = ColumnSchema("device", TSDataType.STRING, ColumnCategory.TAG)
+_WEATHER_TEMPERATURE = ColumnSchema(
+    "temperature", TSDataType.DOUBLE, ColumnCategory.FIELD
+)
+_WEATHER_HUMIDITY = ColumnSchema("humidity", TSDataType.DOUBLE, ColumnCategory.FIELD)
+_WEATHER_PRESSURE = ColumnSchema("pressure", TSDataType.DOUBLE, ColumnCategory.FIELD)
+
+
+def test_dataset_unions_table_field_columns_across_shards(
     tmp_path, dataframe_use_index
 ):
+    # A table may span TsFiles that each register only the columns they wrote.
+    # The dataset unions the field columns and reads a missing column as NaN.
     path1 = tmp_path / "part1.tsfile"
     path2 = tmp_path / "part2.tsfile"
-    _write_weather_file(path1, 0)
-    _write_weather_with_extra_field_file(path2, 2)
+    _write_table_rows_file(
+        path1,
+        [_WEATHER_DEVICE_TAG, _WEATHER_TEMPERATURE, _WEATHER_HUMIDITY],
+        {
+            "time": [0, 1, 2],
+            "device": ["device_a"] * 3,
+            "temperature": [20.0, 21.5, 23.0],
+            "humidity": [50.0, 52.0, 55.0],
+        },
+    )
+    _write_table_rows_file(
+        path2,
+        [
+            _WEATHER_DEVICE_TAG,
+            _WEATHER_TEMPERATURE,
+            _WEATHER_HUMIDITY,
+            _WEATHER_PRESSURE,
+        ],
+        {
+            "time": [3, 4],
+            "device": ["device_a"] * 2,
+            "temperature": [24.0, 25.0],
+            "humidity": [56.0, 57.0],
+            "pressure": [1000.0, 1001.0],
+        },
+    )
 
-    with pytest.raises(ValueError, match="Incompatible schema for table 'weather'"):
-        TsFileDataFrame(
-            [str(path1), str(path2)],
-            show_progress=False,
-            use_index=dataframe_use_index,
+    with TsFileDataFrame(
+        [str(path1), str(path2)],
+        show_progress=False,
+        use_index=dataframe_use_index,
+    ) as tsdf:
+        assert tsdf.list_timeseries() == [
+            "weather.device_a.temperature",
+            "weather.device_a.humidity",
+            "weather.device_a.pressure",
+        ]
+        aligned = tsdf.loc[
+            :,
+            [
+                "weather.device_a.temperature",
+                "weather.device_a.humidity",
+                "weather.device_a.pressure",
+            ],
+        ]
+        np.testing.assert_array_equal(aligned.timestamps, np.array([0, 1, 2, 3, 4]))
+        np.testing.assert_equal(
+            np.asarray(aligned.values),
+            np.array(
+                [
+                    [20.0, 50.0, np.nan],
+                    [21.5, 52.0, np.nan],
+                    [23.0, 55.0, np.nan],
+                    [24.0, 56.0, 1000.0],
+                    [25.0, 57.0, 1001.0],
+                ]
+            ),
         )
+
+
+def test_dataset_unions_disjoint_field_sets_across_shards(
+    tmp_path, dataframe_use_index
+):
+    paths = []
+    for name, column, value in (
+        ("temperature.tsfile", _WEATHER_TEMPERATURE, 1.0),
+        ("humidity.tsfile", _WEATHER_HUMIDITY, 2.0),
+        ("pressure.tsfile", _WEATHER_PRESSURE, 3.0),
+    ):
+        path = tmp_path / name
+        _write_table_rows_file(
+            path,
+            [_WEATHER_DEVICE_TAG, column],
+            {
+                "time": [0],
+                "device": ["device_a"],
+                column.get_column_name(): [value],
+            },
+        )
+        paths.append(str(path))
+
+    with TsFileDataFrame(
+        paths, show_progress=False, use_index=dataframe_use_index
+    ) as tsdf:
+        assert tsdf.list_timeseries() == [
+            "weather.device_a.temperature",
+            "weather.device_a.humidity",
+            "weather.device_a.pressure",
+        ]
+        aligned = tsdf.loc[:, tsdf.list_timeseries()]
+        np.testing.assert_array_equal(aligned.timestamps, np.array([0]))
+        np.testing.assert_equal(np.asarray(aligned.values), np.array([[1.0, 2.0, 3.0]]))
+
+
+def test_dataset_unions_overlapping_field_subsets_for_different_devices(
+    tmp_path, dataframe_use_index
+):
+    path1 = tmp_path / "temperature.tsfile"
+    path2 = tmp_path / "humidity.tsfile"
+    path3 = tmp_path / "both.tsfile"
+    _write_table_rows_file(
+        path1,
+        [_WEATHER_DEVICE_TAG, _WEATHER_TEMPERATURE],
+        {"time": [0], "device": ["device_a"], "temperature": [1.0]},
+    )
+    _write_table_rows_file(
+        path2,
+        [_WEATHER_DEVICE_TAG, _WEATHER_HUMIDITY],
+        {"time": [1], "device": ["device_b"], "humidity": [9.0]},
+    )
+    _write_table_rows_file(
+        path3,
+        [_WEATHER_DEVICE_TAG, _WEATHER_TEMPERATURE, _WEATHER_HUMIDITY],
+        {"time": [2], "device": ["device_a"], "temperature": [5.0], "humidity": [6.0]},
+    )
+
+    with TsFileDataFrame(
+        [str(path1), str(path2), str(path3)],
+        show_progress=False,
+        use_index=dataframe_use_index,
+    ) as tsdf:
+        assert set(tsdf.list_timeseries()) == {
+            "weather.device_a.temperature",
+            "weather.device_a.humidity",
+            "weather.device_b.humidity",
+        }
+        aligned = tsdf.loc[
+            :,
+            [
+                "weather.device_a.temperature",
+                "weather.device_a.humidity",
+                "weather.device_b.humidity",
+            ],
+        ]
+        np.testing.assert_array_equal(aligned.timestamps, np.array([0, 1, 2]))
+        np.testing.assert_equal(
+            np.asarray(aligned.values),
+            np.array(
+                [
+                    [1.0, np.nan, np.nan],
+                    [np.nan, np.nan, 9.0],
+                    [5.0, 6.0, np.nan],
+                ]
+            ),
+        )
+
+
+def test_dataset_unions_tag_columns_with_null_padding(tmp_path, dataframe_use_index):
+    # TAG columns define device identity: a file written before a trailing tag
+    # existed keeps its shorter device ids, and the dataset pads the missing
+    # tag values with null.
+    region_only = tmp_path / "region.tsfile"
+    region_and_site = tmp_path / "region_site.tsfile"
+    _write_table_rows_file(
+        region_only,
+        [
+            ColumnSchema("region", TSDataType.STRING, ColumnCategory.TAG),
+            _WEATHER_TEMPERATURE,
+        ],
+        {"time": [0], "region": ["east"], "temperature": [1.0]},
+    )
+    _write_table_rows_file(
+        region_and_site,
+        [
+            ColumnSchema("region", TSDataType.STRING, ColumnCategory.TAG),
+            ColumnSchema("site", TSDataType.STRING, ColumnCategory.TAG),
+            _WEATHER_TEMPERATURE,
+        ],
+        {
+            "time": [1, 2],
+            "region": ["east", "west"],
+            "site": ["s1", "s2"],
+            "temperature": [2.0, 3.0],
+        },
+    )
+
+    expected = {
+        "weather.east.temperature": [1.0],
+        "weather.east.s1.temperature": [2.0],
+        "weather.west.s2.temperature": [3.0],
+    }
+    # The union must not depend on which file is loaded first.
+    for paths in (
+        [str(region_only), str(region_and_site)],
+        [str(region_and_site), str(region_only)],
+    ):
+        with TsFileDataFrame(
+            paths, show_progress=False, use_index=dataframe_use_index
+        ) as tsdf:
+            assert set(tsdf.list_timeseries()) == set(expected)
+            for name, values in expected.items():
+                np.testing.assert_equal(tsdf[name][:], np.array(values))
+            metadata = tsdf.list_timeseries_metadata()
+            assert list(metadata.columns)[-2:] == ["region", "site"]
+            assert np.isnan(metadata.loc["weather.east.temperature", "site"])
+            assert metadata.loc["weather.east.s1.temperature", "site"] == "s1"
+
+
+def test_dataset_unions_nonnumeric_declared_columns_without_exposing_them(
+    tmp_path, dataframe_use_index
+):
+    path1 = tmp_path / "status.tsfile"
+    path2 = tmp_path / "note.tsfile"
+    _write_table_rows_file(
+        path1,
+        [
+            _WEATHER_DEVICE_TAG,
+            _WEATHER_TEMPERATURE,
+            ColumnSchema("status", TSDataType.STRING, ColumnCategory.FIELD),
+        ],
+        {
+            "time": [0],
+            "device": ["device_a"],
+            "temperature": [1.0],
+            "status": ["ok"],
+        },
+    )
+    _write_table_rows_file(
+        path2,
+        [
+            _WEATHER_DEVICE_TAG,
+            _WEATHER_TEMPERATURE,
+            ColumnSchema("note", TSDataType.STRING, ColumnCategory.FIELD),
+        ],
+        {
+            "time": [1],
+            "device": ["device_a"],
+            "temperature": [2.0],
+            "note": ["calm"],
+        },
+    )
+
+    with TsFileDataFrame(
+        [str(path1), str(path2)],
+        show_progress=False,
+        use_index=dataframe_use_index,
+    ) as tsdf:
+        assert tsdf.list_timeseries() == ["weather.device_a.temperature"]
+        schema_columns = tsdf._index.table_entries["weather"].schema_columns
+        assert [name for name, _, _ in schema_columns] == [
+            "device",
+            "temperature",
+            "status",
+            "note",
+        ]
 
 
 def test_dataset_rejects_same_field_name_with_different_type(
@@ -1296,7 +1525,10 @@ def test_dataset_rejects_same_field_name_with_different_type(
     _write_weather_file(path1, 0)
     _write_weather_int_temperature_file(path2, 3)
 
-    with pytest.raises(ValueError, match="Incompatible schema for table 'weather'"):
+    with pytest.raises(
+        ValueError,
+        match="Incompatible field column 'temperature' for table 'weather'.*INT64.*DOUBLE",
+    ):
         TsFileDataFrame(
             [str(path1), str(path2)],
             show_progress=False,
@@ -1304,7 +1536,7 @@ def test_dataset_rejects_same_field_name_with_different_type(
         )
 
 
-def test_dataset_rejects_nonnumeric_declared_schema_difference(
+def test_dataset_rejects_same_nonnumeric_field_name_with_different_type(
     tmp_path, dataframe_use_index
 ):
     path1 = tmp_path / "text-status.tsfile"
@@ -1312,7 +1544,76 @@ def test_dataset_rejects_nonnumeric_declared_schema_difference(
     _write_numeric_and_text_file(path1)
     _write_weather_boolean_status_file(path2, 3)
 
-    with pytest.raises(ValueError, match="Incompatible schema for table 'weather'"):
+    with pytest.raises(
+        ValueError,
+        match="Incompatible field column 'status' for table 'weather'.*BOOLEAN.*STRING",
+    ):
+        TsFileDataFrame(
+            [str(path1), str(path2)],
+            show_progress=False,
+            use_index=dataframe_use_index,
+        )
+
+
+def test_dataset_rejects_incompatible_tag_prefix(tmp_path, dataframe_use_index):
+    # A differing shared tag prefix means the table was dropped and recreated
+    # with a new schema, so the shards cannot be stitched into one device id.
+    path1 = tmp_path / "region.tsfile"
+    path2 = tmp_path / "zone.tsfile"
+    _write_table_rows_file(
+        path1,
+        [
+            ColumnSchema("region", TSDataType.STRING, ColumnCategory.TAG),
+            _WEATHER_TEMPERATURE,
+        ],
+        {"time": [0], "region": ["east"], "temperature": [1.0]},
+    )
+    _write_table_rows_file(
+        path2,
+        [
+            ColumnSchema("zone", TSDataType.STRING, ColumnCategory.TAG),
+            _WEATHER_TEMPERATURE,
+        ],
+        {"time": [1], "zone": ["east"], "temperature": [2.0]},
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Incompatible tag column for table 'weather'.*'zone'.*'region'",
+    ):
+        TsFileDataFrame(
+            [str(path1), str(path2)],
+            show_progress=False,
+            use_index=dataframe_use_index,
+        )
+
+
+def test_dataset_rejects_same_tag_name_with_different_type(
+    tmp_path, dataframe_use_index
+):
+    path1 = tmp_path / "string-region.tsfile"
+    path2 = tmp_path / "text-region.tsfile"
+    _write_table_rows_file(
+        path1,
+        [
+            ColumnSchema("region", TSDataType.STRING, ColumnCategory.TAG),
+            _WEATHER_TEMPERATURE,
+        ],
+        {"time": [0], "region": ["east"], "temperature": [1.0]},
+    )
+    _write_table_rows_file(
+        path2,
+        [
+            ColumnSchema("region", TSDataType.TEXT, ColumnCategory.TAG),
+            _WEATHER_TEMPERATURE,
+        ],
+        {"time": [1], "region": ["east"], "temperature": [2.0]},
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Incompatible tag column for table 'weather'.*'region'.*TEXT.*STRING",
+    ):
         TsFileDataFrame(
             [str(path1), str(path2)],
             show_progress=False,
