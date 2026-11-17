@@ -75,9 +75,11 @@ same table can span files with different column sets. The dataset unions the
 FIELD columns in first-seen order and reads a device/field missing from a file
 as NaN; a same-named FIELD column must keep one data type across files. TAG
 columns are prefix-compatible: extra trailing tags may be added by later files,
-and devices from files without them read back with a null tag, while a differing
-shared tag prefix (a recreated table) is rejected. Duplicate timestamps for one
-logical series across files remain rejected.
+and devices from files without them read back with a null tag. Device identity
+is the ordered tag *values*, not the tag column names, so a tag renamed at the
+same position merges under the first-seen name instead of failing; a tag at the
+same position with a different data type is rejected. Duplicate timestamps for
+one logical series across files remain rejected.
 
 `use_index=True` builds/reuses an index (default `False`). Indexed mode assumes
 immutable sources (`trust_index=True`); use `False` for generation checks and

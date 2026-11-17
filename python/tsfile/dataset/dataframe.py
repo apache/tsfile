@@ -165,12 +165,16 @@ def _merge_table_model_entries(
 
     One physical TsFile registers only the columns it actually wrote, so the
     same table may legitimately span files with different column sets.  TAG
-    columns define device identity and must be prefix-compatible: the shared
-    prefix has to match by name and type (a mismatch means the table was
-    dropped and recreated with a different schema), while extra trailing tags
-    are appended and shorter devices read as null.  FIELD columns are unioned
-    in first-seen order -- a device/field absent from a file simply has no
-    shard and reads back as NaN.
+    columns define device identity positionally -- a device is keyed by its
+    ordered tag *values*, never by tag column names -- so tag columns merge as
+    a prefix union: the shared prefix must keep the same data type (a type
+    change makes the tag values uninterpretable), while a trailing-tag
+    addition is appended and shorter devices read as null.  A same-position
+    tag whose name differs is a renamed column (IoTDB keeps tag ordinals across
+    RENAME COLUMN), so the merged schema keeps the first-seen name and the
+    values still line up position by position.  FIELD columns are unioned in
+    first-seen order -- a device/field absent from a file simply has no shard
+    and reads back as NaN.
 
     A same-named FIELD column must keep one data type across every file: a
     standalone load set has no external "current schema" to reconcile a type
@@ -181,23 +185,25 @@ def _merge_table_model_entries(
     table_name = existing.table_name
     existing_tags = list(zip(existing.tag_columns, existing.tag_types))
     incoming_tags = list(zip(incoming.tag_columns, incoming.tag_types))
-    for position in range(min(len(existing_tags), len(incoming_tags))):
+    shared_tag_count = min(len(existing_tags), len(incoming_tags))
+    for position in range(shared_tag_count):
         existing_name, existing_type = existing_tags[position]
         incoming_name, incoming_type = incoming_tags[position]
-        if existing_name != incoming_name or existing_type != incoming_type:
+        if existing_type != incoming_type:
             raise ValueError(
-                f"Incompatible tag column for table '{table_name}' in "
-                f"'{file_path}': position {position} is "
+                f"Incompatible tag column at position {position} for table "
+                f"'{table_name}' in '{file_path}': "
                 f"{_column_description(incoming_name, incoming_type)} but earlier "
                 f"TsFiles declare {_column_description(existing_name, existing_type)}. "
-                "Tag columns must share the same name and type across TsFiles; a "
-                "differing shared prefix means the table was recreated with a new "
-                "schema."
+                "Tag columns must keep the same data type across TsFiles; a "
+                "differing type makes the shared device ids uninterpretable."
             )
-    if len(incoming_tags) > len(existing_tags):
-        tag_columns, tag_types = incoming.tag_columns, incoming.tag_types
-    else:
-        tag_columns, tag_types = existing.tag_columns, existing.tag_types
+    tag_columns = tuple(name for name, _ in existing_tags) + tuple(
+        name for name, _ in incoming_tags[shared_tag_count:]
+    )
+    tag_types = tuple(data_type for _, data_type in existing_tags) + tuple(
+        data_type for _, data_type in incoming_tags[shared_tag_count:]
+    )
 
     declared_fields: List[Tuple[str, int]] = []
     field_type_by_name: Dict[str, int] = {}

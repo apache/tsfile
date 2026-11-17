@@ -1464,7 +1464,7 @@ def test_dataset_unions_tag_columns_with_null_padding(tmp_path, dataframe_use_in
                 np.testing.assert_equal(tsdf[name][:], np.array(values))
             metadata = tsdf.list_timeseries_metadata()
             assert list(metadata.columns)[-2:] == ["region", "site"]
-            assert np.isnan(metadata.loc["weather.east.temperature", "site"])
+            assert pd.isna(metadata.loc["weather.east.temperature", "site"])
             assert metadata.loc["weather.east.s1.temperature", "site"] == "s1"
 
 
@@ -1555,11 +1555,13 @@ def test_dataset_rejects_same_nonnumeric_field_name_with_different_type(
         )
 
 
-def test_dataset_rejects_incompatible_tag_prefix(tmp_path, dataframe_use_index):
-    # A differing shared tag prefix means the table was dropped and recreated
-    # with a new schema, so the shards cannot be stitched into one device id.
+def test_dataset_unions_renamed_tag_columns(tmp_path, dataframe_use_index):
+    # IoTDB keeps tag ordinals across RENAME COLUMN, and device identity in the
+    # dataset is the ordered tag *values*, not the tag column names, so a
+    # same-position rename keeps one tag column under the first-seen name and
+    # the devices still line up.
     path1 = tmp_path / "region.tsfile"
-    path2 = tmp_path / "zone.tsfile"
+    path2 = tmp_path / "site.tsfile"
     _write_table_rows_file(
         path1,
         [
@@ -1571,24 +1573,74 @@ def test_dataset_rejects_incompatible_tag_prefix(tmp_path, dataframe_use_index):
     _write_table_rows_file(
         path2,
         [
+            ColumnSchema("site", TSDataType.STRING, ColumnCategory.TAG),
+            _WEATHER_TEMPERATURE,
+        ],
+        {"time": [1], "site": ["east"], "temperature": [2.0]},
+    )
+
+    # Device identity carries no tag column name, so both files' rows land on
+    # the same device in either load order. Exactly one of the two names
+    # survives: the first-declaring file's. (An index fixes that choice per
+    # file set, so the indexed run may reuse the name from the first order.)
+    for paths in ([str(path1), str(path2)], [str(path2), str(path1)]):
+        with TsFileDataFrame(
+            paths, show_progress=False, use_index=dataframe_use_index
+        ) as tsdf:
+            assert tsdf.list_timeseries() == ["weather.east.temperature"]
+            np.testing.assert_equal(
+                tsdf["weather.east.temperature"][:], np.array([1.0, 2.0])
+            )
+            metadata = tsdf.list_timeseries_metadata()
+            surviving_names = set(metadata.columns) & {"region", "site"}
+            assert len(surviving_names) == 1
+            tag_name = surviving_names.pop()
+            assert metadata.loc["weather.east.temperature", tag_name] == "east"
+
+
+def test_dataset_unions_renamed_and_appended_tag_columns(tmp_path, dataframe_use_index):
+    # A rename of the shared prefix combines with a trailing tag added later.
+    path1 = tmp_path / "region.tsfile"
+    path2 = tmp_path / "site_zone.tsfile"
+    _write_table_rows_file(
+        path1,
+        [
+            ColumnSchema("region", TSDataType.STRING, ColumnCategory.TAG),
+            _WEATHER_TEMPERATURE,
+        ],
+        {"time": [0], "region": ["east"], "temperature": [1.0]},
+    )
+    _write_table_rows_file(
+        path2,
+        [
+            ColumnSchema("site", TSDataType.STRING, ColumnCategory.TAG),
             ColumnSchema("zone", TSDataType.STRING, ColumnCategory.TAG),
             _WEATHER_TEMPERATURE,
         ],
-        {"time": [1], "zone": ["east"], "temperature": [2.0]},
+        {
+            "time": [1, 2],
+            "site": ["east", "west"],
+            "zone": ["z1", "z2"],
+            "temperature": [2.0, 3.0],
+        },
     )
 
-    with pytest.raises(
-        ValueError,
-        match="Incompatible tag column for table 'weather'.*'zone'.*'region'",
-    ):
-        TsFileDataFrame(
-            [str(path1), str(path2)],
-            show_progress=False,
-            use_index=dataframe_use_index,
-        )
+    with TsFileDataFrame(
+        [str(path1), str(path2)],
+        show_progress=False,
+        use_index=dataframe_use_index,
+    ) as tsdf:
+        assert set(tsdf.list_timeseries()) == {
+            "weather.east.temperature",
+            "weather.east.z1.temperature",
+            "weather.west.z2.temperature",
+        }
+        metadata = tsdf.list_timeseries_metadata()
+        assert list(metadata.columns)[-2:] == ["region", "zone"]
+        assert pd.isna(metadata.loc["weather.east.temperature", "zone"])
 
 
-def test_dataset_rejects_same_tag_name_with_different_type(
+def test_dataset_rejects_same_tag_position_with_different_type(
     tmp_path, dataframe_use_index
 ):
     path1 = tmp_path / "string-region.tsfile"
@@ -1612,7 +1664,10 @@ def test_dataset_rejects_same_tag_name_with_different_type(
 
     with pytest.raises(
         ValueError,
-        match="Incompatible tag column for table 'weather'.*'region'.*TEXT.*STRING",
+        match=(
+            "Incompatible tag column at position 0 for table 'weather'.*"
+            "'region' \\(TEXT\\).*'region' \\(STRING\\)"
+        ),
     ):
         TsFileDataFrame(
             [str(path1), str(path2)],
