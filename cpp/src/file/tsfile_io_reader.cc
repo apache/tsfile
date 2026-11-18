@@ -251,9 +251,21 @@ int TsFileIOReader::alloc_prepared_ssi(
     if (prepared == nullptr || prepared->index() == nullptr) {
         return E_INVALID_ARG;
     }
-    if (time_filter != nullptr &&
-        !filter_stasify(prepared->index(), time_filter)) {
-        return E_NO_MORE_DATA;
+    if (time_filter != nullptr) {
+        // A device's value statistics exclude NULL cells, but their timestamps
+        // still belong to the aligned rows the query must return.  Prune on the
+        // shared time index instead, which has no NULLs; this mirrors
+        // alloc_prepared_multi_ssi() and the aligned page/chunk filtering.
+        ITimeseriesIndex* filter_index = prepared->index();
+        if (auto* aligned =
+                dynamic_cast<AlignedTimeseriesIndex*>(filter_index)) {
+            if (aligned->time_ts_idx_ != nullptr) {
+                filter_index = aligned->time_ts_idx_;
+            }
+        }
+        if (!filter_stasify(filter_index, time_filter)) {
+            return E_NO_MORE_DATA;
+        }
     }
     void* memory =
         mem_alloc(sizeof(TsFileSeriesScanIterator), MOD_TSFILE_READER);

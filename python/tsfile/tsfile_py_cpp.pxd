@@ -51,9 +51,15 @@ cdef public api PreparedSeriesHandle tsfile_reader_prepare_series_c(
 cdef public api PreparedSeriesHandle tsfile_reader_prepare_series_with_time_owner_c(
     TsFileReader reader, object locator,
     PreparedSeriesHandle aligned_time_owner, bint trust_index) except NULL
+cdef public api PreparedSeriesHandle tsfile_reader_prepare_table_series_c(
+    TsFileReader reader, object table_name, object column_name,
+    TagFilterHandle tag_filter) except NULL
 cdef public api ResultSet tsfile_reader_query_prepared_c(
     TsFileReader reader, PreparedSeriesHandle prepared, int64_t start_time,
     int64_t end_time, int offset, int limit)
+cdef public api ResultSet tsfile_reader_query_prepared_ex_c(
+    TsFileReader reader, PreparedSeriesHandle prepared, int64_t start_time,
+    int64_t end_time, int offset, int limit, uint32_t block_rows)
 cdef public api ErrorCode tsfile_writer_register_device_py_cpp(TsFileWriter writer, DeviceSchema *schema)
 cdef public api ErrorCode tsfile_writer_register_timeseries_py_cpp(TsFileWriter writer, object device_name,
                                                         TimeseriesSchema *schema)

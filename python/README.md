@@ -241,3 +241,31 @@ existing content is discarded; a forward-only stream (for example a pipe) is
 accepted only while it is positioned at 0. A failing `flush()` is reported as
 `FileSyncError` instead of being ignored. As with the reader, the caller owns
 the object and closes it.
+
+## Repeated point queries
+
+A batch query whose tag filter selects exactly one device caches the resolved
+field columns on the reader. Repeated queries for the same
+(table, tag filter, columns) skip the device and timeseries-index lookup; one
+column is served by `query_prepared`, several aligned columns by
+`query_prepared_multi`. The cache is an LRU bounded by
+`TSFILE_QUERY_CACHE_SIZE` (default `1024`; `0` disables it), and results are
+unchanged. Queries that also select a TAG column, row-by-row queries, filters
+that select zero or several devices, and projections of 16 or more field
+columns keep the regular path.
+
+```python
+reader = TsFileReader("data.tsfile")
+for start, end in windows:
+    with reader.query_table(
+        "sensors", ["value"], start, end,
+        tag_filter=tag_eq("device", "dev_a"), batch_size=4096,
+    ) as result:
+        ...
+```
+
+For explicit control, `reader.prepare_table_series(table, column, tag_filter)`
+resolves one column once and returns a handle usable with
+`reader.query_prepared(...)`; `reader.query_prepared_multi([...])` serves
+several aligned columns together. The filter must select exactly one device;
+otherwise the automatic cache is bypassed.

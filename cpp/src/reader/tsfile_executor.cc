@@ -125,7 +125,7 @@ int TsFileExecutor::prepare_series(
 int TsFileExecutor::execute_prepared(
     const std::shared_ptr<PreparedSeries>& prepared, int64_t start_time,
     int64_t end_time, int offset, int limit, const std::string& column_name,
-    ResultSet*& ret_qds) {
+    ResultSet*& ret_qds, uint32_t block_rows) {
     ASSERT(is_inited_);
     ret_qds = nullptr;
     if (prepared == nullptr || offset < 0) {
@@ -135,7 +135,7 @@ int TsFileExecutor::execute_prepared(
         new PreparedSeriesTsBlockReader());
     int ret = tsblock_reader->init(&io_reader_, prepared,
                                    new TimeBetween(start_time, end_time, false),
-                                   offset, limit);
+                                   offset, limit, block_rows);
     if (ret != E_OK) {
         return ret;
     }
@@ -150,7 +150,7 @@ int TsFileExecutor::execute_prepared(
 int TsFileExecutor::execute_prepared_multi(
     const std::vector<std::shared_ptr<PreparedSeries>>& prepared,
     int64_t start_time, int64_t end_time, int offset, int limit,
-    ResultSet*& ret_qds) {
+    ResultSet*& ret_qds, uint32_t block_rows) {
     ASSERT(is_inited_);
     ret_qds = nullptr;
     if (prepared.empty() || offset < 0) {
@@ -161,7 +161,7 @@ int TsFileExecutor::execute_prepared_multi(
         new PreparedSeriesTsBlockReader());
     int ret = tsblock_reader->init_multi(
         &io_reader_, prepared, new TimeBetween(start_time, end_time, false),
-        offset, limit);
+        offset, limit, block_rows);
     if (ret != E_OK) {
         return ret;
     }

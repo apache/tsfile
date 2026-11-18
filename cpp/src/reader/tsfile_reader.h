@@ -153,13 +153,31 @@ class TsFileReader {
         const FileGeneration& generation, const PreparedLocator& locator,
         const std::shared_ptr<PreparedSeries>& aligned_time_owner,
         std::shared_ptr<PreparedSeries>& prepared);
+    /**
+     * @brief Resolve one table column selected by @p tag_filter into a reusable
+     * prepared series.
+     *
+     * The device lookup and timeseries-index parse happen once; repeated
+     * `query_prepared()` calls then skip both. The filter must match exactly
+     * one device, otherwise E_NOT_SUPPORT is returned so that callers can fall
+     * back to the regular table query path.
+     *
+     * @param [in] table_name the table name
+     * @param [in] column_name the measurement (field) column name
+     * @param [in] tag_filter the device tag filter; nullptr means no filter
+     * @param [out] prepared the prepared series
+     */
+    int prepare_table_series(const std::string& table_name,
+                             const std::string& column_name, Filter* tag_filter,
+                             std::shared_ptr<PreparedSeries>& prepared);
     int query_prepared(const std::shared_ptr<PreparedSeries>& prepared,
                        int64_t start_time, int64_t end_time, int offset,
-                       int limit, ResultSet*& result_set);
+                       int limit, ResultSet*& result_set,
+                       uint32_t block_rows = 0);
     int query_prepared_multi(
         const std::vector<std::shared_ptr<PreparedSeries>>& prepared,
         int64_t start_time, int64_t end_time, int offset, int limit,
-        ResultSet*& result_set);
+        ResultSet*& result_set, uint32_t block_rows = 0);
 
     /**
      * @brief Query table-model data by row with offset/limit pushdown.

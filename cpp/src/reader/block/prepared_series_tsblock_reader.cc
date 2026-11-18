@@ -50,8 +50,9 @@ common::TSDataType prepared_value_data_type(ITimeseriesIndex* index) {
 
 int PreparedSeriesTsBlockReader::init(
     TsFileIOReader* io_reader, const std::shared_ptr<PreparedSeries>& prepared,
-    Filter* owned_time_filter, int offset, int limit) {
+    Filter* owned_time_filter, int offset, int limit, uint32_t block_rows) {
     owned_time_filter_ = owned_time_filter;
+    block_rows_ = block_rows == 0 ? PREPARED_BATCH_ROWS : block_rows;
     if (io_reader == nullptr || prepared == nullptr ||
         prepared->index() == nullptr || offset < 0 || closed_) {
         return common::E_INVALID_ARG;
@@ -92,8 +93,9 @@ int PreparedSeriesTsBlockReader::init(
 int PreparedSeriesTsBlockReader::init_multi(
     TsFileIOReader* io_reader,
     const std::vector<std::shared_ptr<PreparedSeries>>& prepared,
-    Filter* owned_time_filter, int offset, int limit) {
+    Filter* owned_time_filter, int offset, int limit, uint32_t block_rows) {
     owned_time_filter_ = owned_time_filter;
+    block_rows_ = block_rows == 0 ? PREPARED_BATCH_ROWS : block_rows;
     if (io_reader == nullptr || prepared.empty() || offset < 0 || closed_) {
         return common::E_INVALID_ARG;
     }
@@ -149,9 +151,9 @@ int PreparedSeriesTsBlockReader::has_next(bool& has_next) {
     while (true) {
         const uint32_t desired_rows =
             remaining_limit_ > 0
-                ? std::min<uint32_t>(PREPARED_BATCH_ROWS,
+                ? std::min<uint32_t>(block_rows_,
                                      static_cast<uint32_t>(remaining_limit_))
-                : PREPARED_BATCH_ROWS;
+                : block_rows_;
         if (block_ != nullptr) {
             if (block_->get_max_row_count() != desired_rows) {
                 ssi_->revert_tsblock();
@@ -168,6 +170,29 @@ int PreparedSeriesTsBlockReader::has_next(bool& has_next) {
         }
         if (ret != common::E_OK) {
             return ret;
+        }
+        // A page boundary can leave the block short of its capacity, while the
+        // regular table reader keeps filling it from the next page. Continue
+        // decoding into the same block so cached queries keep the caller's
+        // batch_size block boundaries.
+        while (block_ != nullptr && block_->get_row_count() > 0 &&
+               block_->get_row_count() < desired_rows) {
+            const uint32_t rows_before = block_->get_row_count();
+            int more = ssi_->get_next(block_, true);
+            if (more == common::E_NO_MORE_DATA) {
+                break;
+            }
+            if (more != common::E_OK) {
+                return more;
+            }
+            if (block_ == nullptr) {
+                break;
+            }
+            if (block_->get_row_count() == rows_before) {
+                // No row was appended; stop instead of spinning if the reader
+                // cannot make progress on the same block.
+                break;
+            }
         }
         if (block_ != nullptr && block_->get_row_count() > 0) {
             if (remaining_limit_ > 0) {

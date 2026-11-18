@@ -41,10 +41,12 @@ class PreparedSeriesTsBlockReader final : public TsBlockReader {
 
     int init(TsFileIOReader* io_reader,
              const std::shared_ptr<PreparedSeries>& prepared,
-             Filter* owned_time_filter, int offset, int limit);
+             Filter* owned_time_filter, int offset, int limit,
+             uint32_t block_rows = 0);
     int init_multi(TsFileIOReader* io_reader,
                    const std::vector<std::shared_ptr<PreparedSeries>>& prepared,
-                   Filter* owned_time_filter, int offset, int limit);
+                   Filter* owned_time_filter, int offset, int limit,
+                   uint32_t block_rows = 0);
 
     int has_next(bool& has_next) override;
     int next(common::TsBlock*& ret_block) override;
@@ -64,6 +66,7 @@ class PreparedSeriesTsBlockReader final : public TsBlockReader {
     common::TsBlock* block_ = nullptr;
     common::TSDataType value_data_type_ = common::INVALID_DATATYPE;
     std::vector<common::TSDataType> value_data_types_;
+    uint32_t block_rows_ = 0;
     int remaining_limit_ = -1;
     bool block_ready_ = false;
     bool exhausted_ = false;
