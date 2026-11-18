@@ -31,10 +31,14 @@ enum TSDataType : uint8_t {
     FLOAT = 3,
     DOUBLE = 4,
     TEXT = 5,
+    VECTOR = 6,
+    UNKNOWN = 7,
     TIMESTAMP = 8,
     DATE = 9,
     BLOB = 10,
     STRING = 11,
+    NULL_TYPE = 254,
+    INVALID_DATATYPE = 255,
 };
 
 // Value encoding. See the table below for which encodings apply to which types.
@@ -42,10 +46,16 @@ enum TSEncoding : uint8_t {
     PLAIN = 0,
     DICTIONARY = 1,
     RLE = 2,
+    DIFF = 3,
     TS_2DIFF = 4,
+    BITMAP = 5,
+    GORILLA_V1 = 6,
+    REGULAR = 7,
     GORILLA = 8,
     ZIGZAG = 9,
+    FREQ = 10,
     SPRINTZ = 12,
+    INVALID_ENCODING = 255,
 };
 
 // Compression type. SNAPPY/GZIP/LZO/LZ4 depend on build options; LZ4 is the default.
@@ -54,7 +64,11 @@ enum CompressionType : uint8_t {
     SNAPPY = 1,
     GZIP = 2,
     LZO = 3,
+    SDT = 4,
+    PAA = 5,
+    PLA = 6,
     LZ4 = 7,
+    INVALID_COMPRESSION = 255,
 };
 
 // Column role within a table schema.
@@ -339,7 +353,13 @@ uint8_t common::get_global_compression();
 // Time-column encoding/compression (the data type is fixed to INT64).
 int  common::set_global_time_encoding(uint8_t encoding);
 int  common::set_global_time_compression(uint8_t compression);
+uint8_t common::get_global_time_encoding();
+uint8_t common::get_global_time_compression();
 ```
+
+Global compression accepts `UNCOMPRESSED`, `SNAPPY`, `GZIP`, `LZO`, and `LZ4`.
+The codec enum also contains legacy values such as `SDT`, `PAA`, and `PLA`, but
+the global compression setter rejects them.
 
 ## Read Interface 
 ### Tsfile Reader
@@ -379,6 +399,17 @@ class TsFileReader {
      */
     int query(storage::QueryExpression *qe, ResultSet *&ret_qds);
     /**
+     * @brief query the tsfile by the path list, start time and end time.
+     * This method is used to query the tree model.
+     *
+     * @param [in] path_list the full path list
+     * @param [in] start_time the start time
+     * @param [in] end_time the end time
+     * @param [out] result_set the result set
+     */
+    int query(std::vector<std::string>& path_list, int64_t start_time,
+              int64_t end_time, ResultSet*& result_set);
+    /**
      * @brief query the tsfile by the table name, columns names, start time
      * and end time.
      *
@@ -390,7 +421,7 @@ class TsFileReader {
      */
     int query(const std::string &table_name,
               const std::vector<std::string> &columns_names, int64_t start_time,
-              int64_t end_time, ResultSet *&result_set);
+              int64_t end_time, ResultSet *&result_set, int batch_size = -1);
 
     /**
      * @brief query the tsfile by the table name, columns names, start time
@@ -405,7 +436,14 @@ class TsFileReader {
      */
     int query(const std::string& table_name,
               const std::vector<std::string>& columns_names, int64_t start_time,
-              int64_t end_time, ResultSet*& result_set, Filter* tag_filter);
+              int64_t end_time, ResultSet*& result_set, Filter* tag_filter,
+              int batch_size = 0);
+
+    /**
+     * @brief query tree-model time series by row with offset and limit.
+     */
+    int queryByRow(std::vector<std::string>& path_list, int offset, int limit,
+                   ResultSet*& result_set);
 
     /**
      * @brief query a table by row, with offset/limit pushdown and an optional
@@ -426,12 +464,39 @@ class TsFileReader {
                    Filter* tag_filter = nullptr, int batch_size = 0);
 
     /**
+     * @brief query tree-model data by measurement names within a time range.
+     */
+    int query_table_on_tree(const std::vector<std::string>& measurement_names,
+                            int64_t start_time, int64_t end_time,
+                            ResultSet*& result_set);
+
+    /**
      * @brief destroy the result set, this method should be called after the
      * query is finished and result_set
      *
      * @param qds the result set
      */
     void destroy_query_data_set(ResultSet *qds);
+
+    ResultSet* read_timeseries(
+        const std::shared_ptr<IDeviceID>& device_id,
+        const std::vector<std::string>& measurement_name);
+
+    std::vector<std::shared_ptr<IDeviceID>> get_all_devices(
+        std::string table_name);
+
+    std::vector<std::shared_ptr<IDeviceID>> get_all_device_ids();
+
+    std::vector<std::shared_ptr<IDeviceID>> get_all_devices();
+
+    int get_timeseries_schema(std::shared_ptr<IDeviceID> device_id,
+                              std::vector<MeasurementSchema>& result);
+
+    DeviceTimeseriesMetadataMap get_timeseries_metadata(
+        const std::vector<std::shared_ptr<IDeviceID>>& device_ids);
+
+    DeviceTimeseriesMetadataMap get_timeseries_metadata();
+
     /**
      * @brief get the table schema by the table name
      *
@@ -448,6 +513,11 @@ class TsFileReader {
     std::vector<std::shared_ptr<TableSchema>> get_all_table_schemas();
 };
 ```
+
+`DeviceTimeseriesMetadataMap` is the metadata map returned by
+`get_timeseries_metadata()`: `std::map<std::shared_ptr<IDeviceID>,
+std::vector<std::shared_ptr<ITimeseriesIndex>>, IDeviceIDComparator>`.
+
 ### ResultSet
 ```cpp
 /**
@@ -579,6 +649,8 @@ class TagFilterBuilder {
     Filter* reg_exp(const std::string& columnName, const std::string& value);
     Filter* not_reg_exp(const std::string& columnName,
                         const std::string& value);
+    Filter* is_null(const std::string& columnName);
+    Filter* is_not_null(const std::string& columnName);
     Filter* between_and(const std::string& columnName, const std::string& lower,
                         const std::string& upper);
     Filter* not_between_and(const std::string& columnName,

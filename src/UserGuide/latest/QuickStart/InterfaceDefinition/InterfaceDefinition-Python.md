@@ -47,10 +47,16 @@ class TSEncoding(IntEnum):
     PLAIN = 0         # all types
     DICTIONARY = 1    # STRING, TEXT
     RLE = 2           # INT32, INT64, TIMESTAMP, DATE
+    DIFF = 3
     TS_2DIFF = 4      # INT32, INT64, TIMESTAMP, DATE, FLOAT, DOUBLE
+    BITMAP = 5
+    GORILLA_V1 = 6
+    REGULAR = 7
     GORILLA = 8       # INT32, INT64, TIMESTAMP, DATE, FLOAT, DOUBLE
     ZIGZAG = 9        # INT32, INT64
+    CHIMP = 11        # INT32, INT64, TIMESTAMP, DATE, FLOAT, DOUBLE
     SPRINTZ = 12      # INT32, INT64, FLOAT, DOUBLE
+    RLBE = 13         # INT32, INT64, TIMESTAMP, DATE, FLOAT, DOUBLE
 
 class Compressor(IntEnum):
     """
@@ -60,7 +66,12 @@ class Compressor(IntEnum):
     SNAPPY = 1
     GZIP = 2
     LZO = 3
+    SDT = 4
+    PAA = 5
+    PLA = 6
     LZ4 = 7
+    ZSTD = 8
+    LZMA2 = 9
 
 class ColumnCategory(IntEnum):
     """
@@ -103,13 +114,39 @@ class ResultSetMetaData:
 
     def __init__(self, column_list: List[str], data_types: List[TSDataType])
 
+@dataclass(frozen=True)
+class DeviceID:
+    path: Optional[str]
+    table_name: Optional[str]
+    segments: tuple[Optional[str], ...]
+
+@dataclass(frozen=True)
+class TimeseriesStatistic:
+    has_statistic: bool
+    row_count: int
+    start_time: int
+    end_time: int
+
+@dataclass(frozen=True)
+class TimeseriesMetadata:
+    measurement_name: str
+    data_type: TSDataType
+    chunk_meta_count: int
+    statistic: TimeseriesStatistic
+    timeline_statistic: TimeseriesStatistic
+
+@dataclass(frozen=True)
+class DeviceTimeseriesMetadataGroup:
+    table_name: Optional[str]
+    segments: tuple[Optional[str], ...]
+    timeseries: list[TimeseriesMetadata]
 ```
 
 
 
 ## Write interface
 
-### TsFileWriter 
+### TsFileTableWriter
 
 ```python
 class TsFileTableWriter:
@@ -144,6 +181,14 @@ class TsFileTableWriter:
     def write_dataframe(self, dataframe: pandas.DataFrame)
 
     """
+    Write a pyarrow RecordBatch or Table into the table. The data must include a
+    time column and columns matching the table schema.
+    :param data: pyarrow.RecordBatch or pyarrow.Table.
+    :return: no return value.
+    """
+    def write_arrow_batch(self, data)
+
+    """
     Flush buffered data to disk.
     :return: no return value.
     """
@@ -161,8 +206,6 @@ class TsFileTableWriter:
     def __enter__(self)
     def __exit__(self, exc_type, exc_val, exc_tb)
 ```
-
-
 
 ### Tablet definition
 
@@ -235,7 +278,13 @@ encodings per data type, and the default used when you do not change it:
 | `FLOAT`, `DOUBLE` | `PLAIN`, `TS_2DIFF`, `GORILLA`, `SPRINTZ` | `GORILLA` |
 | `STRING`, `TEXT` | `PLAIN`, `DICTIONARY` | `PLAIN` |
 
-Compression applies to any data type: `UNCOMPRESSED`, `SNAPPY`, `GZIP`, `LZO`, or `LZ4` (default `LZ4`).
+The time column uses the global time configuration and accepts `PLAIN`,
+`TS_2DIFF`, `GORILLA`, `ZIGZAG`, `RLE`, or `SPRINTZ`.
+
+Compression applies to any data type: `UNCOMPRESSED`, `SNAPPY`, `GZIP`, `LZO`,
+or `LZ4` (default `LZ4`). The Python enum also exposes values such as `CHIMP`,
+`RLBE`, `ZSTD`, and `LZMA2`, but the current writer/config conversion on
+`origin/develop` rejects them.
 
 ## Read Interface
 
@@ -262,11 +311,39 @@ class TsFileReader:
     :param column_names: A list of column names to retrieve.
     :param start_time: The start time of the query range (default: minimum int64 value).
     :param end_time: The end time of the query range (default: maximum int64 value).
+    :param tag_filter: Optional tag predicate for table-model TAG columns.
+    :param batch_size: <= 0 returns rows one by one; > 0 returns blocks of that size.
     :return: A query result set handler.
     """
     def query_table(self, table_name : str, column_names : List[str],
                     start_time : int = np.iinfo(np.int64).min, 
-                    end_time: int = np.iinfo(np.int64).max) -> ResultSet
+                    end_time: int = np.iinfo(np.int64).max,
+                    tag_filter = None, batch_size : int = 0) -> ResultSet
+
+    """
+    Execute a time range query on tree-model measurement columns.
+
+    :param column_names: Measurement names to retrieve.
+    :param start_time: The start time of the query range.
+    :param end_time: The end time of the query range.
+    :return: A query result set handler.
+    """
+    def query_table_on_tree(self, column_names : List[str],
+                            start_time : int = np.iinfo(np.int64).min,
+                            end_time : int = np.iinfo(np.int64).max) -> ResultSet
+
+    """
+    Execute tree-model query by row with offset/limit.
+
+    :param device_ids: Device identifiers to query.
+    :param measurement_names: Measurement names to retrieve.
+    :param offset: Number of leading rows to skip.
+    :param limit: Maximum number of rows to return; < 0 means unlimited.
+    :return: A query result set handler.
+    """
+    def query_tree_by_row(self, device_ids : List[str],
+                          measurement_names : List[str],
+                          offset : int = 0, limit : int = -1) -> ResultSet
 
     """
     Execute a table query by row, with offset/limit pushdown and an optional
@@ -288,6 +365,18 @@ class TsFileReader:
                            tag_filter = None, batch_size : int = 0) -> ResultSet
 
     """
+    Execute a tree-model time range query for one device.
+
+    :param device_name: Device identifier.
+    :param sensor_list: Measurement names to retrieve.
+    :param start_time: Query start time.
+    :param end_time: Query end time.
+    :return: A query result set handler.
+    """
+    def query_timeseries(self, device_name : str, sensor_list : List[str],
+                         start_time : int = 0, end_time : int = 0) -> ResultSet
+
+    """
     Retrieves the schema of the specified table.
 
     :param table_name: The name of the table.
@@ -303,6 +392,31 @@ class TsFileReader:
     """
     def get_all_table_schemas(self) ->dict[str, TableSchema]
 
+    """
+    Retrieves all tree-model timeseries schemas grouped by device.
+
+    :return: A list of DeviceSchema objects.
+    """
+    def get_all_timeseries_schemas(self) -> list[DeviceSchema]
+
+    """
+    Retrieves all device identifiers in the file.
+
+    :return: A list of DeviceID(path, table_name, segments).
+    """
+    def get_all_devices(self) -> List[DeviceID]
+
+    """
+    Retrieves per-timeseries metadata for all devices, or only the specified
+    devices.
+
+    :param device_ids: None for all devices, [] for an empty result, or a list
+        of DeviceID / path-compatible device identifiers.
+    :return: dict mapping device segment tuples to DeviceTimeseriesMetadataGroup.
+    """
+    def get_timeseries_metadata(
+        self, device_ids: Optional[List] = None
+    ) -> Dict[tuple, DeviceTimeseriesMetadataGroup]
 
     """
     Closes the TsFile reader. If the reader has active result sets, they will be invalidated.
@@ -345,6 +459,13 @@ class ResultSet:
     :return: A DataFrame containing data from the query result set.
     """
     def read_data_frame(self, max_row_num : int = 1024) -> DataFrame
+
+    """
+    Fetches the next batch result as a pyarrow.Table. Returns None when no more
+    TsBlock batches are available. This is only valid for result sets created
+    with batch_size > 0.
+    """
+    def read_arrow_batch(self) -> Optional[pyarrow.Table]
 
     
     """
@@ -397,6 +518,9 @@ class ResultSet:
     Closes the result set and releases any associated resources.
     """
     def close(self)
+
+    def __enter__(self)
+    def __exit__(self, exc_type, exc_val, exc_tb)
 ```
 
 ### to_dataframe

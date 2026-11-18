@@ -64,9 +64,11 @@ In the table below, `df` is a `TsFileDataFrame` instance, created with
 
 | Example | Operation | Returns |
 |---|---|---|
-| `TsFileDataFrame(paths)` | Load a file / list of files / directory | `TsFileDataFrame` |
+| `TsFileDataFrame(paths, show_progress=True)` | Load a file / list of files / directory. Set `show_progress=False` to silence loading progress on stderr | `TsFileDataFrame` |
 | `len(df)` | Number of time series | `int` |
+| `df.model` | Loaded file model: `"table"` or `"tree"` | `str` |
 | `df.list_timeseries("weather")` | Series names, optionally filtered by prefix | `List[str]` |
+| `df.list_timeseries_metadata("weather")` | Series metadata, optionally filtered by prefix | `pandas.DataFrame` |
 | `df["weather.Beijing.humidity"]`, `df[0]`, `df[-1]` | One series | `Timeseries` |
 | `df["city"]` | A metadata column (a tag / `field` / `start_time` / `end_time` / `count`) | `pandas.Series` |
 | `df[0:3]`, `df[[0, 2, 5]]` | Subset view by integer position: a contiguous range (`0:3`), or the listed positions (`[0, 2, 5]`); positions are the printed `index` column | `TsFileDataFrame` |
@@ -150,6 +152,7 @@ from tsfile import TsFileDataFrame
 
 df = TsFileDataFrame(["data/weather.tsfile", "data/sensor.tsfile"])
 df = TsFileDataFrame("data/")     # recursively find every .tsfile under the directory
+df = TsFileDataFrame("data/", show_progress=False)
 print(df)
 ```
 
@@ -203,7 +206,21 @@ optionally filtered by a prefix. Calling it with no argument returns all series.
 ```
 
 To inspect metadata such as start/end time and count, print the DataFrame (or a
-subset of it) — see [Displaying a DataFrame](#displaying-a-dataframe).
+subset of it) — see [Displaying a DataFrame](#displaying-a-dataframe) — or call
+`list_timeseries_metadata()`.
+
+## Inspecting metadata
+
+`list_timeseries_metadata(path_prefix="")` returns a pandas DataFrame indexed by
+series name. It includes `field`, `start_time`, `end_time`, `count`, and the
+device tag columns. For table-model files it also includes the `table` column.
+
+```python
+meta = df.list_timeseries_metadata()
+weather_meta = df.list_timeseries_metadata("weather")
+
+meta[["field", "start_time", "end_time", "count"]].head()
+```
 
 ## Selecting series
 
