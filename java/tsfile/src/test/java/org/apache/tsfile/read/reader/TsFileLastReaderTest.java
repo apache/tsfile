@@ -368,4 +368,10 @@ public class TsFileLastReaderTest {
     }
     file.delete();
   }
+
+  @Test
+  public void testCreateButNotRead() throws Exception {
+    createFile(10, 10, 10);
+    try (TsFileLastReader ignored = new TsFileLastReader(filePath)) {}
+  }
 }
