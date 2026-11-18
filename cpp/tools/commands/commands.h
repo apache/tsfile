@@ -63,7 +63,7 @@ int validate_row_query_names(const ParsedArgs& args,
 int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
                   OutputFormat fmt, std::ostream& out, std::ostream& err,
                   long long offset, long long limit,
-                  long long* emitted_rows = nullptr);
+                  long long* emitted_rows = nullptr, bool stage_output = true);
 
 int cmd_ls(const ParsedArgs& args, storage::TsFileReader& reader,
            OutputFormat fmt, std::ostream& out, std::ostream& err);

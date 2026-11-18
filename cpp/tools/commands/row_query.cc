@@ -32,6 +32,7 @@
 #include "common/device_id.h"
 #include "common/schema.h"
 #include "format/result_set_format.h"
+#include "format/staged_output.h"
 #include "reader/filter/tag_filter.h"
 #include "reader/tsfile_reader.h"
 
@@ -374,7 +375,8 @@ int validate_row_query_names(const ParsedArgs& args,
 
 int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
                   OutputFormat fmt, std::ostream& out, std::ostream& err,
-                  long long offset, long long limit, long long* emitted_rows) {
+                  long long offset, long long limit, long long* emitted_rows,
+                  bool stage_output) {
     const int64_t start = args.has_start ? static_cast<int64_t>(args.start)
                                          : std::numeric_limits<int64_t>::min();
     const int64_t end = args.has_end ? static_cast<int64_t>(args.end)
@@ -419,28 +421,36 @@ int run_row_query(const ParsedArgs& args, storage::TsFileReader& reader,
         return kExitFile;
     }
 
-    // Stage the complete result before publishing it.  A decode/read failure
-    // can occur after the result header or earlier rows have been rendered;
-    // input failures must not leave a partial machine-readable stdout stream
-    // that callers could mistake for a complete result.  The final write is
-    // still checked separately so stdout errors remain runtime failures.
-    std::ostringstream staged;
+    // Stdout is staged on disk so late input failures publish nothing without
+    // retaining the complete result in memory. Export already owns a temp file.
+    std::unique_ptr<StagedOutput> staged;
+    if (stage_output) {
+        staged.reset(new StagedOutput());
+        if (!staged->is_open()) {
+            reader.destroy_query_data_set(rs);
+            err << "Error: cannot create temporary row output\n";
+            return kExitRuntime;
+        }
+    }
+    std::ostream& destination = staged ? staged->stream() : out;
     std::string output_error;
-    int wret =
-        push_down
-            ? emit_result_set(rs, fmt, args.no_header, staged, 0, -1,
-                              emitted_rows, &output_error, tree_device_prefix)
-            : emit_result_set(rs, fmt, args.no_header, staged, offset, limit,
-                              emitted_rows, &output_error, tree_device_prefix);
+    int wret = push_down ? emit_result_set(rs, fmt, args.no_header, destination,
+                                           0, -1, emitted_rows, &output_error,
+                                           tree_device_prefix)
+                         : emit_result_set(rs, fmt, args.no_header, destination,
+                                           offset, limit, emitted_rows,
+                                           &output_error, tree_device_prefix);
     reader.destroy_query_data_set(rs);
     if (!output_error.empty()) {
         err << "Error: " << output_error << "\n";
         return kExitFile;
     }
     if (wret == common::E_OK) {
-        const std::string bytes = staged.str();
-        out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-        out.flush();
+        if (staged) {
+            if (!staged->publish(out)) wret = common::E_FILE_WRITE_ERR;
+        } else {
+            out.flush();
+        }
         if (!out.good()) {
             wret = common::E_FILE_WRITE_ERR;
         }

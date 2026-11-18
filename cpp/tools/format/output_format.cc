@@ -128,41 +128,11 @@ const char* tsdatatype_name(common::TSDataType t) {
 }
 
 const char* tsencoding_name(common::TSEncoding e) {
-    switch (e) {
-        case common::PLAIN:
-            return "PLAIN";
-        case common::DICTIONARY:
-            return "DICTIONARY";
-        case common::RLE:
-            return "RLE";
-        case common::DIFF:
-            return "DIFF";
-        case common::TS_2DIFF:
-            return "TS_2DIFF";
-        case common::BITMAP:
-            return "BITMAP";
-        case common::GORILLA_V1:
-            return "GORILLA_V1";
-        case common::REGULAR:
-            return "REGULAR";
-        case common::GORILLA:
-            return "GORILLA";
-        case common::ZIGZAG:
-            return "ZIGZAG";
-        case common::FREQ:
-            return "FREQ";
-        case common::CHIMP:
-            return "CHIMP";
-        case common::SPRINTZ:
-            return "SPRINTZ";
-        case common::RLBE:
-            return "RLBE";
-        case common::CAMEL:
-            return "CAMEL";
-        case common::INVALID_ENCODING:
-        default:
-            return "UNKNOWN";
-    }
+    const size_t index = static_cast<size_t>(e);
+    return index < sizeof(common::s_encoding_names) /
+                       sizeof(common::s_encoding_names[0])
+               ? common::s_encoding_names[index]
+               : "UNKNOWN";
 }
 
 const char* compression_name(common::CompressionType c) {

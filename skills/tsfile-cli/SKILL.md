@@ -60,7 +60,7 @@ does not replace the Java batch and format-aware import tools.
 | `stats` | FIELD statistics, null counts, and `stats_source` | maybe |
 | `count` | per-column row/entity/value counts; no summary row | maybe |
 | `head` | first N rows (default 10, `-n`) | yes |
-| `cat` | all matching rows (buffered) | yes |
+| `cat` | all matching rows (disk-staged) | yes |
 | `sketch` | physical layout text with offsets and chunk/page details | no FIELD decode |
 | `export` | writes one object file or a numbered multi-object directory | yes |
 
@@ -91,9 +91,9 @@ opts: -f table|ndjson|csv  (default table, including pipes)
 - `ndjson` emits one JSON object per line. INT64/TIMESTAMP values are decimal
   strings; BOOLEAN/INT32/FLOAT/DOUBLE are bare values, and NULL/NaN/Inf become
   JSON `null`. CSV includes a header and quotes cells using RFC 4180 rules.
-- Row commands buffer complete output in memory, including CSV/NDJSON/export;
-  bound large reads with `-n` and time/TAG filters. Aligned `table` output also
-  uses a temporary spool and renders control characters as visible escapes.
+- Row output uses bounded buffers: stdout is disk-staged until reads succeed;
+  `export` streams to an atomic temporary target. Allow disk space for the result.
+  Aligned `table` output also spools and renders control characters visibly.
 
 ## Sketch and export
 
@@ -128,8 +128,11 @@ TYPE  ∈ { BOOLEAN, INT32, INT64, FLOAT, DOUBLE, STRING, TEXT, TIMESTAMP, DATE,
 - The CSV header must contain `time` and exactly the declared TAG/FIELD names;
   rows are mapped by header name rather than physical column order.
 - `--encoding` and `--compression` may override the bound defaults by data type.
-- CLI rejects explicit ALP, GORILLA_V1, and BOOLEAN/FLOAT/DOUBLE RLE overrides;
-  ALP reads work but `schema` shows `UNKNOWN`. LZMA2 requires an enabled build.
+- Encoding overrides follow the SDK encoder/decoder factories, including ALP
+  and GORILLA_V1 for FLOAT/DOUBLE, and RLE for BOOLEAN/FLOAT/DOUBLE.
+  GORILLA_V1 rejects NaN (reserved end marker), but accepts NULL and infinities.
+  FLOAT/DOUBLE RLE uses the SDK's two-decimal scaling and may be lossy.
+  ALP is C++/Python-only, not Java-compatible. LZMA2 requires an enabled build.
 - `--stdin` or `-i <input.csv>` is required; TSV, `--columns`, `--no-header`, and
   `--header-match` are not supported.
 - Unquoted `\N` denotes NULL. Empty STRING/TEXT cells are empty strings;

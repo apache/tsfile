@@ -18,6 +18,7 @@
  */
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -31,6 +32,7 @@
 #include "file/tsfile_io_reader.h"
 #include "file/write_file.h"
 #include "reader/block/single_device_tsblock_reader.h"
+#include "reader/table_result_set.h"
 #include "reader/task/device_query_task.h"
 #include "writer/tsfile_table_writer.h"
 
@@ -46,6 +48,78 @@ TupleDesc MakeDesc(const char* second_name, TSDataType second_type) {
     desc.push_back(ColumnSchema("time", INT64, UNCOMPRESSED, PLAIN));
     desc.push_back(ColumnSchema(second_name, second_type, UNCOMPRESSED, PLAIN));
     return desc;
+}
+
+class SingleBlockReader : public TsBlockReader {
+   public:
+    explicit SingleBlockReader(TsBlock* block) : block_(block) {}
+    int has_next(bool& has_next) override {
+        has_next = !delivered_;
+        return E_OK;
+    }
+    int next(TsBlock*& block) override {
+        block = block_;
+        delivered_ = true;
+        return E_OK;
+    }
+    void close() override {}
+
+   private:
+    TsBlock* block_;
+    bool delivered_ = false;
+};
+
+TEST(TableResultSetMemoryTest, MaterializedStringsReuseRowStorage) {
+    libtsfile_init();
+    TupleDesc desc = MakeDesc("s", STRING);
+    desc.push_back(ColumnSchema("t", TEXT, UNCOMPRESSED, PLAIN));
+    desc.push_back(ColumnSchema("b", BLOB, UNCOMPRESSED, PLAIN));
+    const int row_count = 2048;
+    ReusableTsBlock reusable;
+    TsBlock* block = reusable.acquire(desc, row_count);
+    ASSERT_NE(block, nullptr);
+    RowAppender rows(block);
+    for (int64_t row = 0; row < row_count; ++row) {
+        ASSERT_TRUE(rows.add_row());
+        rows.append(0, reinterpret_cast<const char*>(&row), sizeof(row));
+        const std::string value(row % 4 == 0 ? 2048 : 128,
+                                static_cast<char>('a' + row % 26));
+        for (uint32_t col = 1; col <= 3; ++col) {
+            if (row % 7 == 1)
+                rows.append_null(col);
+            else
+                rows.append(col, value.data(), value.size());
+        }
+    }
+    TableResultSet result(
+        std::unique_ptr<TsBlockReader>(new SingleBlockReader(block)),
+        {"s", "t", "b"}, {STRING, TEXT, BLOB});
+    auto& stats = ModStat::get_instance();
+    const int64_t baseline = stats.get_stat(MOD_TSFILE_READER);
+    int64_t peak = baseline;
+    for (int row = 0; row < row_count; ++row) {
+        bool has_next = false;
+        ASSERT_EQ(result.next(has_next), E_OK);
+        ASSERT_TRUE(has_next);
+        EXPECT_EQ(result.get_value<int64_t>(1), row);
+        for (uint32_t col = 2; col <= 4; ++col) {
+            ASSERT_EQ(result.is_null(col), row % 7 == 1);
+            if (!result.is_null(col)) {
+                EXPECT_EQ(result.get_value<String*>(col)->to_std_string(),
+                          std::string(row % 4 == 0 ? 2048 : 128,
+                                      static_cast<char>('a' + row % 26)));
+            }
+        }
+        peak = std::max(peak, stats.get_stat(MOD_TSFILE_READER));
+    }
+#ifdef ENABLE_MEM_STAT
+    // Only the current row's three strings should occupy the materialization
+    // arena, including oversized allocations; preceding rows must be released.
+    EXPECT_LE(peak - baseline, 8 * 1024);
+#endif
+    result.close();
+    result.close();
+    EXPECT_EQ(stats.get_stat(MOD_TSFILE_READER), baseline);
 }
 
 TEST(ReusableTsBlockTest, ReusesTheBlockForTheSameLayout) {

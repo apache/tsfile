@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cerrno>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -42,6 +43,8 @@
 #include "common/datatype/date_converter.h"
 #include "common/schema.h"
 #include "common/tablet.h"
+#include "encoding/decoder_factory.h"
+#include "encoding/encoder_factory.h"
 #include "file/write_file.h"
 #include "format/atomic_output.h"
 #include "format/input_format.h"
@@ -158,26 +161,11 @@ std::string lower_ascii(const std::string& s) {
 }
 
 bool parse_encoding_name(const std::string& name, common::TSEncoding& out) {
-    static const std::pair<const char*, common::TSEncoding> kEncodings[] = {
-        {"PLAIN", common::PLAIN},
-        {"DICTIONARY", common::DICTIONARY},
-        {"RLE", common::RLE},
-        {"DIFF", common::DIFF},
-        {"TS_2DIFF", common::TS_2DIFF},
-        {"BITMAP", common::BITMAP},
-        {"GORILLA_V1", common::GORILLA_V1},
-        {"REGULAR", common::REGULAR},
-        {"GORILLA", common::GORILLA},
-        {"ZIGZAG", common::ZIGZAG},
-        {"FREQ", common::FREQ},
-        {"CHIMP", common::CHIMP},
-        {"SPRINTZ", common::SPRINTZ},
-        {"RLBE", common::RLBE},
-        {"CAMEL", common::CAMEL},
-    };
-    for (const auto& e : kEncodings) {
-        if (name == e.first) {
-            out = e.second;
+    for (size_t i = 0; i < sizeof(common::s_encoding_names) /
+                               sizeof(common::s_encoding_names[0]);
+         ++i) {
+        if (name == common::s_encoding_names[i]) {
+            out = static_cast<common::TSEncoding>(i);
             return true;
         }
     }
@@ -207,33 +195,14 @@ bool parse_compression_name(const std::string& name,
 }
 
 bool encoding_supported(common::TSDataType type, common::TSEncoding encoding) {
-    switch (type) {
-        case common::BOOLEAN:
-            return encoding == common::PLAIN;
-        case common::INT32:
-        case common::DATE:
-        case common::INT64:
-        case common::TIMESTAMP:
-            return encoding == common::PLAIN || encoding == common::TS_2DIFF ||
-                   encoding == common::GORILLA || encoding == common::ZIGZAG ||
-                   encoding == common::RLE || encoding == common::SPRINTZ ||
-                   encoding == common::CHIMP || encoding == common::RLBE;
-        case common::FLOAT:
-            return encoding == common::PLAIN || encoding == common::TS_2DIFF ||
-                   encoding == common::GORILLA || encoding == common::SPRINTZ ||
-                   encoding == common::CHIMP || encoding == common::RLBE;
-        case common::DOUBLE:
-            return encoding == common::PLAIN || encoding == common::TS_2DIFF ||
-                   encoding == common::GORILLA || encoding == common::SPRINTZ ||
-                   encoding == common::CHIMP || encoding == common::RLBE ||
-                   encoding == common::CAMEL;
-        case common::STRING:
-        case common::TEXT:
-        case common::BLOB:
-            return encoding == common::PLAIN || encoding == common::DICTIONARY;
-        default:
-            return false;
-    }
+    auto* encoder =
+        storage::EncoderFactory::alloc_value_encoder(encoding, type);
+    auto* decoder =
+        storage::DecoderFactory::alloc_value_decoder(encoding, type);
+    const bool supported = encoder != nullptr && decoder != nullptr;
+    storage::EncoderFactory::free(encoder);
+    storage::DecoderFactory::free(decoder);
+    return supported;
 }
 
 bool compression_supported(common::CompressionType compression) {
@@ -412,7 +381,8 @@ void unescape_leading_backslash_prefix(CsvCell& cell) {
 
 bool add_typed_value(storage::Tablet& tablet, uint32_t row,
                      uint32_t schema_index, const ColumnDef& def,
-                     const CsvCell& csv_cell, std::string& error) {
+                     common::TSEncoding encoding, const CsvCell& csv_cell,
+                     std::string& error) {
     if (is_csv_null(csv_cell)) {
         return true;  // null
     }
@@ -490,6 +460,13 @@ bool add_typed_value(storage::Tablet& tablet, uint32_t row,
                 error = "FLOAT out of range '" + cell + "'";
                 return false;
             }
+            if (encoding == common::GORILLA_V1 && std::isnan(v)) {
+                error =
+                    "NaN is reserved as the GORILLA_V1 end marker "
+                    "(column '" +
+                    def.name + "')";
+                return false;
+            }
             tablet.add_value(row, schema_index, v);
             return true;
         }
@@ -502,6 +479,13 @@ bool add_typed_value(storage::Tablet& tablet, uint32_t row,
             }
             if (errno == ERANGE) {
                 error = "DOUBLE out of range '" + cell + "'";
+                return false;
+            }
+            if (encoding == common::GORILLA_V1 && std::isnan(v)) {
+                error =
+                    "NaN is reserved as the GORILLA_V1 end marker "
+                    "(column '" +
+                    def.name + "')";
                 return false;
             }
             tablet.add_value(row, schema_index, v);
@@ -676,7 +660,8 @@ int cmd_write(const ParsedArgs& args, std::ostream& /*out*/,
             for (size_t j = 0; j < columns.size(); ++j) {
                 std::string cell_err;
                 if (!add_typed_value(tablet, r, static_cast<uint32_t>(j),
-                                     columns[j], batch[i].cells[j], cell_err)) {
+                                     columns[j], col_schemas[j].encoding_,
+                                     batch[i].cells[j], cell_err)) {
                     err << "Error: " << cell_err << " (line "
                         << batch[i].line_no << ")\n";
                     return kExitFile;

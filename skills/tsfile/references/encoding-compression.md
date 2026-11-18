@@ -71,8 +71,10 @@ allocations with `CompressorFactory::free`.
 Python exposes schema encoding/compression enums through the native binding but
 does not expose these Java/C++ low-level factories as an equivalent Python API.
 
-ALP is C++/Python-only; Java cannot query ALP series. CLI write support is
-narrower than this SDK matrix; use the `tsfile-cli` skill for its restrictions.
+ALP is C++/Python-only; Java cannot query ALP series. CLI encoding overrides
+follow the C++ encoder/decoder factory support matrix.
+GORILLA_V1 reserves NaN as its end marker; the CLI rejects NaN input for this codec.
+FLOAT/DOUBLE RLE uses two-decimal scaling by default and may be lossy.
 
 ## Source Anchors
 

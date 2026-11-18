@@ -69,6 +69,23 @@ class FlushFailingStreamBuf : public std::stringbuf {
     int sync() override { return -1; }
 };
 
+class CountingStreamBuf : public std::streambuf {
+   public:
+    std::streamsize max_write = 0;
+    size_t bytes = 0;
+    size_t lines = 0;
+
+   protected:
+    std::streamsize xsputn(const char* data, std::streamsize size) override {
+        if (size > max_write) max_write = size;
+        bytes += static_cast<size_t>(size);
+        for (std::streamsize i = 0; i < size; ++i) {
+            if (data[i] == '\n') ++lines;
+        }
+        return size;
+    }
+};
+
 size_t count_lines(const std::string& s) {
     size_t n = 0;
     for (char c : s) {
@@ -80,6 +97,50 @@ size_t count_lines(const std::string& s) {
 }
 
 }  // namespace
+
+TEST(CliE2E, LargeRowOutputPublishesBoundedBlocks) {
+    const std::string csv =
+        tsfile_cli_test::unique_temp_path("cli_large_output", ".csv");
+    const std::string file =
+        tsfile_cli_test::unique_temp_path("cli_large_output", ".tsfile");
+    const int row_count = 4096;
+    size_t csv_bytes = 0;
+    {
+        std::ofstream input(csv.c_str(), std::ios::binary);
+        input << "time,value\n";
+        for (int row = 0; row < row_count; ++row) {
+            input << row << ',' << std::string(512, 'x') << '\n';
+        }
+        csv_bytes = static_cast<size_t>(input.tellp());
+    }
+    std::ostringstream write_out;
+    std::ostringstream write_err;
+    const int write_code =
+        tsfile_cli::run_cli({"write", "--table", "t", "--field", "value",
+                             "STRING", "-i", csv, "-o", file},
+                            write_out, write_err);
+    EXPECT_EQ(write_code, 0) << write_err.str();
+    if (write_code == 0) {
+        for (const std::string format : {"csv", "ndjson", "table"}) {
+            CountingStreamBuf sink;
+            std::ostream out(&sink);
+            std::ostringstream err;
+            EXPECT_EQ(
+                tsfile_cli::run_cli({"cat", "-f", format, file}, out, err), 0)
+                << err.str();
+            EXPECT_GT(sink.bytes, 2 * 1024 * 1024u);
+            EXPECT_LE(sink.max_write, 64 * 1024);
+            if (format == "csv") {
+                EXPECT_EQ(sink.bytes, csv_bytes);
+                EXPECT_EQ(sink.lines, row_count + 1u);
+            } else if (format == "ndjson") {
+                EXPECT_EQ(sink.lines, row_count);
+            }
+        }
+    }
+    std::remove(csv.c_str());
+    std::remove(file.c_str());
+}
 
 TEST(CliE2E, LsListsTableNameTsv) {
     Fixture f;

@@ -194,7 +194,7 @@ int stream_query_to_file(const ParsedArgs& args, storage::TsFileReader& reader,
         return kExitRuntime;
     }
     code = run_row_query(args, reader, fmt, output, err, args.offset,
-                         args.limit, &rows);
+                         args.limit, &rows, /*stage_output=*/false);
     output.flush();
     if (code == kExitOk && !output.good()) {
         err << "Error: failed to flush output target '" << path << "'\n";
