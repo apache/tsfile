@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.utils;
 
+import java.nio.ByteBuffer;
+
 class BitMapLongImpl extends BitMapImpl {
 
   private static final long ALL_BITS_MARKED = -1L;
@@ -70,6 +72,18 @@ class BitMapLongImpl extends BitMapImpl {
   @Override
   byte getByte(int index) {
     return index < Long.BYTES ? (byte) (bits >>> (index * Byte.SIZE)) : paddingByte;
+  }
+
+  @Override
+  void serializeTo(ByteBuffer buffer, int byteCount) {
+    int copiedByteCount = Math.min(byteCount, getByteArrayLength());
+    for (int i = 0; i < copiedByteCount; i++) {
+      buffer.put(getByte(i));
+    }
+    while (copiedByteCount < byteCount) {
+      buffer.put((byte) 0);
+      copiedByteCount++;
+    }
   }
 
   @Override

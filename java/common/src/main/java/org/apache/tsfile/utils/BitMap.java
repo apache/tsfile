@@ -21,6 +21,7 @@ package org.apache.tsfile.utils;
 
 import org.apache.tsfile.i18n.Messages;
 
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 public class BitMap implements Accountable {
@@ -233,6 +234,22 @@ public class BitMap implements Accountable {
 
   public byte[] getTruncatedByteArray(int size) {
     return Arrays.copyOf(getByteArray(), getSizeOfBytes(size));
+  }
+
+  /** Return the serialized size of this bitmap for the specified number of bits. */
+  public int serializedSize(int size) {
+    return Math.addExact(Integer.BYTES, getSizeOfBytes(size));
+  }
+
+  /**
+   * Write this bitmap's length-prefixed bytes to the buffer's current position. The length prefix
+   * uses the buffer's byte order.
+   */
+  public int serializeTo(ByteBuffer buffer, int size) {
+    final int byteCount = getSizeOfBytes(size);
+    buffer.putInt(byteCount);
+    implementation.serializeTo(buffer, byteCount);
+    return Integer.BYTES + byteCount;
   }
 
   public void append(BitMap another, int position, int length) {

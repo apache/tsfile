@@ -19,6 +19,7 @@
 
 package org.apache.tsfile.utils;
 
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 class BitMapArrayImpl extends BitMapImpl {
@@ -67,6 +68,16 @@ class BitMapArrayImpl extends BitMapImpl {
   @Override
   byte getByte(int index) {
     return bits[index];
+  }
+
+  @Override
+  void serializeTo(ByteBuffer buffer, int byteCount) {
+    int copiedByteCount = Math.min(byteCount, bits.length);
+    buffer.put(bits, 0, copiedByteCount);
+    while (copiedByteCount < byteCount) {
+      buffer.put((byte) 0);
+      copiedByteCount++;
+    }
   }
 
   @Override

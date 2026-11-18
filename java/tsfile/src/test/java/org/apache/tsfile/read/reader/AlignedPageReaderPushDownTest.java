@@ -29,6 +29,7 @@ import org.apache.tsfile.encoding.encoder.IntRleEncoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
+import org.apache.tsfile.read.common.BatchData;
 import org.apache.tsfile.read.common.TimeRange;
 import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.filter.basic.Filter;
@@ -36,6 +37,7 @@ import org.apache.tsfile.read.filter.factory.TimeFilterApi;
 import org.apache.tsfile.read.filter.factory.ValueFilterApi;
 import org.apache.tsfile.read.reader.page.AlignedPageReader;
 import org.apache.tsfile.read.reader.page.LazyLoadPageData;
+import org.apache.tsfile.read.reader.page.TablePageReader;
 import org.apache.tsfile.read.reader.series.PaginationController;
 import org.apache.tsfile.write.page.TimePageWriter;
 import org.apache.tsfile.write.page.ValuePageWriter;
@@ -61,6 +63,110 @@ public class AlignedPageReaderPushDownTest {
 
   private static final PageHeader testValuePageHeader2;
   private static ByteBuffer testValuePageData2;
+
+  @Test
+  public void testBatchDataWithoutRecordFilters() throws IOException {
+    for (boolean lazy : new boolean[] {false, true}) {
+      AlignedPageReader reader =
+          lazy ? generateAlignedPageReaderUsingLazyLoad(null) : generateAlignedPageReader(null);
+      BatchData data = reader.getAllSatisfiedPageData(true);
+      for (int time = 0; time < 100; time++, data.next()) {
+        Assert.assertTrue(data.hasCurrent());
+        Assert.assertEquals(time, data.currentTime());
+        Assert.assertEquals(time, data.getVector()[0].getInt());
+        if (time >= 10 && time < 90) {
+          Assert.assertEquals(time, data.getVector()[1].getInt());
+        } else {
+          Assert.assertNull(data.getVector()[1]);
+        }
+      }
+      Assert.assertFalse(data.hasCurrent());
+
+      reader =
+          lazy
+              ? generateSingleColumnAlignedPageReaderUsingLazyLoad(null, false)
+              : generateSingleColumnAlignedPageReader(null, false);
+      data = reader.getAllSatisfiedPageData(true);
+      for (int time = 10; time < 90; time++, data.next()) {
+        Assert.assertTrue(data.hasCurrent());
+        Assert.assertEquals(time, data.currentTime());
+        Assert.assertEquals(time, data.getVector()[0].getInt());
+      }
+      Assert.assertFalse(data.hasCurrent());
+    }
+  }
+
+  @Test
+  public void testBatchDataWithoutRecordFiltersHonorsDeletes() throws IOException {
+    AlignedPageReader reader = generateAlignedPageReader(null, Arrays.asList(true, true));
+    reader.setDeleteIntervalList(
+        Arrays.asList(
+            Collections.singletonList(new TimeRange(0, 29)),
+            Collections.singletonList(new TimeRange(20, 39))));
+    BatchData data = reader.getAllSatisfiedPageData(true);
+    for (int time = 0; time < 100; time++) {
+      if (time < 10 || (time >= 20 && time < 30)) {
+        continue;
+      }
+      Assert.assertTrue(data.hasCurrent());
+      Assert.assertEquals(time, data.currentTime());
+      if (time < 30) {
+        Assert.assertNull(data.getVector()[0]);
+      } else {
+        Assert.assertEquals(time, data.getVector()[0].getInt());
+      }
+      if ((time >= 10 && time < 20) || (time >= 40 && time < 90)) {
+        Assert.assertEquals(time, data.getVector()[1].getInt());
+      } else {
+        Assert.assertNull(data.getVector()[1]);
+      }
+      data.next();
+    }
+    Assert.assertFalse(data.hasCurrent());
+  }
+
+  @Test
+  public void testBatchDataWithRecordFilters() throws IOException {
+    for (Filter timeFilter : new Filter[] {null, TimeFilterApi.between(30, 69)}) {
+      AlignedPageReader reader = generateAlignedPageReader(timeFilter);
+      reader.addRecordFilter(ValueFilterApi.gtEq(DEFAULT_MEASUREMENT_INDEX, 50, TSDataType.INT32));
+      BatchData data = reader.getAllSatisfiedPageData(true);
+      int end = timeFilter == null ? 100 : 70;
+      for (int time = 50; time < end; time++, data.next()) {
+        Assert.assertTrue(data.hasCurrent());
+        Assert.assertEquals(time, data.currentTime());
+        Assert.assertEquals(time, data.getVector()[0].getInt());
+      }
+      Assert.assertFalse(data.hasCurrent());
+    }
+  }
+
+  @Test
+  public void testTableBatchDataKeepsAllNullRowsWithoutRecordFilters() throws IOException {
+    resetDataBuffer();
+    TablePageReader reader =
+        new TablePageReader(
+            testTimePageHeader,
+            testTimePageData,
+            new DeltaBinaryDecoder.LongDeltaDecoder(),
+            Arrays.asList(null, testValuePageHeader2),
+            Arrays.asList(null, testValuePageData2),
+            Arrays.asList(TSDataType.INT32, TSDataType.INT32),
+            Arrays.asList(new IntRleDecoder(), new IntRleDecoder()),
+            null);
+    BatchData data = reader.getAllSatisfiedPageData(true);
+    for (int time = 0; time < 100; time++, data.next()) {
+      Assert.assertTrue(data.hasCurrent());
+      Assert.assertEquals(time, data.currentTime());
+      Assert.assertNull(data.getVector()[0]);
+      if (time >= 10 && time < 90) {
+        Assert.assertEquals(time, data.getVector()[1].getInt());
+      } else {
+        Assert.assertNull(data.getVector()[1]);
+      }
+    }
+    Assert.assertFalse(data.hasCurrent());
+  }
 
   static {
     TimePageWriter timePageWriter =

@@ -449,7 +449,8 @@ public class DoubleType extends AbstractType {
   public void serializeArray(Object array, int length, ByteBuffer buffer) {
     double[] values = (double[]) array;
     for (int i = 0; i < length; i++) {
-      buffer.putDouble(values[i]);
+      // Match the canonical NaN representation of the stream serialization.
+      buffer.putLong(Double.doubleToLongBits(values[i]));
     }
   }
 

@@ -39,7 +39,9 @@ import org.junit.Test;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -823,9 +825,96 @@ public class TabletTest {
         DataOutputStream outputStream = new DataOutputStream(baos)) {
       tablet.serialize(outputStream);
       assertEquals(scenario + ": serialize(stream) size", expectedSize, baos.size());
+      Assert.assertArrayEquals(
+          scenario + ": buffer and stream wire format",
+          Arrays.copyOf(baos.getBuf(), baos.size()),
+          buffer.array());
     }
     buffer.rewind();
     assertEquals(scenario + ": deserialize roundtrip", tablet, Tablet.deserialize(buffer));
+  }
+
+  @Test
+  public void testSerializeToExistingByteBuffer() throws IOException {
+    final List<TSDataType> types =
+        Arrays.asList(
+            TSDataType.BOOLEAN,
+            TSDataType.INT32,
+            TSDataType.INT64,
+            TSDataType.FLOAT,
+            TSDataType.DOUBLE,
+            TSDataType.TEXT,
+            TSDataType.STRING,
+            TSDataType.BLOB,
+            TSDataType.DATE,
+            TSDataType.TIMESTAMP,
+            TSDataType.OBJECT);
+    final Tablet tablet =
+        createAndFillTreeTablet("root.设备.d1", buildColumnNames(types), types, 9, 0, true, true);
+    final byte[] expected = tablet.serialize().array();
+    final int size = expected.length;
+    final ByteBuffer sliced = ByteBuffer.allocate(size + 13);
+    sliced.position(7);
+    for (ByteBuffer buffer :
+        new ByteBuffer[] {
+          ByteBuffer.allocate(size + 6), ByteBuffer.allocateDirect(size + 6), sliced.slice()
+        }) {
+      while (buffer.hasRemaining()) {
+        buffer.put((byte) 0x5a);
+      }
+      buffer.position(2);
+      buffer.limit(2 + size);
+      buffer.order(ByteOrder.LITTLE_ENDIAN);
+      tablet.serialize(buffer);
+      assertEquals(2 + size, buffer.position());
+      assertEquals(2 + size, buffer.limit());
+      assertEquals(ByteOrder.LITTLE_ENDIAN, buffer.order());
+      buffer.position(2);
+      final byte[] actual = new byte[size];
+      buffer.get(actual);
+      Assert.assertArrayEquals(expected, actual);
+      assertEquals(tablet, Tablet.deserialize(ByteBuffer.wrap(actual)));
+      buffer.clear();
+      assertEquals((byte) 0x5a, buffer.get(0));
+      assertEquals((byte) 0x5a, buffer.get(1));
+      for (int i = 2 + size; i < buffer.capacity(); i++) {
+        assertEquals((byte) 0x5a, buffer.get(i));
+      }
+    }
+    final ByteBuffer tooSmall = ByteBuffer.allocate(size - 1).order(ByteOrder.LITTLE_ENDIAN);
+    Assert.assertThrows(BufferOverflowException.class, () -> tablet.serialize(tooSmall));
+    assertEquals(ByteOrder.LITTLE_ENDIAN, tooSmall.order());
+  }
+
+  @Test
+  public void testSerializationCanonicalizesNaNs() throws IOException {
+    final Tablet tablet =
+        new Tablet(
+            "root.sg.d1",
+            Arrays.asList(
+                new MeasurementSchema("f", TSDataType.FLOAT),
+                new MeasurementSchema("d", TSDataType.DOUBLE)),
+            5);
+    final float[] floats = {
+      Float.intBitsToFloat(0x7fa12345),
+      Float.intBitsToFloat(0xffc12345),
+      -0.0f,
+      Float.POSITIVE_INFINITY,
+      Float.MIN_VALUE
+    };
+    final double[] doubles = {
+      Double.longBitsToDouble(0x7ff123456789abcdL),
+      Double.longBitsToDouble(0xfff123456789abcdL),
+      -0.0,
+      Double.NEGATIVE_INFINITY,
+      Double.MIN_VALUE
+    };
+    for (int i = 0; i < floats.length; i++) {
+      tablet.addTimestamp(i, i);
+      tablet.addValue("f", i, floats[i]);
+      tablet.addValue("d", i, doubles[i]);
+    }
+    assertSerializedSizeMatches(tablet, "floating-point wire format");
   }
 
   @Test

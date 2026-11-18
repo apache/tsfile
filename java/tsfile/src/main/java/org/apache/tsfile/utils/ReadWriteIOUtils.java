@@ -257,6 +257,11 @@ public class ReadWriteIOUtils {
     return Byte.BYTES;
   }
 
+  public static int write(byte n, DataOutputStream outputStream) throws IOException {
+    outputStream.writeByte(n);
+    return Byte.BYTES;
+  }
+
   /**
    * write a short n.
    *
@@ -266,6 +271,11 @@ public class ReadWriteIOUtils {
     byte[] bytes = BytesUtils.shortToBytes(n);
     outputStream.write(bytes);
     return bytes.length;
+  }
+
+  public static int write(short n, DataOutputStream outputStream) throws IOException {
+    outputStream.writeShort(n);
+    return SHORT_LEN;
   }
 
   /**
@@ -311,12 +321,24 @@ public class ReadWriteIOUtils {
     return INT_LEN;
   }
 
+  public static int write(int n, DataOutputStream outputStream) throws IOException {
+    outputStream.writeInt(n);
+    return INT_LEN;
+  }
+
   /** write the size (int) of the binary and then the bytes in binary */
   public static int write(Binary binary, OutputStream outputStream) throws IOException {
     byte[] size = BytesUtils.intToBytes(binary.getValues().length);
     outputStream.write(size);
     outputStream.write(binary.getValues());
     return size.length + binary.getValues().length;
+  }
+
+  public static int write(Binary binary, DataOutputStream outputStream) throws IOException {
+    byte[] values = binary.getValues();
+    outputStream.writeInt(values.length);
+    outputStream.write(values);
+    return INT_LEN + values.length;
   }
 
   /**
@@ -340,6 +362,11 @@ public class ReadWriteIOUtils {
     return FLOAT_LEN;
   }
 
+  public static int write(float n, DataOutputStream outputStream) throws IOException {
+    outputStream.writeFloat(n);
+    return FLOAT_LEN;
+  }
+
   /**
    * Write a double n to outputStream.
    *
@@ -351,6 +378,11 @@ public class ReadWriteIOUtils {
     return DOUBLE_LEN;
   }
 
+  public static int write(double n, DataOutputStream outputStream) throws IOException {
+    outputStream.writeDouble(n);
+    return DOUBLE_LEN;
+  }
+
   /**
    * write a long n to outputStream.
    *
@@ -359,6 +391,11 @@ public class ReadWriteIOUtils {
   public static int write(long n, OutputStream outputStream) throws IOException {
     byte[] bytes = BytesUtils.longToBytes(n);
     outputStream.write(bytes);
+    return LONG_LEN;
+  }
+
+  public static int write(long n, DataOutputStream outputStream) throws IOException {
+    outputStream.writeLong(n);
     return LONG_LEN;
   }
 
