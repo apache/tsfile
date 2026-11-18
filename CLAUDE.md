@@ -130,7 +130,15 @@ Java logs and exception messages use a runtime `ResourceBundle` approach so the 
 
 ## License Header
 
-Every new file must include the Apache License 2.0 header at the top. Use the comment style appropriate for the file type (e.g., `<!-- -->` for Markdown, `/* */` for Java/C++, `#` for Python). See any existing file for the exact wording.
+Use the complete ASF source header in new TsFile-authored files that support comments.
+Match the comment syntax to the file format. Use `<!-- -->` for Markdown, `/* */`
+for Java and C++, and `#` for Python. Preserve third-party license and copyright
+notices. [ASF source header policy](https://www.apache.org/legal/src-headers.html)
+
+Keep license headers intact during bulk replacements and refactors. When adding
+or restoring a standard header, check the full text including the disclaimer.
+For generated sources, update the template that emits the header. ATR checks the
+header wording separately from Maven RAT. [ATR license checks](https://releases.apache.org/docs/license-checks#lightweight-license-check)
 
 ## Git Commit
 
