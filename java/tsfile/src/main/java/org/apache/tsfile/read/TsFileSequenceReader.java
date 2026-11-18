@@ -1248,7 +1248,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     if (endOffset - startOffset < Integer.MAX_VALUE) {
       ByteBuffer buffer = readData(startOffset, endOffset, ioSizeRecorder);
       while (buffer.hasRemaining()) {
-        TimeseriesMetadata metadata = deserializeTimeseriesMetadata(buffer);
+        TimeseriesMetadata metadata = deserializeTimeseriesMetadata(buffer, requested);
         if (requested.contains(metadata.getMeasurementId())) {
           result.put(metadata.getMeasurementId(), metadata);
         }
@@ -1262,7 +1262,7 @@ public class TsFileSequenceReader implements AutoCloseable {
     synchronized (this) {
       tsFileInput.position(startOffset);
       while (tsFileInput.position() < endOffset) {
-        TimeseriesMetadata metadata = deserializeTimeseriesMetadata(tsFileInput);
+        TimeseriesMetadata metadata = deserializeTimeseriesMetadata(tsFileInput, requested);
         if (requested.contains(metadata.getMeasurementId())) {
           result.put(metadata.getMeasurementId(), metadata);
         }
@@ -1270,18 +1270,21 @@ public class TsFileSequenceReader implements AutoCloseable {
     }
   }
 
-  private TimeseriesMetadata deserializeTimeseriesMetadata(ByteBuffer buffer) throws IOException {
+  private TimeseriesMetadata deserializeTimeseriesMetadata(ByteBuffer buffer, Set<String> requested)
+      throws IOException {
     try {
-      return TimeseriesMetadata.deserializeFrom(buffer, true);
+      // skip the chunk metadata of the series this call does not return
+      return TimeseriesMetadata.deserializeFrom(buffer, requested::contains, true, true);
     } catch (Exception e) {
       logger.error(Messages.get("log.read.sequence_reader_tsm_deserialize_error"), file);
       throw e;
     }
   }
 
-  private TimeseriesMetadata deserializeTimeseriesMetadata(TsFileInput input) throws IOException {
+  private TimeseriesMetadata deserializeTimeseriesMetadata(TsFileInput input, Set<String> requested)
+      throws IOException {
     try {
-      return TimeseriesMetadata.deserializeFrom(input, true);
+      return TimeseriesMetadata.deserializeFrom(input, requested::contains, true, true);
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (Exception e) {

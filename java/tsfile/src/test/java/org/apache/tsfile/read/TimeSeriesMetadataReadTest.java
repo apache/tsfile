@@ -21,10 +21,15 @@ package org.apache.tsfile.read;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.constant.TestConstant;
+import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
 import org.apache.tsfile.read.common.Path;
 import org.apache.tsfile.utils.FileGenerator;
+import org.apache.tsfile.write.TsFileWriter;
+import org.apache.tsfile.write.record.TSRecord;
+import org.apache.tsfile.write.schema.IMeasurementSchema;
+import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -33,7 +38,9 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -174,6 +181,87 @@ public class TimeSeriesMetadataReadTest {
             batch.get(measurement).getStatistics().getCount(),
             viaOffset.get(measurement).getStatistics().getCount());
       }
+    }
+  }
+
+  @Test
+  public void testReadTimeseriesMetadataInBatchThroughInternalNode() throws Exception {
+    File file = new File(TestConstant.BASE_OUTPUT_PATH.concat("BatchInternalNode.tsfile"));
+    file.delete();
+    IDeviceID device = IDeviceID.Factory.DEFAULT_FACTORY.create("root.sg.d1");
+    int measurementCount = 20;
+    List<IMeasurementSchema> schemas = new ArrayList<>(measurementCount);
+    List<String> present = new ArrayList<>(measurementCount);
+    for (int i = 0; i < measurementCount; i++) {
+      String measurement = String.format("m%02d", i);
+      present.add(measurement);
+      schemas.add(new MeasurementSchema(measurement, TSDataType.INT32));
+    }
+    try (TsFileWriter writer = new TsFileWriter(file)) {
+      for (IMeasurementSchema schema : schemas) {
+        writer.registerTimeseries(device, schema);
+      }
+      for (int time = 0; time < 5; time++) {
+        TSRecord record = new TSRecord(device, time);
+        for (String measurement : present) {
+          record.addPoint(measurement, time);
+        }
+        writer.writeRecord(record);
+      }
+    }
+    try (TsFileSequenceReader reader = new TsFileSequenceReader(file.getAbsolutePath())) {
+      long[] offset = null;
+      LazyTsFileDeviceIterator iterator = new LazyTsFileDeviceIterator(reader);
+      while (iterator.hasNext()) {
+        IDeviceID current = iterator.next();
+        if (current.equals(device)) {
+          offset = iterator.getCurrentDeviceMeasurementNodeOffset();
+          break;
+        }
+      }
+      Assert.assertNotNull(offset);
+
+      List<Long> allReads = new ArrayList<>();
+      Map<String, TimeseriesMetadata> all =
+          reader.readTimeseriesMetadata(device, offset, present, false, allReads::add);
+      Assert.assertEquals(measurementCount, all.size());
+      // the batch read resolves several measurements per node/group read
+      Assert.assertFalse(allReads.isEmpty());
+      Assert.assertTrue(allReads.size() < measurementCount);
+      for (String measurement : present) {
+        TimeseriesMetadata metadata = all.get(measurement);
+        Assert.assertNotNull(measurement, metadata);
+        Assert.assertEquals(measurement, metadata.getMeasurementId());
+        Assert.assertNotNull(measurement, metadata.getChunkMetadataList());
+        Assert.assertFalse(measurement, metadata.getChunkMetadataList().isEmpty());
+      }
+
+      // absent names must not add reads
+      Set<String> withAbsent = new HashSet<>(present);
+      withAbsent.add("a");
+      withAbsent.add("m99");
+      withAbsent.add("zzz");
+      List<Long> readsWithAbsent = new ArrayList<>();
+      Map<String, TimeseriesMetadata> withAbsentResult =
+          reader.readTimeseriesMetadata(device, offset, withAbsent, false, readsWithAbsent::add);
+      Assert.assertEquals(measurementCount, withAbsentResult.size());
+      Assert.assertEquals(allReads, readsWithAbsent);
+
+      // a single searched measurement can warm the siblings that share its leaf group
+      List<Long> siblingReads = new ArrayList<>();
+      Map<String, TimeseriesMetadata> siblings =
+          reader.readTimeseriesMetadata(
+              device,
+              offset,
+              Collections.singletonList("m00"),
+              new HashSet<>(present),
+              false,
+              siblingReads::add);
+      Assert.assertTrue(siblings.containsKey("m00"));
+      Assert.assertTrue(present.containsAll(siblings.keySet()));
+      Assert.assertTrue(siblingReads.size() < measurementCount);
+    } finally {
+      Assert.assertTrue(file.delete());
     }
   }
 }

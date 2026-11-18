@@ -228,7 +228,8 @@ public class MetadataIndexNode {
 
       if (foundIndex >= 0) {
         results[i] = foundIndex;
-        currentLow = foundIndex + 1;
+        // keep the matched child eligible: the key list may contain duplicates
+        currentLow = foundIndex;
       } else {
         results[i] = exactSearch ? -1 : start - 1;
         currentLow = start;
@@ -242,12 +243,14 @@ public class MetadataIndexNode {
     int i = 0;
     int j = 0;
     while (i < keys.size() && j < children.size()) {
-      int cmp = keys.get(i).compareTo(children.get(j).getCompareKey());
+      // compare in the same direction as binarySearchInChildren: the key and the child compare
+      // key may be different implementations that only support child.compareTo(key)
+      int cmp = children.get(j).getCompareKey().compareTo(keys.get(i));
       if (cmp == 0) {
         results[i] = j;
+        // keep the child eligible for the next key, which may duplicate this one
         i++;
-        j++;
-      } else if (cmp > 0) {
+      } else if (cmp < 0) {
         j++;
       } else {
         results[i] = exactSearch ? -1 : j - 1;
