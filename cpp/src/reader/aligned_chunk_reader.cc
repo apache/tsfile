@@ -408,7 +408,10 @@ int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
             }
         }
         if (IS_SUCC(ret)) {
-            ret = decode_cur_time_page_data() || decode_cur_value_page_data();
+            ret = decode_cur_time_page_data();
+        }
+        if (IS_SUCC(ret)) {
+            ret = decode_cur_value_page_data();
         }
     }
     if (IS_SUCC(ret)) {
@@ -666,19 +669,38 @@ int AlignedChunkReader::decode_cur_value_page_data() {
     }
     // Step 3: get value_buf
     if (IS_SUCC(ret)) {
-        uint32_t value_uncompressed_buf_offset = 0;
-        value_page_data_num_ =
-            SerializationUtil::read_ui32(value_uncompressed_buf);
-        value_uncompressed_buf_offset += sizeof(uint32_t);
-        value_page_col_notnull_bitmap_.resize((value_page_data_num_ + 7) / 8);
-        for (unsigned char& i : value_page_col_notnull_bitmap_) {
-            i = *(value_uncompressed_buf + value_uncompressed_buf_offset);
-            value_uncompressed_buf_offset++;
+        // The page begins with a uint32 row count followed by a not-null
+        // bitmap of ceil(count/8) bytes. Validate both before the count is
+        // used to size the bitmap or to walk the buffer.
+        if (value_uncompressed_buf_size < sizeof(uint32_t)) {
+            ret = E_TSFILE_CORRUPTED;
+        } else {
+            uint32_t value_uncompressed_buf_offset = 0;
+            value_page_data_num_ =
+                SerializationUtil::read_ui32(value_uncompressed_buf);
+            value_uncompressed_buf_offset += sizeof(uint32_t);
+            // 64-bit arithmetic: value_page_data_num_ + 7 overflows uint32_t
+            // for counts near UINT32_MAX.
+            const uint64_t bitmap_bytes =
+                (static_cast<uint64_t>(value_page_data_num_) + 7) / 8;
+            if (bitmap_bytes >
+                value_uncompressed_buf_size - value_uncompressed_buf_offset) {
+                ret = E_TSFILE_CORRUPTED;
+            } else {
+                value_page_col_notnull_bitmap_.resize(
+                    static_cast<size_t>(bitmap_bytes));
+                for (unsigned char& i : value_page_col_notnull_bitmap_) {
+                    i = *(value_uncompressed_buf +
+                          value_uncompressed_buf_offset);
+                    value_uncompressed_buf_offset++;
+                }
+                cur_value_index = -1;
+                value_buf =
+                    value_uncompressed_buf + value_uncompressed_buf_offset;
+                value_buf_size =
+                    value_uncompressed_buf_size - value_uncompressed_buf_offset;
+            }
         }
-        cur_value_index = -1;
-        value_buf = value_uncompressed_buf + value_uncompressed_buf_offset;
-        value_buf_size =
-            value_uncompressed_buf_size - value_uncompressed_buf_offset;
     }
     value_decoder_->reset();
 #ifdef DEBUG_SE
@@ -738,6 +760,10 @@ int AlignedChunkReader::decode_time_value_buf_into_tsblock(
         CppType value;                                                         \
         while (time_decoder_->has_remaining(time_in)) {                        \
             cur_value_index++;                                                 \
+            if (UNLIKELY(value_row_out_of_bitmap(cur_value_index))) {          \
+                ret = E_TSFILE_CORRUPTED;                                      \
+                break;                                                         \
+            }                                                                  \
             if (value_page_col_notnull_bitmap_.empty() ||                      \
                 ((value_page_col_notnull_bitmap_[cur_value_index / 8] &        \
                   0xFF) &                                                      \
@@ -858,6 +884,13 @@ int AlignedChunkReader::decode_tv_batch(ByteStream& time_in,
             if (time_decoder_->peek_next_block_range_int64(
                     time_in, block_min, block_max, block_count)) {
                 if (!filter->satisfy_start_end_time(block_min, block_max)) {
+                    if (block_count > 0 &&
+                        UNLIKELY(value_row_out_of_bitmap(
+                            cur_value_index +
+                            static_cast<int64_t>(block_count)))) {
+                        ret = E_TSFILE_CORRUPTED;
+                        break;
+                    }
                     int skipped = 0;
                     time_decoder_->skip_peeked_block_int64(time_in, skipped);
                     int nonnull = 0;
@@ -890,6 +923,12 @@ int AlignedChunkReader::decode_tv_batch(ByteStream& time_in,
             break;
         }
         if (time_count == 0) break;
+
+        if (UNLIKELY(value_row_out_of_bitmap(
+                cur_value_index + static_cast<int64_t>(time_count)))) {
+            ret = E_TSFILE_CORRUPTED;
+            break;
+        }
 
         bool is_null[BATCH];
         int nonnull_count = 0;
@@ -1049,6 +1088,10 @@ int AlignedChunkReader::STRING_DECODE_TYPED_TV_INTO_TSBLOCK(
     uint32_t mask = 1 << 7;
     while (time_decoder_->has_remaining(time_in)) {
         cur_value_index++;
+        if (UNLIKELY(value_row_out_of_bitmap(cur_value_index))) {
+            ret = E_TSFILE_CORRUPTED;
+            break;
+        }
         bool should_read_data = true;
         if (value_page_col_notnull_bitmap_.empty() ||
             ((value_page_col_notnull_bitmap_[cur_value_index / 8] & 0xFF) &
@@ -1181,7 +1224,10 @@ int AlignedChunkReader::get_next_page(TsBlock* ret_tsblock,
             }
         }
         if (IS_SUCC(ret)) {
-            ret = decode_cur_time_page_data() || decode_cur_value_page_data();
+            ret = decode_cur_time_page_data();
+        }
+        if (IS_SUCC(ret)) {
+            ret = decode_cur_value_page_data();
         }
     }
     if (IS_SUCC(ret)) {
