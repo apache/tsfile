@@ -19,6 +19,7 @@
 """Reject build-only files, repeated native libraries and ELF debug sections."""
 
 import argparse
+from email.parser import BytesParser
 import hashlib
 from pathlib import Path
 import struct
@@ -47,12 +48,30 @@ def elf_debug_sections(data):
     return result
 
 
-def check_wheel(path):
+def check_wheel(path, expected_version=None):
     with ZipFile(path) as wheel:
         files = [info for info in wheel.infolist() if not info.is_dir()]
         names = [info.filename for info in files]
         if len(names) != len(set(names)):
             raise ValueError(f"Duplicate ZIP entries in {path}")
+        if expected_version is not None:
+            metadata_path = f"tsfile-{expected_version}.dist-info/METADATA"
+            metadata_files = [
+                name for name in names if name.endswith(".dist-info/METADATA")
+            ]
+            if not Path(path).name.startswith(
+                f"tsfile-{expected_version}-"
+            ) or metadata_files != [metadata_path]:
+                raise ValueError(
+                    f"Wheel filename and metadata must use version {expected_version}: {path}"
+                )
+            metadata = BytesParser().parsebytes(wheel.read(metadata_path))
+            if metadata.get_all("Name") != ["tsfile"] or metadata.get_all(
+                "Version"
+            ) != [expected_version]:
+                raise ValueError(
+                    f"Wheel METADATA must declare tsfile version {expected_version}: {path}"
+                )
         forbidden = [
             name
             for name in names
@@ -103,6 +122,7 @@ def check_wheel(path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--wheelhouse", type=Path)
+    parser.add_argument("--expected-version")
     parser.add_argument("wheels", type=Path, nargs="*")
     arguments = parser.parse_args()
     wheels = arguments.wheels
@@ -111,7 +131,7 @@ def main():
     if not wheels:
         raise ValueError("No wheels found for content validation")
     for wheel in wheels:
-        check_wheel(wheel)
+        check_wheel(wheel, arguments.expected_version)
 
 
 if __name__ == "__main__":

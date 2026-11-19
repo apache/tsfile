@@ -305,10 +305,23 @@ the same manually installed native package that Go users consume.
 
 ## Python wheels
 
-The native workflow is the single packaging entry point. It replaces the former
-`.github/workflows/wheels.yml` workflow; pushing an `rc/**` branch no longer
-starts a separate wheel build. Dispatch the native workflow to build the full
-package bundle, including all 30 Python wheels:
+The native workflow builds the full release package bundle, including all 30
+Python wheels. For Python development versions only, use **Build Python
+development wheels** (`.github/workflows/wheels.yml`): select **Run workflow**,
+choose the source branch, and enter an explicit version such as `2.5.1.dev0`
+or `2.5.1.dev2`. This workflow is manual-only; pushing an `rc/**` branch does
+not trigger it.
+
+The development workflow updates both Python version declarations in its
+temporary checkout and preserves the requested version through the C++ build.
+It builds the C++ library needed by the bindings, then builds and smoke-tests
+the installed wheels on the same five platforms and six CPython versions below.
+It checks that wheel filenames and distribution metadata both carry the exact
+requested development version. Download the five
+`tsfile-wheels-<version>-<platform>` artifacts from the run; they contain only
+wheel files and are retained for 14 days. This workflow does not build native
+release packages or publish to PyPI. The native release workflow still accepts
+only final source versions.
 
 | Wheel platform | CPython | C++ SDK source |
 | --- | --- | --- |
@@ -316,7 +329,7 @@ package bundle, including all 30 Python wheels:
 | manylinux_2_28 aarch64 | 3.9–3.14 | One bundled build inside the native ARM container |
 | macOS 12 x86_64 | 3.9–3.14 | One bundled build with deployment target 12.0 |
 | macOS 12 arm64 | 3.9–3.14 | One bundled build with deployment target 12.0 |
-| Windows x86_64 | 3.9–3.14 | The existing native MSVC SDK |
+| Windows x86_64 | 3.9–3.14 | Bundled MSVC SDK; release builds reuse the native job's SDK |
 
 Each SDK installs `share/tsfile/tsfile-build-config.json`, recording its compiler,
 configuration, resolved MSVC runtime and runtime library filename. The same

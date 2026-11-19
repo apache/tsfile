@@ -127,7 +127,19 @@ raise "Python SDK export must support the container host mount" unless sdk_build
 raise "Windows SDKs must retain Python wheel codec coverage" unless windows.include?("-Denable.lzma2=ON")
 output, status = Open3.capture2e("bash", "-n", sdk_builder_path)
 raise "Invalid Python SDK shell script: #{output}" unless status.success?
-raise "The old wheel workflow must be retired" if File.exist?(File.expand_path("../../.github/workflows/wheels.yml", __dir__))
+dev_workflow = YAML.load_file(File.expand_path("../../.github/workflows/wheels.yml", __dir__))
+dev_triggers = dev_workflow["on"] || dev_workflow[true]
+raise "Development wheels must be manual-only" unless dev_triggers.keys == ["workflow_dispatch"]
+raise "Development wheels require an explicit version" unless dev_triggers.fetch("workflow_dispatch").fetch("inputs").fetch("version").fetch("required")
+raise "Development wheels must remain read-only" unless dev_workflow.fetch("permissions") == { "contents" => "read" }
+dev_jobs = dev_workflow.fetch("jobs")
+dev_jobs.each_value do |job|
+  raise "Development wheels must not depend on native release jobs" unless Array(job["needs"]).all? { |name| dev_jobs.key?(name) }
+  job.fetch("steps").each do |step|
+    next unless step["uses"].to_s.start_with?("actions/upload-artifact@")
+    raise "Development workflow must upload only wheels" unless step.fetch("with").fetch("path") == "wheelhouse/*.whl"
+  end
+end
 
 homebrew = jobs.fetch("build-homebrew")
 raise "Homebrew must use the current repository" unless homebrew.fetch("env").fetch("SOURCE_REPOSITORY") == "${{ github.repository }}"
@@ -283,7 +295,7 @@ end
 raise "assemble must verify the bundle" unless assemble_text.include?("--verify-bundle")
 raise "workflow must not hard-code a fork repository" if File.read(path).include?("ColinLeeo/tsfile")
 
-jobs.each_value do |job|
+(jobs.values + dev_jobs.values).each do |job|
   job.fetch("steps").each do |step|
     artifact = step["with"].to_h["name"].to_s
     raise "artifact names must not repeat the macOS matrix prefix" if artifact.include?("macos-macos")
