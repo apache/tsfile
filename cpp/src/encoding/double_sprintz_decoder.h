@@ -128,7 +128,14 @@ class DoubleSprintzDecoder : public SprintzDecoder {
         bit_width_ = static_cast<int32_t>(bit_width);
 
         if ((bit_width_ & (1 << 7)) != 0) {
+            // A special block stores its value count in the low 7 bits of the
+            // header byte. Encoders write 1..block_size; any other count
+            // would either index past current_buffer_ (block_size_ + 1
+            // entries) or describe a block no encoder can produce.
             decode_size_ = bit_width_ & ~(1 << 7);
+            if (decode_size_ == 0 || decode_size_ > block_size_) {
+                return common::E_TSFILE_CORRUPTED;
+            }
             DoubleGorillaDecoder decoder;
             for (int i = 0; i < decode_size_; ++i) {
                 if (RET_FAIL(decoder.read_double(current_buffer_[i], input))) {
