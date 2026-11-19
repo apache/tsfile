@@ -489,6 +489,56 @@ public class ColumnTest {
   }
 
   @Test
+  public void binaryColumnSizeIgnoresUnusedCapacityTest() {
+    Binary value = new Binary(new byte[1024]);
+    // the builder allocates 8 slots for the two positions
+    BinaryColumnBuilder columnBuilder = new BinaryColumnBuilder(null, 8);
+    columnBuilder.appendNull();
+    columnBuilder.writeBinary(value);
+    Column overAllocatedColumn = columnBuilder.build();
+    Assert.assertEquals(8, overAllocatedColumn.getBinaries().length);
+
+    Column compactColumn =
+        new BinaryColumn(2, Optional.of(new boolean[] {true, false}), new Binary[] {null, value});
+    Assert.assertEquals(compactColumn.getSizeInBytes(), overAllocatedColumn.getSizeInBytes());
+    Assert.assertTrue(overAllocatedColumn.getSizeInBytes() >= 1024);
+  }
+
+  @Test
+  public void binaryColumnSizeOfRegionTest() {
+    Binary largeValue = new Binary(new byte[4096]);
+    Binary smallValue = new Binary(new byte[16]);
+    Column column =
+        new BinaryColumn(
+            4, Optional.empty(), new Binary[] {largeValue, smallValue, smallValue, smallValue});
+
+    // a region only counts its own positions, whatever else the shared array holds
+    Column largeRegion = column.getRegion(0, 1);
+    Assert.assertSame(column.getBinaries(), largeRegion.getBinaries());
+    Assert.assertEquals(column.getRegionCopy(0, 1).getSizeInBytes(), largeRegion.getSizeInBytes());
+    Assert.assertTrue(largeRegion.getSizeInBytes() >= 4096);
+
+    Column smallRegion = column.getRegion(1, 3);
+    Assert.assertEquals(column.getRegionCopy(1, 3).getSizeInBytes(), smallRegion.getSizeInBytes());
+    Assert.assertTrue(smallRegion.getSizeInBytes() < 4096);
+
+    Column subColumn = column.subColumn(1);
+    Assert.assertSame(column.getBinaries(), subColumn.getBinaries());
+    Assert.assertEquals(column.subColumnCopy(1).getSizeInBytes(), subColumn.getSizeInBytes());
+  }
+
+  @Test
+  public void binaryColumnSizeAfterSetPositionCountTest() {
+    Binary value = new Binary(new byte[1024]);
+    Column column = new BinaryColumn(2, Optional.empty(), new Binary[] {value, value});
+    Assert.assertTrue(column.getSizeInBytes() >= 2048);
+
+    column.setPositionCount(1);
+    Column compactColumn = new BinaryColumn(1, Optional.empty(), new Binary[] {value});
+    Assert.assertEquals(compactColumn.getSizeInBytes(), column.getSizeInBytes());
+  }
+
+  @Test
   public void booleanColumnSubColumnTest() {
     BooleanColumnBuilder columnBuilder = new BooleanColumnBuilder(null, 10);
     // 0: true, 1: false

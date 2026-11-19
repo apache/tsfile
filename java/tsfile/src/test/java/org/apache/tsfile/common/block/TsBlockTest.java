@@ -182,6 +182,19 @@ public class TsBlockTest {
   }
 
   @Test
+  public void testBinaryTsBlockSize() {
+    byte[] bytes = new byte[1024 * 1024];
+    TsBlockBuilder builder = new TsBlockBuilder(Collections.singletonList(TSDataType.TEXT));
+    builder.getTimeColumnBuilder().writeLong(1L);
+    builder.getColumnBuilder(0).writeBinary(new Binary(bytes));
+    builder.declarePosition();
+    TsBlock tsBlock = builder.build();
+    // the builder allocates more slots than the only row needs
+    assertTrue(tsBlock.getColumn(0).getBinaries().length > tsBlock.getPositionCount());
+    assertTrue(tsBlock.getSizeInBytes() >= bytes.length);
+  }
+
+  @Test
   public void testIntTsBlockWithNull() {
     long[] timeArray = {1L, 2L, 3L, 4L, 5L};
     int[] valueArray = {10, 20, 30, 40, 50};

@@ -41,6 +41,7 @@ import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkValidRe
 import static org.apache.tsfile.utils.RamUsageEstimator.NUM_BYTES_OBJECT_REF;
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOf;
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfBooleanArray;
+import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfObjectArray;
 
 public class BinaryColumn implements Column {
 
@@ -55,7 +56,8 @@ public class BinaryColumn implements Column {
   private final Binary[] values;
 
   private final long retainedSizeInBytes;
-  private final long sizeInBytes;
+  // calculated on demand, -1 means that it has to be calculated
+  private volatile long sizeInBytes = -1;
 
   public BinaryColumn(int initialCapacity) {
     this(0, 0, null, new Binary[initialCapacity]);
@@ -86,7 +88,6 @@ public class BinaryColumn implements Column {
     this.valueIsNull = valueIsNull;
 
     retainedSizeInBytes = INSTANCE_SIZE + sizeOfBooleanArray(positionCount) + sizeOf(values);
-    sizeInBytes = values.length > 0 ? retainedSizeInBytes * positionCount / values.length : 0L;
   }
 
   // called by getRegion which already knows the underlying retainedSizeInBytes
@@ -115,7 +116,6 @@ public class BinaryColumn implements Column {
     }
     this.valueIsNull = valueIsNull;
     this.retainedSizeInBytes = retainedSizeInBytes;
-    this.sizeInBytes = values.length > 0 ? retainedSizeInBytes * positionCount / values.length : 0L;
   }
 
   @Override
@@ -233,7 +233,28 @@ public class BinaryColumn implements Column {
 
   @Override
   public long getSizeInBytes() {
-    return sizeInBytes;
+    long size = sizeInBytes;
+    if (size < 0) {
+      size = calculateSizeInBytes();
+      sizeInBytes = size;
+    }
+    return size;
+  }
+
+  /**
+   * Only the positions of this column count. The array can be longer than that: a builder
+   * over-allocates it, and a region shares the array of the column it was taken from.
+   */
+  private long calculateSizeInBytes() {
+    long size =
+        INSTANCE_SIZE + sizeOfBooleanArray(positionCount) + sizeOfObjectArray(positionCount);
+    for (int i = arrayOffset, end = arrayOffset + positionCount; i < end; i++) {
+      Binary value = values[i];
+      if (value != null) {
+        size += value.ramBytesUsed();
+      }
+    }
+    return size;
   }
 
   @Override
@@ -332,6 +353,7 @@ public class BinaryColumn implements Column {
   @Override
   public void setPositionCount(int count) {
     positionCount = count;
+    sizeInBytes = -1;
   }
 
   @Override
