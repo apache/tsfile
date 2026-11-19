@@ -1313,4 +1313,112 @@ TEST_F(SprintzCodecTest, JavaGoldenDouble) {
         values.data(), static_cast<int>(values.size()));
 }
 
+// Builds a Sprintz page whose first byte is a special-block header claiming
+// `claimed_size` values, followed by the RLE/Gorilla payload that a malformed
+// file uses to satisfy every claimed entry.
+void BuildSpecialBlockPage(int claimed_size, ByteStream& payload,
+                           ByteStream& page) {
+    uint8_t header = static_cast<uint8_t>(0x80 | claimed_size);
+    ASSERT_EQ(page.write_buf(&header, 1), E_OK);
+    ASSERT_EQ(merge_byte_stream(page, payload, false), E_OK);
+}
+
+// A malformed special-block header may claim any count in 0..127, but
+// current_buffer_ only holds block_size_ + 1 values and encoders only write
+// 1..block_size. The decoder must reject such a block instead of writing past
+// the buffer.
+TEST_F(SprintzCodecTest, Int32SpecialBlockOversizedCountIsRejected) {
+    for (int claimed : {0, 9, 127}) {
+        SCOPED_TRACE(::testing::Message() << "claimed=" << claimed);
+        ByteStream payload(1024, MOD_ENCODER_OBJ);
+        Int32RleEncoder encoder;
+        for (int i = 0; i < claimed; ++i) {
+            ASSERT_EQ(encoder.encode(1000 + i, payload), E_OK);
+        }
+        ASSERT_EQ(encoder.flush(payload), E_OK);
+        ByteStream page(4096, MOD_DECODER_OBJ);
+        BuildSpecialBlockPage(claimed, payload, page);
+
+        Int32SprintzDecoder decoder;
+        int32_t value = 0;
+        EXPECT_EQ(decoder.read_int32(value, page), common::E_TSFILE_CORRUPTED);
+    }
+}
+
+TEST_F(SprintzCodecTest, Int64SpecialBlockOversizedCountIsRejected) {
+    for (int claimed : {0, 9, 127}) {
+        SCOPED_TRACE(::testing::Message() << "claimed=" << claimed);
+        ByteStream payload(1024, MOD_ENCODER_OBJ);
+        Int64RleEncoder encoder;
+        for (int i = 0; i < claimed; ++i) {
+            ASSERT_EQ(
+                encoder.encode(static_cast<int64_t>(1) << 40 | i, payload),
+                E_OK);
+        }
+        ASSERT_EQ(encoder.flush(payload), E_OK);
+        ByteStream page(4096, MOD_DECODER_OBJ);
+        BuildSpecialBlockPage(claimed, payload, page);
+
+        Int64SprintzDecoder decoder;
+        int64_t value = 0;
+        EXPECT_EQ(decoder.read_int64(value, page), common::E_TSFILE_CORRUPTED);
+    }
+}
+
+TEST_F(SprintzCodecTest, FloatSpecialBlockOversizedCountIsRejected) {
+    for (int claimed : {0, 9, 127}) {
+        SCOPED_TRACE(::testing::Message() << "claimed=" << claimed);
+        ByteStream payload(1024, MOD_ENCODER_OBJ);
+        FloatGorillaEncoder encoder;
+        for (int i = 0; i < claimed; ++i) {
+            ASSERT_EQ(encoder.encode(1000.25f + i, payload), E_OK);
+        }
+        ASSERT_EQ(encoder.flush(payload), E_OK);
+        ByteStream page(4096, MOD_DECODER_OBJ);
+        BuildSpecialBlockPage(claimed, payload, page);
+
+        FloatSprintzDecoder decoder;
+        float value = 0;
+        EXPECT_EQ(decoder.read_float(value, page), common::E_TSFILE_CORRUPTED);
+    }
+}
+
+TEST_F(SprintzCodecTest, DoubleSpecialBlockOversizedCountIsRejected) {
+    for (int claimed : {0, 9, 127}) {
+        SCOPED_TRACE(::testing::Message() << "claimed=" << claimed);
+        ByteStream payload(1024, MOD_ENCODER_OBJ);
+        DoubleGorillaEncoder encoder;
+        for (int i = 0; i < claimed; ++i) {
+            ASSERT_EQ(encoder.encode(1000.25 + i, payload), E_OK);
+        }
+        ASSERT_EQ(encoder.flush(payload), E_OK);
+        ByteStream page(4096, MOD_DECODER_OBJ);
+        BuildSpecialBlockPage(claimed, payload, page);
+
+        DoubleSprintzDecoder decoder;
+        double value = 0;
+        EXPECT_EQ(decoder.read_double(value, page), common::E_TSFILE_CORRUPTED);
+    }
+}
+
+// Eight values is the largest special block an encoder writes; it must keep
+// decoding after the count validation above.
+TEST_F(SprintzCodecTest, Int32SpecialBlockAtCapacityStillDecodes) {
+    Int32SprintzEncoder encoder;
+    ByteStream stream(128, MOD_ENCODER_OBJ);
+    for (int i = 0; i < 8; ++i) {
+        ASSERT_EQ(encoder.encode(i * 7, stream), E_OK);
+    }
+    ASSERT_EQ(encoder.flush(stream), E_OK);
+
+    Int32SprintzDecoder decoder;
+    for (int i = 0; i < 8; ++i) {
+        int32_t actual = 0;
+        ASSERT_TRUE(decoder.has_remaining(stream));
+        ASSERT_EQ(decoder.read_int32(actual, stream), E_OK);
+        ASSERT_EQ(actual, i * 7);
+    }
+    ASSERT_FALSE(decoder.has_remaining(stream));
+}
+
 }  // namespace
