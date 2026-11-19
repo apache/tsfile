@@ -104,6 +104,14 @@ public abstract class Encoder {
    *
    * @return the maximal possible size of one data item encoded by this encoder
    */
+  /**
+   * Returns the number of whole bytes that are buffered inside the encoder and not written to the
+   * output stream yet. Page sizing uses it so buffering bits does not change where pages are split.
+   */
+  public int getPendingByteCount() {
+    return 0;
+  }
+
   public int getOneItemMaxSize() {
     throw new UnsupportedOperationException();
   }

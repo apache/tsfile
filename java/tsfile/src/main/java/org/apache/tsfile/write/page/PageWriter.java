@@ -56,6 +56,10 @@ public class PageWriter {
   private Encoder valueEncoder;
   private PublicBAOS valueOut;
 
+  // Reused across the pages of a chunk so that encoding and compression do not allocate the page
+  // body buffers for every page.
+  private final PageBodyBuffer pageBodyBuffer = new PageBodyBuffer();
+
   /**
    * statistic of current page. It will be reset after calling {@code
    * writePageHeaderAndDataIntoBuff()}
@@ -224,6 +228,26 @@ public class PageWriter {
     return buffer;
   }
 
+  /** Retained heap bytes of this page writer's buffers, for the global flush threshold. */
+  public long retainedBufferBytes() {
+    return (long) timeOut.getBuf().length
+        + valueOut.getBuf().length
+        + pageBodyBuffer.retainedBytes();
+  }
+
+  /** Same as {@link #getUncompressedBytes()} but reuses the writer's scratch buffer. */
+  private ByteBuffer getUncompressedBytesForWriting() throws IOException {
+    prepareEndWriteOnePage();
+    int timeSize = timeOut.size();
+    int valueSize = valueOut.size();
+    ByteBuffer buffer = pageBodyBuffer.uncompressed(timeSize + valueSize + 4);
+    ReadWriteForEncodingUtils.writeUnsignedVarInt(timeSize, buffer);
+    buffer.put(timeOut.getBuf(), 0, timeSize);
+    buffer.put(valueOut.getBuf(), 0, valueSize);
+    buffer.flip();
+    return buffer;
+  }
+
   /** write the page header and data into the PageWriter's output stream. */
   public int writePageHeaderAndDataIntoBuff(PublicBAOS pageBuffer, boolean first)
       throws IOException {
@@ -233,15 +257,32 @@ public class PageWriter {
   /** write the page header and data into the PageWriter's output stream. */
   public int writePageHeaderAndDataIntoBuff(PublicBAOS pageBuffer, boolean first, int pageIndex)
       throws IOException {
+    return writePageHeaderAndDataIntoBuff(pageBuffer, first, pageIndex, false);
+  }
+
+  /**
+   * @param includeFirstPageStatistics when {@code first} is true, serialize the first page
+   *     statistics after the page header. Multi-page chunks need them; writing them up front avoids
+   *     copying the whole chunk buffer when the second page arrives.
+   */
+  public int writePageHeaderAndDataIntoBuff(
+      PublicBAOS pageBuffer, boolean first, int pageIndex, boolean includeFirstPageStatistics)
+      throws IOException {
     if (statistics.getCount() == 0) {
       return 0;
     }
 
-    ByteBuffer pageData = getUncompressedBytes();
+    ByteBuffer pageData = getUncompressedBytesForWriting();
     int uncompressedSize = pageData.remaining();
     ByteBuffer pageBody =
         PageBodyEncoder.encode(
-            pageData, uncompressedSize, compressor, encryptParam, pageIndex, chunkOrdinal);
+            pageData,
+            uncompressedSize,
+            compressor,
+            encryptParam,
+            pageIndex,
+            chunkOrdinal,
+            pageBodyBuffer);
     int pageBodySize = pageBody.remaining();
 
     // write the page header to IOWriter
@@ -251,6 +292,9 @@ public class PageWriter {
           ReadWriteForEncodingUtils.writeUnsignedVarInt(uncompressedSize, pageBuffer);
       sizeWithoutStatistic +=
           ReadWriteForEncodingUtils.writeUnsignedVarInt(pageBodySize, pageBuffer);
+      if (includeFirstPageStatistics) {
+        statistics.serialize(pageBuffer);
+      }
     } else {
       ReadWriteForEncodingUtils.writeUnsignedVarInt(uncompressedSize, pageBuffer);
       ReadWriteForEncodingUtils.writeUnsignedVarInt(pageBodySize, pageBuffer);
@@ -273,6 +317,8 @@ public class PageWriter {
   public long estimateMaxMemSize() {
     return timeOut.size()
         + valueOut.size()
+        + timeEncoder.getPendingByteCount()
+        + valueEncoder.getPendingByteCount()
         + timeEncoder.getMaxByteSize()
         + valueEncoder.getMaxByteSize();
   }

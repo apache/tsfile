@@ -62,14 +62,16 @@ public class DictionaryEncoder extends Encoder {
 
   @Override
   public void encode(Binary value, ByteArrayOutputStream out) {
-    int i =
-        entryIndex.computeIfAbsent(
-            value,
-            v -> {
-              indexEntry.add(v);
-              mapSize += v.getLength();
-              return entryIndex.size();
-            });
+    // Avoid computeIfAbsent: its capturing lambda is allocated on every call, which shows up as
+    // one of the largest allocation sites when encoding a TEXT column.
+    Integer i = entryIndex.get(value);
+    if (i == null) {
+      indexEntry.add(value);
+      mapSize += value.getLength();
+      // The index must be the size before inserting, matching the original 0-based indexes.
+      i = entryIndex.size();
+      entryIndex.put(value, i);
+    }
     valuesEncoder.encode(i, out);
   }
 

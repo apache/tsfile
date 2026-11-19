@@ -482,6 +482,14 @@ public class AlignedChunkWriterImpl implements IChunkWriter {
   }
 
   @Override
+  public void setExpectedPageCount(int expectedPageCount) {
+    timeChunkWriter.setExpectedPageCount(expectedPageCount);
+    for (ValueChunkWriter valueChunkWriter : valueChunkWriterList) {
+      valueChunkWriter.setExpectedPageCount(expectedPageCount);
+    }
+  }
+
+  @Override
   public void clearPageWriter() {
     timeChunkWriter.clearPageWriter();
     for (ValueChunkWriter valueChunkWriter : valueChunkWriterList) {

@@ -25,6 +25,7 @@ import org.apache.tsfile.exception.encoding.TsFileEncodingException;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.PublicBAOS;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import org.slf4j.Logger;
@@ -33,7 +34,6 @@ import org.slf4j.LoggerFactory;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -78,10 +78,13 @@ public abstract class RleEncoder<T extends Comparable<T>> extends Encoder {
   protected int numBufferedValues;
 
   /**
-   * we will write all bytes using bit-packing to OutputStream once. Before that, all bytes are
-   * saved in list.
+   * Buffers the packed bytes of the current bit-packing run. It is reused across pages so that
+   * packing a group does not allocate a new byte array per group.
    */
-  protected List<byte[]> bytesBuffer;
+  protected PublicBAOS bitPackedBuffer;
+
+  /** Scratch array for packing one group of {@code RLE_MIN_REPEATED_NUM} values. */
+  private byte[] packScratch = new byte[32];
 
   /** flag which indicate encoding mode false -- rle true -- bit-packing. */
   protected boolean isBitPackRun;
@@ -102,7 +105,7 @@ public abstract class RleEncoder<T extends Comparable<T>> extends Encoder {
   /** constructor. */
   protected RleEncoder() {
     super(TSEncoding.RLE);
-    bytesBuffer = new ArrayList<>();
+    bitPackedBuffer = new PublicBAOS();
     isBitPackRun = false;
     isBitWidthSaved = false;
     byteCache = new ByteArrayOutputStream();
@@ -112,7 +115,7 @@ public abstract class RleEncoder<T extends Comparable<T>> extends Encoder {
     numBufferedValues = 0;
     repeatCount = 0;
     bitPackedGroupCount = 0;
-    bytesBuffer.clear();
+    bitPackedBuffer.reset();
     isBitPackRun = false;
     isBitWidthSaved = false;
     byteCache.reset();
@@ -183,8 +186,8 @@ public abstract class RleEncoder<T extends Comparable<T>> extends Encoder {
 
   /**
    * End a bit-packing run write all bit-packing group to OutputStream bit-packing format: {@code
-   * [header][lastBitPackedNum][bit-packing group]+ [bit-packing group]+ are saved in List<byte[]>
-   * bytesBuffer }.
+   * [header][lastBitPackedNum][bit-packing group]+ [bit-packing group]+ are appended to the reusable
+   * bit-packing buffer.
    *
    * @param lastBitPackedNum - in last bit-packing group, it may have useful values less than 8.
    *     This param indicates how many values are useful
@@ -196,12 +199,26 @@ public abstract class RleEncoder<T extends Comparable<T>> extends Encoder {
     byte bitPackHeader = (byte) ((bitPackedGroupCount << 1) | 1);
     byteCache.write(bitPackHeader);
     byteCache.write(lastBitPackedNum);
-    for (byte[] bytes : bytesBuffer) {
-      byteCache.write(bytes, 0, bytes.length);
-    }
-    bytesBuffer.clear();
+    byteCache.write(bitPackedBuffer.getBuf(), 0, bitPackedBuffer.size());
+    bitPackedBuffer.reset();
     isBitPackRun = false;
     bitPackedGroupCount = 0;
+  }
+
+  /**
+   * Returns a scratch array with at least {@code length} bytes for packing one group, then appends
+   * the packed bytes to the current bit-packing run.
+   */
+  protected byte[] packScratch(int length) {
+    if (packScratch.length < length) {
+      packScratch = new byte[length];
+    }
+    return packScratch;
+  }
+
+  /** Appends one packed group to the current bit-packing run. */
+  protected void appendBitPackedGroup(byte[] bytes, int length) {
+    bitPackedBuffer.write(bytes, 0, length);
   }
 
   /**

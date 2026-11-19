@@ -170,7 +170,7 @@ public class NonAlignedChunkGroupWriterImpl implements IChunkGroupWriter {
   public long updateMaxGroupMemSize() {
     long bufferSize = 0;
     for (IChunkWriter seriesWriter : chunkWriters.values()) {
-      bufferSize += seriesWriter.estimateMaxSeriesMemSize();
+      bufferSize += seriesWriter.getRetainedMemSize();
     }
     return bufferSize;
   }
