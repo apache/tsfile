@@ -988,8 +988,9 @@ public class Tablet implements Accountable {
 
   @Override
   public int hashCode() {
-    // Must stay consistent with equals(): only the fields compared before the
-    // timestamp/bitmap/value checks are hashed. Equal tablets share them, and
+    // Must stay consistent with equals(): `schemas` is left out so the hash
+    // does not depend on the List's element hash implementations; the
+    // remaining partial fields keep equal tablets on the same hash, and
     // unequal tablets may still collide, which is allowed.
     return Objects.hash(rowSize, insertTargetName, columnCategories, measurementIndex);
   }

@@ -127,6 +127,6 @@ public class BitmapEncoder extends Encoder {
   @Override
   public long getMaxByteSize() {
     // byteCacheSize + byteDictSize + (byte array + array length) * byteDictSize
-    return (long) 4 + 4 + ((long) (values.size() + 7) / 8 + 4) * values.size();
+    return (long) 4 + 4 + ((values.size() + 7L) / 8 + 4) * values.size();
   }
 }
