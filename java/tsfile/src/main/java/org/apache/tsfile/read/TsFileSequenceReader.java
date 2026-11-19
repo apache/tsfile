@@ -112,11 +112,11 @@ import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.LongConsumer;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class TsFileSequenceReader implements AutoCloseable {
@@ -1097,27 +1097,28 @@ public class TsFileSequenceReader implements AutoCloseable {
 
   /**
    * Reads the {@link TimeseriesMetadata} of the given measurements of a device, visiting each
-   * measurement leaf group that holds a requested measurement at most once.
+   * measurement leaf group that holds one of them at most once.
    *
    * @param deviceMetadataIndexNodeOffset measurement metadata index node offset of an external
    *     TsFile; null to locate the device through the table metadata index
    * @param measurements measurements to read, in any order
    * @param ignoreNotExistDevice whether to return an empty map instead of throwing when the device
    *     is not recorded in the file metadata
-   * @return the metadata of the measurements found in this file; absent measurements are missing
-   *     from the map
+   * @return the metadata of the measurements found in the visited leaf groups; absent measurements
+   *     are missing from the map
    */
-  public Map<String, TimeseriesMetadata> readTimeseriesMetadata(
+  public Map<String, TimeseriesMetadata> readTimeseriesMetadataForMeasurements(
       IDeviceID device,
       long[] deviceMetadataIndexNodeOffset,
       Collection<String> measurements,
       boolean ignoreNotExistDevice,
       LongConsumer ioSizeRecorder)
       throws IOException {
-    return readTimeseriesMetadata(
+    return readTimeseriesMetadataForMeasurements(
         device,
         deviceMetadataIndexNodeOffset,
         measurements,
+        null,
         null,
         ignoreNotExistDevice,
         ioSizeRecorder);
@@ -1125,27 +1126,41 @@ public class TsFileSequenceReader implements AutoCloseable {
 
   /**
    * Reads the {@link TimeseriesMetadata} of the measurements that share a leaf group with one of
-   * {@code measurements}. Leaf groups that no searched measurement maps into are not read, and each
-   * visited leaf group is read once.
+   * {@code measurements}. Every searched measurement selects the leaf group that holds its floor
+   * key, and each visited group is read once.
+   *
+   * <p>An absent measurement still selects its floor group, so a group that holds none of the
+   * requested series is read when an absent measurement sorts into it. Pass {@code mayExist} to
+   * avoid those reads: a measurement is tested before it selects a group, and a rejected
+   * measurement selects nothing. The predicate must have no false negatives, as a {@link
+   * BloomFilter} does not; do not pass one for an offset-addressed external TsFile whose
+   * BloomFilter may not cover the series.
+   *
+   * <p>A returned measurement that is missing from the result was rejected by {@code mayExist}, or
+   * its floor group was visited and does not contain it; a measurement before the first key is
+   * missing without a read. With {@code mayExist}, every searched measurement missing from the
+   * result is therefore absent from the file.
    *
    * @param measurements measurements that select the leaf groups to visit
    * @param returnedMeasurements measurements to deserialize from the visited groups; null means
    *     {@code measurements}. It may contain measurements outside {@code measurements}, which is
    *     how a caller warms the metadata cache with the siblings of a single requested measurement
-   * @return the metadata of the returned measurements found in this file; absent measurements are
-   *     missing from the map
+   * @param mayExist optional filter tested on a measurement before it selects a group; null reads
+   *     every floor group
+   * @return the metadata of the returned measurements found in the visited leaf groups
    */
-  public Map<String, TimeseriesMetadata> readTimeseriesMetadata(
+  @SuppressWarnings("unchecked")
+  public Map<String, TimeseriesMetadata> readTimeseriesMetadataForMeasurements(
       IDeviceID device,
       long[] deviceMetadataIndexNodeOffset,
       Collection<String> measurements,
       Set<String> returnedMeasurements,
+      Predicate<String> mayExist,
       boolean ignoreNotExistDevice,
       LongConsumer ioSizeRecorder)
       throws IOException {
-    if (measurements.isEmpty()) {
-      return Collections.emptyMap();
-    }
+    // the device is looked up even for an empty request, so an absent device is reported the same
+    // way as for a non-empty one
     MetadataIndexNode measurementIndexNode =
         getMeasurementMetadataIndexNode(device, deviceMetadataIndexNodeOffset, ioSizeRecorder);
     if (measurementIndexNode == null) {
@@ -1155,19 +1170,45 @@ public class TsFileSequenceReader implements AutoCloseable {
       throw new IOException(
           Messages.format("error.read.device_not_in_metadata_file", device, file));
     }
-    List<String> sortedMeasurements = new ArrayList<>(new TreeSet<>(measurements));
+    if (measurements.isEmpty()) {
+      return Collections.emptyMap();
+    }
     Set<String> returned =
-        returnedMeasurements == null ? new HashSet<>(sortedMeasurements) : returnedMeasurements;
-    Map<String, TimeseriesMetadata> result = new HashMap<>();
+        returnedMeasurements != null
+            ? returnedMeasurements
+            : measurements instanceof Set
+                ? (Set<String>) measurements
+                : new HashSet<>(measurements);
+    Map<String, TimeseriesMetadata> result =
+        new HashMap<>(Math.max(16, (int) (returned.size() / 0.75f) + 1));
     readMeasurementsInIndexNode(
-        measurementIndexNode, sortedMeasurements, returned, result, ioSizeRecorder);
+        measurementIndexNode, measurements, returned, mayExist, result, ioSizeRecorder);
     return result;
   }
 
-  public Map<String, TimeseriesMetadata> readTimeseriesMetadata(
+  public Map<String, TimeseriesMetadata> readTimeseriesMetadataForMeasurements(
+      IDeviceID device,
+      long[] deviceMetadataIndexNodeOffset,
+      Collection<String> measurements,
+      Set<String> returnedMeasurements,
+      boolean ignoreNotExistDevice,
+      LongConsumer ioSizeRecorder)
+      throws IOException {
+    return readTimeseriesMetadataForMeasurements(
+        device,
+        deviceMetadataIndexNodeOffset,
+        measurements,
+        returnedMeasurements,
+        null,
+        ignoreNotExistDevice,
+        ioSizeRecorder);
+  }
+
+  public Map<String, TimeseriesMetadata> readTimeseriesMetadataForMeasurements(
       IDeviceID device, Collection<String> measurements, boolean ignoreNotExistDevice)
       throws IOException {
-    return readTimeseriesMetadata(device, null, measurements, null, ignoreNotExistDevice, null);
+    return readTimeseriesMetadataForMeasurements(
+        device, null, measurements, null, null, ignoreNotExistDevice, null);
   }
 
   private MetadataIndexNode getMeasurementMetadataIndexNode(
@@ -1188,9 +1229,6 @@ public class TsFileSequenceReader implements AutoCloseable {
       return null;
     }
     ByteBuffer buffer = readData(deviceEntry.left.getOffset(), deviceEntry.right, ioSizeRecorder);
-    if (deviceIndexNode.getNodeType().equals(MetadataIndexNodeType.LEAF_MEASUREMENT)) {
-      return deviceIndexNode;
-    }
     return deserializeMeasurementMetadataIndexNode(buffer);
   }
 
@@ -1207,49 +1245,112 @@ public class TsFileSequenceReader implements AutoCloseable {
 
   private void readMeasurementsInIndexNode(
       MetadataIndexNode node,
-      List<String> sortedMeasurements,
-      Set<String> requested,
+      Collection<String> measurements,
+      Set<String> returned,
+      Predicate<String> mayExist,
       Map<String, TimeseriesMetadata> result,
       LongConsumer ioSizeRecorder)
       throws IOException {
-    List<Pair<IMetadataIndexEntry, Long>> entries =
-        node.getChildIndexEntries(sortedMeasurements, false);
-    int groupStart = 0;
-    for (int i = 1; i <= sortedMeasurements.size(); i++) {
-      if (i < sortedMeasurements.size() && entries.get(i) == entries.get(groupStart)) {
-        continue;
-      }
-      Pair<IMetadataIndexEntry, Long> entry = entries.get(groupStart);
-      if (entry != null) {
-        if (node.getNodeType().equals(MetadataIndexNodeType.LEAF_MEASUREMENT)) {
-          readLeafMeasurementGroup(entry, requested, result, ioSizeRecorder);
-        } else {
-          ByteBuffer buffer = readData(entry.left.getOffset(), entry.right, ioSizeRecorder);
-          readMeasurementsInIndexNode(
-              deserializeMeasurementMetadataIndexNode(buffer),
-              sortedMeasurements.subList(groupStart, i),
-              requested,
-              result,
-              ioSizeRecorder);
+    List<IMetadataIndexEntry> children = node.getChildren();
+    if (children.isEmpty()) {
+      return;
+    }
+    if (MetadataIndexNodeType.LEAF_MEASUREMENT.equals(node.getNodeType())) {
+      boolean[] selected = new boolean[children.size()];
+      int remaining = children.size();
+      for (String measurement : measurements) {
+        int index = floorChild(children, measurement);
+        if (index < 0 || selected[index]) {
+          continue;
+        }
+        if (mayExist != null && !mayExist.test(measurement)) {
+          continue;
+        }
+        selected[index] = true;
+        if (--remaining == 0) {
+          break;
         }
       }
-      groupStart = i;
+      for (int i = 0; i < selected.length; i++) {
+        if (selected[i]) {
+          readLeafMeasurementGroup(node, i, returned, result, ioSizeRecorder);
+        }
+      }
+      return;
+    }
+    // an internal node: route each measurement to its floor child and read each visited child once
+    List<List<String>> buckets = new ArrayList<>(children.size());
+    for (int i = 0; i < children.size(); i++) {
+      buckets.add(null);
+    }
+    for (String measurement : measurements) {
+      int index = floorChild(children, measurement);
+      if (index < 0) {
+        continue;
+      }
+      List<String> bucket = buckets.get(index);
+      if (bucket == null) {
+        if (mayExist != null && !mayExist.test(measurement)) {
+          continue;
+        }
+        bucket = new ArrayList<>();
+        buckets.set(index, bucket);
+      }
+      bucket.add(measurement);
+    }
+    for (int i = 0; i < buckets.size(); i++) {
+      List<String> bucket = buckets.get(i);
+      if (bucket != null) {
+        ByteBuffer buffer =
+            readData(children.get(i).getOffset(), childEndOffset(node, i), ioSizeRecorder);
+        readMeasurementsInIndexNode(
+            deserializeMeasurementMetadataIndexNode(buffer),
+            bucket,
+            returned,
+            mayExist,
+            result,
+            ioSizeRecorder);
+      }
     }
   }
 
+  private static int floorChild(List<IMetadataIndexEntry> children, String key) {
+    int low = 0;
+    int high = children.size() - 1;
+    int floor = -1;
+    while (low <= high) {
+      int mid = (low + high) >>> 1;
+      if (children.get(mid).getCompareKey().compareTo(key) <= 0) {
+        floor = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+    return floor;
+  }
+
+  private static long childEndOffset(MetadataIndexNode node, int childIndex) {
+    return childIndex == node.getChildren().size() - 1
+        ? node.getEndOffset()
+        : node.getChildren().get(childIndex + 1).getOffset();
+  }
+
   private void readLeafMeasurementGroup(
-      Pair<IMetadataIndexEntry, Long> entry,
-      Set<String> requested,
+      MetadataIndexNode node,
+      int childIndex,
+      Set<String> returned,
       Map<String, TimeseriesMetadata> result,
       LongConsumer ioSizeRecorder)
       throws IOException {
-    long startOffset = entry.left.getOffset();
-    long endOffset = entry.right;
+    long startOffset = node.getChildren().get(childIndex).getOffset();
+    long endOffset = childEndOffset(node, childIndex);
+    Predicate<String> isReturned = returned::contains;
     if (endOffset - startOffset < Integer.MAX_VALUE) {
       ByteBuffer buffer = readData(startOffset, endOffset, ioSizeRecorder);
       while (buffer.hasRemaining()) {
-        TimeseriesMetadata metadata = deserializeTimeseriesMetadata(buffer, requested);
-        if (requested.contains(metadata.getMeasurementId())) {
+        TimeseriesMetadata metadata = deserializeTimeseriesMetadata(buffer, isReturned);
+        if (isReturned.test(metadata.getMeasurementId())) {
           result.put(metadata.getMeasurementId(), metadata);
         }
       }
@@ -1262,29 +1363,29 @@ public class TsFileSequenceReader implements AutoCloseable {
     synchronized (this) {
       tsFileInput.position(startOffset);
       while (tsFileInput.position() < endOffset) {
-        TimeseriesMetadata metadata = deserializeTimeseriesMetadata(tsFileInput, requested);
-        if (requested.contains(metadata.getMeasurementId())) {
+        TimeseriesMetadata metadata = deserializeTimeseriesMetadata(tsFileInput, isReturned);
+        if (isReturned.test(metadata.getMeasurementId())) {
           result.put(metadata.getMeasurementId(), metadata);
         }
       }
     }
   }
 
-  private TimeseriesMetadata deserializeTimeseriesMetadata(ByteBuffer buffer, Set<String> requested)
-      throws IOException {
+  private TimeseriesMetadata deserializeTimeseriesMetadata(
+      ByteBuffer buffer, Predicate<String> decodeChunkMetadata) throws IOException {
     try {
       // skip the chunk metadata of the series this call does not return
-      return TimeseriesMetadata.deserializeFrom(buffer, requested::contains, true, true);
+      return TimeseriesMetadata.deserializeFrom(buffer, decodeChunkMetadata, true, true);
     } catch (Exception e) {
       logger.error(Messages.get("log.read.sequence_reader_tsm_deserialize_error"), file);
       throw e;
     }
   }
 
-  private TimeseriesMetadata deserializeTimeseriesMetadata(TsFileInput input, Set<String> requested)
-      throws IOException {
+  private TimeseriesMetadata deserializeTimeseriesMetadata(
+      TsFileInput input, Predicate<String> decodeChunkMetadata) throws IOException {
     try {
-      return TimeseriesMetadata.deserializeFrom(input, requested::contains, true, true);
+      return TimeseriesMetadata.deserializeFrom(input, decodeChunkMetadata, true, true);
     } catch (StopReadTsFileByInterruptException e) {
       throw e;
     } catch (Exception e) {

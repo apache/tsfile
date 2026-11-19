@@ -168,31 +168,11 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
       boolean needChunkMetadataForDataTypeWithValuesInStatistics,
       boolean needChunkMetadataForDataTypeWithoutValuesInStatistics)
       throws IOException {
-    InputStream inputStream = tsFileInput.wrapAsInputStream();
-    TimeseriesMetadata timeseriesMetaData = new TimeseriesMetadata();
-    timeseriesMetaData.setTimeSeriesMetadataType(ReadWriteIOUtils.readByte(inputStream));
-    timeseriesMetaData.setMeasurementId(ReadWriteIOUtils.readVarIntString(inputStream));
-    timeseriesMetaData.setTsDataType(ReadWriteIOUtils.readDataType(inputStream));
-    int chunkMetaDataListDataSize = ReadWriteForEncodingUtils.readUnsignedVarInt(inputStream);
-    timeseriesMetaData.setDataSizeOfChunkMetaDataList(chunkMetaDataListDataSize);
-    timeseriesMetaData.setStatistics(
-        Statistics.deserialize(inputStream, timeseriesMetaData.dataType));
-    long startOffset = tsFileInput.position();
-    if ((!timeseriesMetaData.getTsDataType().hasNoValueInStatistics()
-            && needChunkMetadataForDataTypeWithValuesInStatistics)
-        || (timeseriesMetaData.getTsDataType().hasNoValueInStatistics()
-            && needChunkMetadataForDataTypeWithoutValuesInStatistics)) {
-      timeseriesMetaData.chunkMetadataList = new ArrayList<>();
-      while (tsFileInput.position() < startOffset + chunkMetaDataListDataSize) {
-        timeseriesMetaData.chunkMetadataList.add(
-            ChunkMetadata.deserializeFrom(inputStream, timeseriesMetaData));
-      }
-      // minimize the storage of an ArrayList instance.
-      timeseriesMetaData.chunkMetadataList.trimToSize();
-    } else {
-      tsFileInput.position(startOffset + chunkMetaDataListDataSize);
-    }
-    return timeseriesMetaData;
+    return deserializeFrom(
+        tsFileInput,
+        id -> true,
+        needChunkMetadataForDataTypeWithValuesInStatistics,
+        needChunkMetadataForDataTypeWithoutValuesInStatistics);
   }
 
   /**
