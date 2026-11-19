@@ -83,6 +83,41 @@ TEST_F(ByteStreamTest, VarStringPreservesEmbeddedNulls) {
     ASSERT_EQ(byte_stream_->remaining_size(), 0);
 }
 
+TEST_F(ByteStreamTest, VarStringRejectsNegativeLength) {
+    // Var-int lengths are zigzag-encoded, so a crafted stream can decode to
+    // any negative value. -1 (zigzag 1) used to write tmp_buf[-1]; every
+    // negative length must be rejected before it reaches mem_alloc / indexing.
+    for (uint8_t encoded : {1, 3, 5}) {
+        byte_stream_->reset();
+        write_to_stream(&encoded, 1);
+        std::string str = "unchanged";
+        EXPECT_EQ(SerializationUtil::read_var_str(str, *byte_stream_),
+                  E_TSFILE_CORRUPTED);
+        EXPECT_EQ(str, "unchanged");
+    }
+}
+
+TEST_F(ByteStreamTest, VarStringRejectsLengthBeyondStream) {
+    ASSERT_EQ(SerializationUtil::write_var_int(100, *byte_stream_), E_OK);
+    write_to_stream(reinterpret_cast<const uint8_t*>("ab"), 2);
+    std::string str;
+    // E_PARTIAL_READ keeps the chunk/page-header retry path working.
+    EXPECT_EQ(SerializationUtil::read_var_str(str, *byte_stream_),
+              E_PARTIAL_READ);
+}
+
+TEST_F(ByteStreamTest, FixedStringRejectsNegativeLength) {
+    ASSERT_EQ(SerializationUtil::write_i32(-1, *byte_stream_), E_OK);
+    std::string str = "unchanged";
+    EXPECT_EQ(SerializationUtil::read_str(str, *byte_stream_),
+              E_TSFILE_CORRUPTED);
+    EXPECT_EQ(str, "unchanged");
+
+    byte_stream_->reset();
+    ASSERT_EQ(SerializationUtil::write_i32(100, *byte_stream_), E_OK);
+    EXPECT_EQ(SerializationUtil::read_str(str, *byte_stream_), E_PARTIAL_READ);
+}
+
 TEST_F(ByteStreamTest, WriteReadTest) {
     const uint8_t data[] = {0x01, 0x02, 0x03};
     const uint32_t data_size = sizeof(data);
