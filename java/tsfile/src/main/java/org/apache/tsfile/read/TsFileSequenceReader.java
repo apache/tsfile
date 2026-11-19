@@ -1348,10 +1348,27 @@ public class TsFileSequenceReader implements AutoCloseable {
    */
   static int[] floorChildren(List<IMetadataIndexEntry> children, String key) {
     int utf16Floor = floorChild(children, key, String::compareTo);
+    if (!ordersMayDiffer(key)) {
+      return new int[] {utf16Floor};
+    }
     int codePointFloor = floorChild(children, key, TsFileSequenceReader::compareByCodePoint);
     return utf16Floor == codePointFloor
         ? new int[] {utf16Floor}
         : new int[] {utf16Floor, codePointFloor};
+  }
+
+  /**
+   * Whether UTF-16 and code-point order can disagree for this name. They differ only between a
+   * surrogate code unit and a unit in U+E000..U+FFFF, so a name whose units are all below U+D800
+   * (ASCII, Latin, common CJK) compares the same under both orders.
+   */
+  static boolean ordersMayDiffer(String key) {
+    for (int i = 0; i < key.length(); i++) {
+      if (key.charAt(i) >= '\uD800') {
+        return true;
+      }
+    }
+    return false;
   }
 
   private static int floorChild(
