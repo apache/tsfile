@@ -991,7 +991,7 @@ public class Tablet implements Accountable {
     // Must stay consistent with equals(): only the fields compared before the
     // timestamp/bitmap/value checks are hashed. Equal tablets share them, and
     // unequal tablets may still collide, which is allowed.
-    return Objects.hash(rowSize, insertTargetName, schemas, columnCategories, measurementIndex);
+    return Objects.hash(rowSize, insertTargetName, columnCategories, measurementIndex);
   }
 
   private boolean isTimestampsEqual(long[] thisTimestamps, long[] thatTimestamps, int rowSize) {
