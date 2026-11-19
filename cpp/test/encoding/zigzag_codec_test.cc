@@ -86,7 +86,9 @@ TEST_F(ZigzagDecoderTest, DecodeInt32) {
 
     IntZigzagDecoder decoder;
     for (int i = 0; i < (int)(sizeof(data) / sizeof(int32_t)); i++) {
-        EXPECT_EQ(data[i], decoder.decode(stream));
+        int32_t actual = 0;
+        EXPECT_EQ(decoder.read_int32(actual, stream), common::E_OK);
+        EXPECT_EQ(data[i], actual);
     }
 }
 
@@ -101,7 +103,9 @@ TEST_F(ZigzagDecoderTest, DecodeInt64) {
 
     LongZigzagDecoder decoder;
     for (int i = 0; i < (int)(sizeof(data) / sizeof(int64_t)); i++) {
-        EXPECT_EQ(data[i], decoder.decode(stream));
+        int64_t actual = 0;
+        EXPECT_EQ(decoder.read_int64(actual, stream), common::E_OK);
+        EXPECT_EQ(data[i], actual);
     }
 }
 
@@ -115,7 +119,9 @@ TEST_F(ZigzagDecoderTest, DecodeInt32LargeQuantities) {
 
     IntZigzagDecoder decoder;
     for (int32_t value = 0; value < 20000; value++) {
-        EXPECT_EQ(value, decoder.decode(stream));
+        int32_t actual = 0;
+        EXPECT_EQ(decoder.read_int32(actual, stream), common::E_OK);
+        EXPECT_EQ(value, actual);
     }
 }
 
@@ -129,8 +135,165 @@ TEST_F(ZigzagDecoderTest, DecodeInt64LargeQuantities) {
 
     LongZigzagDecoder decoder;
     for (int64_t value = 0; value < 50000; value++) {
-        EXPECT_EQ(value, decoder.decode(stream));
+        int64_t actual = 0;
+        EXPECT_EQ(decoder.read_int64(actual, stream), common::E_OK);
+        EXPECT_EQ(value, actual);
     }
+}
+
+namespace {
+
+void WriteZigzagHeader(common::ByteStream& stream, uint32_t zigzag_length,
+                       uint32_t int_length) {
+    common::SerializationUtil::write_var_uint(zigzag_length, stream);
+    common::SerializationUtil::write_var_uint(int_length, stream);
+}
+
+}  // namespace
+
+// The page header carries the byte count of every encoded
+// value as a var-int. A crafted header used to make the decoder push that many
+// bytes into memory one at a time, regardless of what the page holds.
+TEST_F(ZigzagDecoderTest, RejectsDeclaredLengthBeyondInput) {
+    LongZigzagDecoder decoder;
+    common::ByteStream stream(64, common::MOD_ZIGZAG_OBJ);
+    WriteZigzagHeader(stream, 0xFFFFFFFFu, 1);
+    uint8_t zero = 0;
+    stream.write_buf(&zero, 1);
+    int64_t value = 0;
+    EXPECT_EQ(decoder.read_int64(value, stream), common::E_TSFILE_CORRUPTED);
+}
+
+TEST_F(ZigzagDecoderTest, RejectsValueRunningPastDeclaredLength) {
+    // Both declared bytes set the continuation bit, so the value asks for a
+    // third byte that the page does not contain.
+    for (int wide : {0, 1}) {
+        common::ByteStream stream(64, common::MOD_ZIGZAG_OBJ);
+        WriteZigzagHeader(stream, 2, 1);
+        uint8_t continuation = 0x80;
+        stream.write_buf(&continuation, 1);
+        stream.write_buf(&continuation, 1);
+        if (wide) {
+            LongZigzagDecoder decoder;
+            int64_t value = 0;
+            EXPECT_EQ(decoder.read_int64(value, stream),
+                      common::E_TSFILE_CORRUPTED);
+        } else {
+            IntZigzagDecoder decoder;
+            int32_t value = 0;
+            EXPECT_EQ(decoder.read_int32(value, stream),
+                      common::E_TSFILE_CORRUPTED);
+        }
+    }
+}
+
+TEST_F(ZigzagDecoderTest, RejectsValueWithTooManyContinuationBytes) {
+    // Ten 7-bit groups are the longest int64 value; a value with more groups
+    // used to be written past the ten-byte decode buffer.
+    for (int wide : {0, 1}) {
+        common::ByteStream stream(64, common::MOD_ZIGZAG_OBJ);
+        WriteZigzagHeader(stream, 65, 1);
+        for (int i = 0; i < 64; ++i) {
+            uint8_t continuation = 0xFF;
+            stream.write_buf(&continuation, 1);
+        }
+        uint8_t last = 0x01;
+        stream.write_buf(&last, 1);
+        if (wide) {
+            LongZigzagDecoder decoder;
+            int64_t value = 0;
+            EXPECT_EQ(decoder.read_int64(value, stream),
+                      common::E_TSFILE_CORRUPTED);
+        } else {
+            IntZigzagDecoder decoder;
+            int32_t value = 0;
+            EXPECT_EQ(decoder.read_int32(value, stream),
+                      common::E_TSFILE_CORRUPTED);
+        }
+    }
+}
+
+TEST_F(ZigzagDecoderTest, RejectsEmptyAndHeaderlessStreams) {
+    {
+        IntZigzagDecoder decoder;
+        common::ByteStream empty(64, common::MOD_ZIGZAG_OBJ);
+        int32_t value = 0;
+        EXPECT_EQ(decoder.read_int32(value, empty), common::E_TSFILE_CORRUPTED);
+    }
+    {
+        // A header declaring no encoded bytes cannot describe a value.
+        LongZigzagDecoder decoder;
+        common::ByteStream stream(64, common::MOD_ZIGZAG_OBJ);
+        WriteZigzagHeader(stream, 0, 0);
+        int64_t value = 0;
+        EXPECT_EQ(decoder.read_int64(value, stream),
+                  common::E_TSFILE_CORRUPTED);
+    }
+}
+
+// The page header fields are unsigned 32-bit var-ints: at most five bytes,
+// with four payload bits in the fifth and no continuation after it.
+TEST_F(ZigzagDecoderTest, RejectsMalformedHeaderVarint) {
+    {
+        // A continuation in the fifth byte would need a sixth byte.
+        common::ByteStream stream(64, common::MOD_ZIGZAG_OBJ);
+        for (int i = 0; i < 5; ++i) {
+            uint8_t byte = 0x80;
+            stream.write_buf(&byte, 1);
+        }
+        uint8_t zero = 0;
+        stream.write_buf(&zero, 1);
+        LongZigzagDecoder decoder;
+        int64_t value = 0;
+        EXPECT_EQ(decoder.read_int64(value, stream),
+                  common::E_TSFILE_CORRUPTED);
+    }
+    {
+        // A fifth byte carrying bits above bit 31 is out of range.
+        common::ByteStream stream(64, common::MOD_ZIGZAG_OBJ);
+        for (int i = 0; i < 4; ++i) {
+            uint8_t byte = 0x80;
+            stream.write_buf(&byte, 1);
+        }
+        uint8_t too_big = 0x10;
+        stream.write_buf(&too_big, 1);
+        LongZigzagDecoder decoder;
+        int64_t value = 0;
+        EXPECT_EQ(decoder.read_int64(value, stream),
+                  common::E_TSFILE_CORRUPTED);
+    }
+}
+
+TEST_F(ZigzagDecoderTest, RejectsValueWiderThanInt32) {
+    // Four continuation bytes and a fifth group of 0x20 put payload bits
+    // above bit 31; the value must be rejected, not truncated.
+    common::ByteStream stream(64, common::MOD_ZIGZAG_OBJ);
+    WriteZigzagHeader(stream, 5, 1);
+    for (int i = 0; i < 4; ++i) {
+        uint8_t byte = 0x80;
+        stream.write_buf(&byte, 1);
+    }
+    uint8_t tail = 0x20;
+    stream.write_buf(&tail, 1);
+    IntZigzagDecoder decoder;
+    int32_t value = 0;
+    EXPECT_EQ(decoder.read_int32(value, stream), common::E_TSFILE_CORRUPTED);
+}
+
+TEST_F(ZigzagDecoderTest, RejectsValueWiderThanInt64) {
+    // Nine continuation bytes and a tenth group of 0x02 put payload bits
+    // above bit 63; the value must be rejected, not truncated.
+    common::ByteStream stream(64, common::MOD_ZIGZAG_OBJ);
+    WriteZigzagHeader(stream, 10, 1);
+    for (int i = 0; i < 9; ++i) {
+        uint8_t byte = 0x80;
+        stream.write_buf(&byte, 1);
+    }
+    uint8_t tail = 0x02;
+    stream.write_buf(&tail, 1);
+    LongZigzagDecoder decoder;
+    int64_t value = 0;
+    EXPECT_EQ(decoder.read_int64(value, stream), common::E_TSFILE_CORRUPTED);
 }
 
 }  // namespace storage

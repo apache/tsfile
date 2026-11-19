@@ -113,12 +113,15 @@ TEST(EncodingCoverage, ResetClearsState) {
         common::ByteStream s(64, common::MOD_DEFAULT);
         EXPECT_EQ(enc.encode(123, s), common::E_OK);
         enc.flush(s);
-        EXPECT_EQ(dec.decode(s), 123);
+        int32_t decoded = 0;
+        EXPECT_EQ(dec.read_int32(decoded, s), common::E_OK);
+        EXPECT_EQ(decoded, 123);
         dec.reset();
         common::ByteStream s2(64, common::MOD_DEFAULT);
         EXPECT_EQ(enc.encode(-456, s2), common::E_OK);
         enc.flush(s2);
-        EXPECT_EQ(dec.decode(s2), -456);
+        EXPECT_EQ(dec.read_int32(decoded, s2), common::E_OK);
+        EXPECT_EQ(decoded, -456);
     }
     {
         IntGorillaEncoder enc;
