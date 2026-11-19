@@ -1264,15 +1264,26 @@ public class TsFileSequenceReader implements AutoCloseable {
       boolean[] selected = new boolean[children.size()];
       int remaining = children.size();
       for (String measurement : measurements) {
-        int index = floorChild(children, measurement);
-        if (index < 0 || selected[index]) {
-          continue;
+        int[] floors = floorChildren(children, measurement);
+        boolean tested = false;
+        boolean accepted = false;
+        for (int index : floors) {
+          if (index < 0 || selected[index]) {
+            continue;
+          }
+          if (!tested) {
+            tested = true;
+            accepted = mayExist == null || mayExist.test(measurement);
+          }
+          if (!accepted) {
+            break;
+          }
+          selected[index] = true;
+          if (--remaining == 0) {
+            break;
+          }
         }
-        if (mayExist != null && !mayExist.test(measurement)) {
-          continue;
-        }
-        selected[index] = true;
-        if (--remaining == 0) {
+        if (remaining == 0) {
           break;
         }
       }
@@ -1289,19 +1300,29 @@ public class TsFileSequenceReader implements AutoCloseable {
       buckets.add(null);
     }
     for (String measurement : measurements) {
-      int index = floorChild(children, measurement);
-      if (index < 0) {
+      int[] floors = floorChildren(children, measurement);
+      // probe the filter only when this name could add a child that no accepted name selected yet
+      boolean selectsNewChild = false;
+      for (int index : floors) {
+        if (index >= 0 && buckets.get(index) == null) {
+          selectsNewChild = true;
+          break;
+        }
+      }
+      if (selectsNewChild && mayExist != null && !mayExist.test(measurement)) {
         continue;
       }
-      List<String> bucket = buckets.get(index);
-      if (bucket == null) {
-        if (mayExist != null && !mayExist.test(measurement)) {
+      for (int index : floors) {
+        if (index < 0) {
           continue;
         }
-        bucket = new ArrayList<>();
-        buckets.set(index, bucket);
+        List<String> bucket = buckets.get(index);
+        if (bucket == null) {
+          bucket = new ArrayList<>();
+          buckets.set(index, bucket);
+        }
+        bucket.add(measurement);
       }
-      bucket.add(measurement);
     }
     for (int i = 0; i < buckets.size(); i++) {
       List<String> bucket = buckets.get(i);
@@ -1319,13 +1340,28 @@ public class TsFileSequenceReader implements AutoCloseable {
     }
   }
 
-  private static int floorChild(List<IMetadataIndexEntry> children, String key) {
+  /**
+   * Returns the floor child index under both orderings a TsFile may have been written with: Java
+   * indexes are sorted by UTF-16 code units, C++ indexes by UTF-8 bytes (code point order). The two
+   * disagree only for names that mix supplementary characters with the U+E000..U+FFFF range, so
+   * both candidates are returned when they differ and the caller visits both.
+   */
+  static int[] floorChildren(List<IMetadataIndexEntry> children, String key) {
+    int utf16Floor = floorChild(children, key, String::compareTo);
+    int codePointFloor = floorChild(children, key, TsFileSequenceReader::compareByCodePoint);
+    return utf16Floor == codePointFloor
+        ? new int[] {utf16Floor}
+        : new int[] {utf16Floor, codePointFloor};
+  }
+
+  private static int floorChild(
+      List<IMetadataIndexEntry> children, String key, Comparator<String> comparator) {
     int low = 0;
     int high = children.size() - 1;
     int floor = -1;
     while (low <= high) {
       int mid = (low + high) >>> 1;
-      if (children.get(mid).getCompareKey().compareTo(key) <= 0) {
+      if (comparator.compare((String) children.get(mid).getCompareKey(), key) <= 0) {
         floor = mid;
         low = mid + 1;
       } else {
@@ -1333,6 +1369,22 @@ public class TsFileSequenceReader implements AutoCloseable {
       }
     }
     return floor;
+  }
+
+  /** Compares two measurement names by Unicode code point, the order C++ writers use. */
+  private static int compareByCodePoint(String left, String right) {
+    int leftIndex = 0;
+    int rightIndex = 0;
+    while (leftIndex < left.length() && rightIndex < right.length()) {
+      int leftCodePoint = left.codePointAt(leftIndex);
+      int rightCodePoint = right.codePointAt(rightIndex);
+      if (leftCodePoint != rightCodePoint) {
+        return Integer.compare(leftCodePoint, rightCodePoint);
+      }
+      leftIndex += Character.charCount(leftCodePoint);
+      rightIndex += Character.charCount(rightCodePoint);
+    }
+    return Integer.compare(left.length() - leftIndex, right.length() - rightIndex);
   }
 
   private static long childEndOffset(MetadataIndexNode node, int childIndex) {
@@ -1362,15 +1414,32 @@ public class TsFileSequenceReader implements AutoCloseable {
       return;
     }
     // a group larger than Integer.MAX_VALUE cannot be held in one buffer
+    readLeafMeasurementGroupInStream(
+        tsFileInput, startOffset, endOffset, returned, result, ioSizeRecorder);
+  }
+
+  /**
+   * Reads a leaf group through the given input and records only the bytes a selective read actually
+   * consumes: the chunk lists skipped for measurements the caller does not return are excluded.
+   */
+  void readLeafMeasurementGroupInStream(
+      TsFileInput input,
+      long startOffset,
+      long endOffset,
+      Set<String> returned,
+      Map<String, TimeseriesMetadata> result,
+      LongConsumer ioSizeRecorder)
+      throws IOException {
+    Predicate<String> isReturned = returned::contains;
     synchronized (this) {
-      tsFileInput.position(startOffset);
-      while (tsFileInput.position() < endOffset) {
-        long recordStart = tsFileInput.position();
-        TimeseriesMetadata metadata = deserializeTimeseriesMetadata(tsFileInput, isReturned);
+      input.position(startOffset);
+      while (input.position() < endOffset) {
+        long recordStart = input.position();
+        TimeseriesMetadata metadata = deserializeTimeseriesMetadata(input, isReturned);
         boolean returnedMeasurement = isReturned.test(metadata.getMeasurementId());
         if (ioSizeRecorder != null) {
           // the selective deserializer seeks past the chunk list of a series it does not return
-          long consumed = tsFileInput.position() - recordStart;
+          long consumed = input.position() - recordStart;
           if (!returnedMeasurement) {
             consumed -= metadata.getDataSizeOfChunkMetaDataList();
           }
