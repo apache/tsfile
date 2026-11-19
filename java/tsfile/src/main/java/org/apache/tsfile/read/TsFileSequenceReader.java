@@ -1132,8 +1132,8 @@ public class TsFileSequenceReader implements AutoCloseable {
    * <p>An absent measurement still selects its floor group, so a group that holds none of the
    * requested series is read when an absent measurement sorts into it. Pass {@code mayExist} to
    * avoid those reads: a measurement is tested before it selects a group, and a rejected
-   * measurement selects nothing. The predicate must have no false negatives, as a {@link
-   * BloomFilter} does not; do not pass one for an offset-addressed external TsFile whose
+   * measurement selects nothing. The predicate must have no false negatives, because a {@link
+   * BloomFilter} has none; do not pass one for an offset-addressed external TsFile whose
    * BloomFilter may not cover the series.
    *
    * <p>A returned measurement that is missing from the result was rejected by {@code mayExist}, or
