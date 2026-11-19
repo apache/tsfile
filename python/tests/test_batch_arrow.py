@@ -56,10 +56,7 @@ def test_batch_read_arrow_basic():
                 tablet.add_value_by_name("value1", i, i * 10)
                 tablet.add_value_by_name("value2", i, i * 1.5)
             writer.write_table(tablet)
-        try:
-            import pyarrow as pa
-        except ImportError:
-            pytest.skip("pyarrow is not installed")
+        pa = pytest.importorskip("pyarrow")
 
         reader = TsFileReader(file_path)
         result_set = reader.query_table(
@@ -134,10 +131,7 @@ def test_batch_read_arrow_compare_with_dataframe():
                 tablet.add_value_by_name("value3", i, i % 2 == 0)
             writer.write_table(tablet)
 
-        try:
-            import pyarrow as pa
-        except ImportError:
-            pytest.skip("pyarrow is not installed")
+        pa = pytest.importorskip("pyarrow")
 
         reader1 = TsFileReader(file_path)
         result_set1 = reader1.query_table(
@@ -242,10 +236,7 @@ def test_batch_read_arrow_empty_result():
                 tablet.add_value_by_name("value", i, i)
             writer.write_table(tablet)
 
-        try:
-            import pyarrow as pa
-        except ImportError:
-            pytest.skip("pyarrow is not installed")
+        pa = pytest.importorskip("pyarrow")
 
         reader = TsFileReader(file_path)
         result_set = reader.query_table(
@@ -294,10 +285,7 @@ def test_batch_read_arrow_time_range():
                 tablet.add_value_by_name("value", i, i)
             writer.write_table(tablet)
 
-        try:
-            import pyarrow as pa
-        except ImportError:
-            pytest.skip("pyarrow is not installed")
+        pa = pytest.importorskip("pyarrow")
 
         reader = TsFileReader(file_path)
         result_set = reader.query_table(
@@ -384,10 +372,7 @@ def test_batch_read_arrow_all_datatypes():
                 tablet.add_value_by_name("date_val", i, date(2025, 1, (i % 28) + 1))
             writer.write_table(tablet)
 
-        try:
-            import pyarrow as pa
-        except ImportError:
-            pytest.skip("pyarrow is not installed")
+        pa = pytest.importorskip("pyarrow")
 
         reader = TsFileReader(file_path)
         result_set = reader.query_table(

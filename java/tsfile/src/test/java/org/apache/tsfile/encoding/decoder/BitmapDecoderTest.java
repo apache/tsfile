@@ -41,7 +41,6 @@ public class BitmapDecoderTest {
   private static final Logger logger = LoggerFactory.getLogger(BitmapDecoderTest.class);
 
   private List<Integer> intList;
-  private List<Boolean> booleanList;
 
   @Before
   public void setUp() {
@@ -51,14 +50,6 @@ public class BitmapDecoderTest {
     int int_num = 100000;
     for (int i = 0; i < int_num; i++) {
       intList.add(int_array[i % int_len]);
-    }
-
-    booleanList = new ArrayList<Boolean>();
-    boolean[] boolean_array = {true, false, true, true, false, true, false, false};
-    int boolean_len = boolean_array.length;
-    int boolean_num = 100000;
-    for (int i = 0; i < boolean_num; i++) {
-      booleanList.add(boolean_array[i % boolean_len]);
     }
   }
 

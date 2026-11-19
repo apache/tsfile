@@ -96,15 +96,17 @@ public final class ExtractValueFilterOperators {
       if (this == o) {
         return true;
       }
-      if (o == null || getClass() != o.getClass()) {
+      if (!(o instanceof ExtractValueCompareFilter)) {
+        return false;
+      }
+      if (getClass() != o.getClass()) {
         return false;
       }
       if (!super.equals(o)) {
         return false;
       }
-      ExtractTimeFilterOperators.ExtractTimeCompareFilter thatDelegate =
-          ((ExtractValueCompareFilter) o).delegate;
-      return delegate.equals(thatDelegate);
+      ExtractValueCompareFilter that = (ExtractValueCompareFilter) o;
+      return delegate.equals(that.delegate);
     }
 
     @Override
