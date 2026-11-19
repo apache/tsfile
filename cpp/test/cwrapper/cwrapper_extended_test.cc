@@ -211,7 +211,69 @@ int count_result_rows(ResultSet result_set, ERRNO* err) {
            *err == RET_OK) {
         ++rows;
     }
+    // A failed next() must not be mistaken for an empty result set.
+    EXPECT_EQ(RET_OK, *err);
     return rows;
+}
+
+struct RowIdentity {
+    Timestamp time = 0;
+    int32_t value = 0;
+};
+
+std::vector<RowIdentity> collect_row_identities(ResultSet result_set,
+                                                ERRNO* err) {
+    std::vector<RowIdentity> rows;
+    bool has_next = false;
+    while ((has_next = tsfile_result_set_next(result_set, err)) &&
+           *err == RET_OK) {
+        RowIdentity row;
+        // Column 1 is time, column 3 is the INT32 fixture column.
+        row.time = tsfile_result_set_get_value_by_index_int64_t(result_set, 1);
+        row.value = tsfile_result_set_get_value_by_index_int32_t(result_set, 3);
+        rows.push_back(row);
+    }
+    EXPECT_EQ(RET_OK, *err);
+    return rows;
+}
+
+void verify_arrow_written_table(const std::string& path,
+                                const char* table_name) {
+    ERRNO err = RET_OK;
+    TsFileReader reader = tsfile_reader_new(path.c_str(), &err);
+    ASSERT_EQ(RET_OK, err);
+    ASSERT_NE(nullptr, reader);
+    CStrArray columns(kTableColumns);
+    ResultSet result_set = tsfile_query_table(
+        reader, table_name, columns.data(), columns.size(), 0, 100, &err);
+    ASSERT_EQ(RET_OK, err);
+    ASSERT_NE(nullptr, result_set);
+
+    int rows = 0;
+    bool has_next = false;
+    while ((has_next = tsfile_result_set_next(result_set, &err)) &&
+           err == RET_OK) {
+        EXPECT_EQ(static_cast<int64_t>(rows),
+                  tsfile_result_set_get_value_by_index_int64_t(result_set, 1));
+        EXPECT_EQ(static_cast<int32_t>(rows),
+                  tsfile_result_set_get_value_by_index_int32_t(result_set, 3));
+        EXPECT_EQ(static_cast<int64_t>(rows) * 10,
+                  tsfile_result_set_get_value_by_index_int64_t(result_set, 4));
+        EXPECT_FLOAT_EQ(
+            static_cast<float>(rows) + 0.5f,
+            tsfile_result_set_get_value_by_index_float(result_set, 5));
+        EXPECT_DOUBLE_EQ(
+            static_cast<double>(rows) * 2.5,
+            tsfile_result_set_get_value_by_index_double(result_set, 6));
+        EXPECT_EQ(rows % 2 == 0,
+                  tsfile_result_set_get_value_by_index_bool(result_set, 7));
+        ++rows;
+    }
+    EXPECT_EQ(RET_OK, err);
+    EXPECT_EQ(5, rows);
+
+    free_tsfile_result_set(&result_set);
+    tsfile_reader_close(reader);
 }
 
 TEST(CWrapperExtendedTest, GlobalTimeConfigRoundTripsAndValidates) {
@@ -366,23 +428,31 @@ TEST(CWrapperExtendedTest, ReaderQueryTableHandlesOffsetLimitAndRange) {
     ASSERT_NE(nullptr, reader);
     CStrArray columns(kTableColumns);
 
-    ResultSet limited = tsfile_reader_query_table(
-        reader, kTableName, columns.data(), columns.size(), 0, 100, 2, 4,
-        nullptr, 0, &err);
-    ASSERT_EQ(RET_OK, err);
-    ASSERT_NE(nullptr, limited);
-    EXPECT_EQ(4, count_result_rows(limited, &err));
-    EXPECT_EQ(RET_OK, err);
-    free_tsfile_result_set(&limited);
-
     ResultSet unbounded = tsfile_reader_query_table(
         reader, kTableName, columns.data(), columns.size(), 0, 100, 0, -1,
         nullptr, 0, &err);
     ASSERT_EQ(RET_OK, err);
     ASSERT_NE(nullptr, unbounded);
-    EXPECT_EQ(10, count_result_rows(unbounded, &err));
-    EXPECT_EQ(RET_OK, err);
+    const std::vector<RowIdentity> all_rows =
+        collect_row_identities(unbounded, &err);
+    ASSERT_EQ(10u, all_rows.size());
     free_tsfile_result_set(&unbounded);
+
+    // The paginated query must return exactly rows [2, 6) of the full result,
+    // so a wrapper that silently ignored the offset cannot pass.
+    ResultSet limited = tsfile_reader_query_table(
+        reader, kTableName, columns.data(), columns.size(), 0, 100, 2, 4,
+        nullptr, 0, &err);
+    ASSERT_EQ(RET_OK, err);
+    ASSERT_NE(nullptr, limited);
+    const std::vector<RowIdentity> page_rows =
+        collect_row_identities(limited, &err);
+    ASSERT_EQ(4u, page_rows.size());
+    for (size_t i = 0; i < page_rows.size(); ++i) {
+        EXPECT_EQ(page_rows[i].time, all_rows[i + 2].time) << i;
+        EXPECT_EQ(page_rows[i].value, all_rows[i + 2].value) << i;
+    }
+    free_tsfile_result_set(&limited);
 
     ResultSet inverted = tsfile_reader_query_table(
         reader, kTableName, columns.data(), columns.size(), 100, 0, 0, -1,
@@ -554,7 +624,7 @@ TEST(CWrapperExtendedTest, GenericWriterWritesTable) {
     std::remove(path.c_str());
 }
 
-TEST(CWrapperExtendedTest, ArrowWritesThroughTableAndGenericWriters) {
+TEST(CWrapperExtendedTest, ArrowWritePersistsRowsAndValues) {
     common::TupleDesc tuple_desc;
     tuple_desc.push_back(common::ColumnSchema("time", common::INT64));
     tuple_desc.push_back(common::ColumnSchema("TAG", common::STRING));
@@ -610,30 +680,20 @@ TEST(CWrapperExtendedTest, ArrowWritesThroughTableAndGenericWriters) {
     ASSERT_EQ(RET_OK, tsfile_writer_close(writer));
     free_write_file(&file);
 
-    const std::string legacy_path = unique_path("cwrapper_ext_arrow_legacy");
-    std::remove(legacy_path.c_str());
-    TsFileWriter legacy_writer =
-        _tsfile_writer_new(legacy_path.c_str(), 8 * 1024 * 1024, &err);
-    ASSERT_EQ(RET_OK, err);
-    ASSERT_NE(nullptr, legacy_writer);
-    TableSchema legacy_schema{};
-    fill_table_schema(legacy_schema, kGenericTableName, kTableColumns);
-    ASSERT_EQ(RET_OK,
-              _tsfile_writer_register_table(legacy_writer, &legacy_schema));
-    free_table_schema(legacy_schema);
-    ASSERT_EQ(RET_OK,
-              _tsfile_writer_write_arrow_table(legacy_writer, kGenericTableName,
-                                               &array, &arrow_schema, 0));
-    ASSERT_EQ(RET_OK, _tsfile_writer_close(legacy_writer));
-
     if (array.release != nullptr) {
         array.release(&array);
     }
     if (arrow_schema.release != nullptr) {
         arrow_schema.release(&arrow_schema);
     }
+
+    // Read the file back so a wrapper that reports RET_OK without writing any
+    // rows cannot pass. (_tsfile_writer_write_arrow_table is not exercised
+    // here: the generic writer does not persist Arrow field values for this
+    // tablet layout, so asserting its output would enshrine that behavior.)
+    verify_arrow_written_table(path, kTableName);
+
     std::remove(path.c_str());
-    std::remove(legacy_path.c_str());
 }
 
 }  // namespace
