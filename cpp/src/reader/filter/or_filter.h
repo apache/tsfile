@@ -97,6 +97,17 @@ class OrFilter : public BinaryFilter {
         return result;
     }
 
+    Filter* clone() const override {
+        Filter* left = left_->clone();
+        Filter* right = right_->clone();
+        if (left == nullptr || right == nullptr) {
+            delete left;
+            delete right;
+            return nullptr;
+        }
+        return new OrFilter(left, right);
+    }
+
    private:
     TimeRange* choose_next_range(std::vector<TimeRange*>* left_time_ranges,
                                  std::vector<TimeRange*>* right_time_ranges,

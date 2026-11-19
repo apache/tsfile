@@ -23,18 +23,52 @@
 
 #include <vector>
 
+#include "reader/filter/time_operator.h"
+
 namespace storage {
+
+namespace {
+
+// A filter without clone(): pushing it onto several owners must fail instead
+// of sharing a single instance (and double-freeing it later).
+class StatelessFilter : public Filter {
+   public:
+    bool satisfy(Statistic*) override { return true; }
+    bool satisfy(int64_t, int64_t) override { return true; }
+};
+
+}  // namespace
+
+TEST(QueryExpressionTest, OptimizeFailsWhenAndCannotCloneTimeFilter) {
+    QueryExpression query_expression;
+    std::vector<Path> paths{Path("root.sg.d1.s1")};
+    Expression* expression = new Expression(
+        AND_EXPR, new Expression(GLOBALTIME_EXPR, new StatelessFilter()),
+        new Expression(SERIES_EXPR, paths.at(0), new TimeGtEq(0)));
+
+    EXPECT_EQ(query_expression.optimize(expression, paths), nullptr);
+}
+
+TEST(QueryExpressionTest, OptimizeFailsWhenOrCannotCloneTimeFilter) {
+    QueryExpression query_expression;
+    std::vector<Path> paths{Path("root.sg.d1.s1")};
+    Expression* expression = new Expression(
+        OR_EXPR, new Expression(GLOBALTIME_EXPR, new StatelessFilter()),
+        new Expression(SERIES_EXPR, paths.at(0), new TimeGtEq(0)));
+
+    EXPECT_EQ(query_expression.optimize(expression, paths), nullptr);
+}
 
 TEST(QueryExpressionTest, EmptySelectedSeriesReturnsNull) {
     QueryExpression query_expression;
     std::vector<Path> selected_series;
+    // optimize() consumes the input tree, including on failure: the empty
+    // selected-series list makes the global time filter impossible to push.
     Expression* expression = new Expression(
         OR_EXPR, new Expression(GLOBALTIME_EXPR, static_cast<Filter*>(nullptr)),
         new Expression(SERIES_EXPR, Path(), static_cast<Filter*>(nullptr)));
 
     EXPECT_EQ(query_expression.optimize(expression, selected_series), nullptr);
-
-    delete expression;
 }
 
 }  // namespace storage

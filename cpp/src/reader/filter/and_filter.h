@@ -103,6 +103,17 @@ class AndFilter : public BinaryFilter {
         }
         return result;
     }
+
+    Filter* clone() const override {
+        Filter* left = left_->clone();
+        Filter* right = right_->clone();
+        if (left == nullptr || right == nullptr) {
+            delete left;
+            delete right;
+            return nullptr;
+        }
+        return new AndFilter(left, right);
+    }
 };
 
 }  // namespace storage
