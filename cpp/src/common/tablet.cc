@@ -33,12 +33,16 @@ namespace storage {
 
 int Tablet::init() {
     ASSERT(timestamps_ == nullptr);
-    timestamps_ = static_cast<int64_t*>(
-        common::mem_alloc(sizeof(int64_t) * max_row_num_, common::MOD_TABLET));
-    if (timestamps_ == nullptr) return E_OOM;
     cur_row_size_ = 0;
+    if (max_row_num_ == 0) return E_INVALID_ARG;
+    if (static_cast<uint64_t>(max_row_num_) > SIZE_MAX / sizeof(int64_t))
+        return E_OOM;
 
     size_t schema_count = schema_vec_->size();
+    if (schema_count > SIZE_MAX / sizeof(ValueMatrixEntry) ||
+        schema_count > SIZE_MAX / sizeof(BitMap)) {
+        return E_OOM;
+    }
     std::pair<std::map<std::string, int>::iterator, bool> ins_res;
     for (size_t c = 0; c < schema_count; c++) {
         ins_res = schema_map_.insert(
@@ -48,9 +52,16 @@ int Tablet::init() {
         }
     }
     ASSERT(schema_map_.size() == schema_count);
+    // Finish schema-map allocations before acquiring the owned raw buffers.
+    timestamps_ = static_cast<int64_t*>(
+        common::mem_alloc(sizeof(int64_t) * max_row_num_, common::MOD_TABLET));
+    if (timestamps_ == nullptr) return E_OOM;
     value_matrix_ = static_cast<ValueMatrixEntry*>(common::mem_alloc(
         sizeof(ValueMatrixEntry) * schema_count, common::MOD_TABLET));
     if (value_matrix_ == nullptr) return E_OOM;
+    for (size_t c = 0; c < schema_count; ++c) {
+        new (&value_matrix_[c]) ValueMatrixEntry();
+    }
     for (size_t c = 0; c < schema_count; ++c) {
         const MeasurementSchema& schema = schema_vec_->at(c);
 
@@ -106,8 +117,9 @@ int Tablet::init() {
                     return E_OOM;
                 }
                 auto* sc = new (mem) StringColumn();
-                sc->init(max_row_num_, max_row_num_ * 32);
                 value_matrix_[c].string_col = sc;
+                int ret = sc->init(max_row_num_);
+                if (ret != E_OK) return ret;
                 break;
             }
             default:
@@ -121,7 +133,10 @@ int Tablet::init() {
     if (bitmaps_ == nullptr) return E_OOM;
     for (size_t c = 0; c < schema_count; c++) {
         new (&bitmaps_[c]) BitMap();
-        bitmaps_[c].init(max_row_num_, false, common::MOD_TABLET);
+    }
+    for (size_t c = 0; c < schema_count; c++) {
+        int ret = bitmaps_[c].init(max_row_num_, false, common::MOD_TABLET);
+        if (ret != E_OK) return ret;
     }
 
     return E_OK;
@@ -139,26 +154,33 @@ void Tablet::destroy() {
             switch (schema.data_type_) {
                 case DATE:
                 case INT32:
-                    common::mem_free(value_matrix_[c].int32_data);
+                    if (value_matrix_[c].int32_data)
+                        common::mem_free(value_matrix_[c].int32_data);
                     break;
                 case TIMESTAMP:
                 case INT64:
-                    common::mem_free(value_matrix_[c].int64_data);
+                    if (value_matrix_[c].int64_data)
+                        common::mem_free(value_matrix_[c].int64_data);
                     break;
                 case FLOAT:
-                    common::mem_free(value_matrix_[c].float_data);
+                    if (value_matrix_[c].float_data)
+                        common::mem_free(value_matrix_[c].float_data);
                     break;
                 case DOUBLE:
-                    common::mem_free(value_matrix_[c].double_data);
+                    if (value_matrix_[c].double_data)
+                        common::mem_free(value_matrix_[c].double_data);
                     break;
                 case BOOLEAN:
-                    common::mem_free(value_matrix_[c].bool_data);
+                    if (value_matrix_[c].bool_data)
+                        common::mem_free(value_matrix_[c].bool_data);
                     break;
                 case BLOB:
                 case TEXT:
                 case STRING:
-                    value_matrix_[c].string_col->destroy();
-                    common::mem_free(value_matrix_[c].string_col);
+                    if (value_matrix_[c].string_col) {
+                        value_matrix_[c].string_col->destroy();
+                        common::mem_free(value_matrix_[c].string_col);
+                    }
                     break;
                 default:
                     break;
@@ -249,7 +271,7 @@ int Tablet::set_column_values(uint32_t schema_index, const void* data,
         // get_bitmap() would leave the flag stale (e.g. cleared by a prior
         // clear_all()) and downstream may_have_set_bits() checks would skip
         // null-mask handling for the column.
-        uint32_t bm_bytes = (count + 7) / 8;
+        uint32_t bm_bytes = count / 8 + (count % 8 != 0);
         bitmaps_[schema_index].copy_from(reinterpret_cast<const char*>(bitmap),
                                          bm_bytes);
     }
@@ -305,13 +327,14 @@ int Tablet::set_column_string_values(uint32_t schema_index,
     if (total_bytes > 0) {
         std::memcpy(sc->buffer, data, total_bytes);
     }
-    std::memcpy(sc->offsets, offsets, (count + 1) * sizeof(int32_t));
+    std::memcpy(sc->offsets, offsets,
+                (static_cast<size_t>(count) + 1) * sizeof(int32_t));
     sc->buf_used = total_bytes;
 
     if (bitmap == nullptr) {
         bitmaps_[schema_index].clear_all();
     } else {
-        uint32_t bm_bytes = (count + 7) / 8;
+        uint32_t bm_bytes = count / 8 + (count % 8 != 0);
         bitmaps_[schema_index].copy_from(reinterpret_cast<const char*>(bitmap),
                                          bm_bytes);
     }
@@ -335,12 +358,11 @@ int Tablet::set_column_string_repeated(uint32_t schema_index, const char* str,
     StringColumn* sc = value_matrix_[schema_index].string_col;
     if (sc == nullptr) return E_INVALID_ARG;
 
-    // str_len * count can overflow uint32_t; do the multiply in uint64_t and
-    // reject anything that wouldn't fit, otherwise the subsequent loop would
-    // walk past the truncated buf_capacity allocation.
+    // Multiply in uint64_t and require the total to fit signed Arrow offsets
+    // before allocating or writing any data.
     uint64_t total_bytes_64 =
         static_cast<uint64_t>(str_len) * static_cast<uint64_t>(count);
-    if (total_bytes_64 > std::numeric_limits<uint32_t>::max()) {
+    if (total_bytes_64 > std::numeric_limits<int32_t>::max()) {
         return E_OVERFLOW;
     }
     uint32_t total_bytes = static_cast<uint32_t>(total_bytes_64);
@@ -364,6 +386,7 @@ int Tablet::set_column_string_repeated(uint32_t schema_index, const char* str,
 }
 
 void Tablet::reset(uint32_t row_count) {
+    if (err_code_ != E_OK) return;
     ASSERT(row_count <= max_row_num_);
     cur_row_size_ = row_count;
     reset_string_columns();
@@ -379,8 +402,10 @@ void Tablet::reset(uint32_t row_count) {
     }
 }
 
-void* Tablet::get_value(int row_index, uint32_t schema_index,
+void* Tablet::get_value(uint32_t row_index, uint32_t schema_index,
                         common::TSDataType& data_type) const {
+    if (err_code_ != E_OK) return nullptr;
+    if (UNLIKELY(row_index >= max_row_num_)) return nullptr;
     if (UNLIKELY(schema_index >= schema_vec_->size())) {
         return nullptr;
     }
@@ -580,6 +605,7 @@ void Tablet::set_column_categories(
 }
 
 void Tablet::reset_string_columns() {
+    if (err_code_ != E_OK) return;
     size_t schema_count = schema_vec_->size();
     for (size_t c = 0; c < schema_count; c++) {
         const MeasurementSchema& schema = schema_vec_->at(c);
@@ -595,7 +621,7 @@ std::vector<uint32_t> Tablet::find_all_device_boundaries() const {
     if (row_count <= 1) return {};
 
     // Use uint64_t bitmap instead of vector<bool> for faster set/test/scan.
-    const uint32_t nwords = (row_count + 63) / 64;
+    const uint32_t nwords = row_count / 64 + (row_count % 64 != 0);
     std::vector<uint64_t> boundary(nwords, 0);
 
     // Walk id columns RIGHT to LEFT.  In time-series tag systems the rightmost
@@ -666,7 +692,7 @@ std::vector<uint32_t> Tablet::find_all_device_boundaries() const {
     return result;
 }
 
-std::shared_ptr<IDeviceID> Tablet::get_device_id(int i) const {
+std::shared_ptr<IDeviceID> Tablet::get_device_id(uint32_t i) const {
     std::vector<std::string*> id_array;
     id_array.push_back(new std::string(insert_target_name_));
     for (auto id_column_idx : id_column_indexes_) {

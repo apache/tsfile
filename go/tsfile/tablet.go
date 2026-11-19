@@ -32,6 +32,8 @@ type Tablet struct {
 }
 
 // NewTablet allocates a tablet with fixed columns and row capacity.
+// maxRows must fit the C ABI's positive uint32 row count. Allocation failures
+// return an out-of-memory error.
 func NewTablet(columns []TabletColumn, maxRows int) (*Tablet, error) {
 	if len(columns) == 0 {
 		return nil, fmt.Errorf("%w: at least one column is required", ErrInvalidArgument)
