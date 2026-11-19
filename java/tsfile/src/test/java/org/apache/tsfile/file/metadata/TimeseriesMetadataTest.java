@@ -19,6 +19,10 @@
 package org.apache.tsfile.file.metadata;
 
 import org.apache.tsfile.constant.TestConstant;
+import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.metadata.enums.CompressionType;
+import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.file.metadata.utils.TestHelper;
 import org.apache.tsfile.read.reader.LocalTsFileInput;
 import org.apache.tsfile.read.reader.TsFileInput;
@@ -33,6 +37,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Paths;
@@ -134,5 +139,79 @@ public class TimeseriesMetadataTest {
         }
       }
     }
+  }
+
+  @Test
+  public void testStreamingDeserializerSkipsRejectedChunkList() throws IOException {
+    File file = new File(TestConstant.BASE_OUTPUT_PATH.concat("streaming-predicate.tsfile"));
+    file.delete();
+    try {
+      long firstChunkOffset = 1024L;
+      long secondChunkOffset = 2048L;
+      TimeseriesMetadata first = metadataWithOneChunk("s1", firstChunkOffset, 3);
+      TimeseriesMetadata second = metadataWithOneChunk("s2", secondChunkOffset, 5);
+      Assert.assertTrue(first.getDataSizeOfChunkMetaDataList() > 0);
+      int firstLength;
+      try (FileOutputStream out = new FileOutputStream(file)) {
+        firstLength = first.serializeTo(out);
+        second.serializeTo(out);
+      }
+      TsFileInput input = new LocalTsFileInput(Paths.get(file.getPath()));
+      try {
+        TimeseriesMetadata rejected =
+            TimeseriesMetadata.deserializeFrom(input, name -> false, true, true);
+        Assert.assertEquals("s1", rejected.getMeasurementId());
+        // the rejected series' chunk list is skipped, not decoded
+        Assert.assertNull(rejected.getChunkMetadataList());
+        // the input advanced exactly to the next record
+        Assert.assertEquals(firstLength, input.position());
+
+        TimeseriesMetadata accepted =
+            TimeseriesMetadata.deserializeFrom(input, name -> true, true, true);
+        Assert.assertEquals("s2", accepted.getMeasurementId());
+        Assert.assertNotNull(accepted.getChunkMetadataList());
+        Assert.assertEquals(1, accepted.getChunkMetadataList().size());
+        ChunkMetadata chunk = (ChunkMetadata) accepted.getChunkMetadataList().get(0);
+        Assert.assertEquals(secondChunkOffset, chunk.getOffsetOfChunkHeader());
+        Assert.assertEquals(5, chunk.getStatistics().getCount());
+        Assert.assertEquals(0L, chunk.getStatistics().getStartTime());
+        Assert.assertEquals(4L, chunk.getStatistics().getEndTime());
+      } finally {
+        input.close();
+      }
+    } finally {
+      file.delete();
+    }
+  }
+
+  private static TimeseriesMetadata metadataWithOneChunk(
+      String measurementId, long chunkOffset, int chunkCount) throws IOException {
+    Statistics<? extends Serializable> seriesStatistics =
+        Statistics.getStatsByType(TSDataType.INT64);
+    seriesStatistics.setCount(chunkCount);
+    seriesStatistics.setStartTime(0);
+    seriesStatistics.setEndTime(chunkCount - 1);
+    Statistics<? extends Serializable> chunkStatistics =
+        Statistics.getStatsByType(TSDataType.INT64);
+    chunkStatistics.setCount(chunkCount);
+    chunkStatistics.setStartTime(0);
+    chunkStatistics.setEndTime(chunkCount - 1);
+    ChunkMetadata chunk =
+        new ChunkMetadata(
+            measurementId,
+            TSDataType.INT64,
+            TSEncoding.PLAIN,
+            CompressionType.UNCOMPRESSED,
+            chunkOffset,
+            chunkStatistics);
+    PublicBAOS chunkBuffer = new PublicBAOS();
+    chunk.serializeTo(chunkBuffer, true);
+    return new TimeseriesMetadata(
+        (byte) 1,
+        chunkBuffer.size(),
+        measurementId,
+        TSDataType.INT64,
+        seriesStatistics,
+        chunkBuffer);
   }
 }

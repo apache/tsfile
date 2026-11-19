@@ -23,6 +23,7 @@ import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.constant.TestConstant;
 import org.apache.tsfile.enums.ColumnCategory;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.file.metadata.ChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.file.metadata.TimeseriesMetadata;
@@ -137,6 +138,36 @@ public class TimeSeriesMetadataReadTest {
             measurement,
             single.getChunkMetadataList().size(),
             batched.getChunkMetadataList().size());
+        for (int i = 0; i < single.getChunkMetadataList().size(); i++) {
+          ChunkMetadata singleChunk = (ChunkMetadata) single.getChunkMetadataList().get(i);
+          ChunkMetadata batchedChunk = (ChunkMetadata) batched.getChunkMetadataList().get(i);
+          Assert.assertEquals(
+              measurement,
+              singleChunk.getOffsetOfChunkHeader(),
+              batchedChunk.getOffsetOfChunkHeader());
+          Assert.assertEquals(
+              measurement,
+              singleChunk.getStatistics().getCount(),
+              batchedChunk.getStatistics().getCount());
+          Assert.assertEquals(
+              measurement,
+              singleChunk.getStatistics().getStartTime(),
+              batchedChunk.getStatistics().getStartTime());
+          Assert.assertEquals(
+              measurement,
+              singleChunk.getStatistics().getEndTime(),
+              batchedChunk.getStatistics().getEndTime());
+          if (single.getTsDataType().isNumeric()) {
+            Assert.assertEquals(
+                measurement,
+                singleChunk.getStatistics().getMinValue(),
+                batchedChunk.getStatistics().getMinValue());
+            Assert.assertEquals(
+                measurement,
+                singleChunk.getStatistics().getMaxValue(),
+                batchedChunk.getStatistics().getMaxValue());
+          }
+        }
       }
 
       // a single searched measurement can warm the cache with its group siblings

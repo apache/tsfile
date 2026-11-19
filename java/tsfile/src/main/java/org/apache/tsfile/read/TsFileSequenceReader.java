@@ -1134,19 +1134,23 @@ public class TsFileSequenceReader implements AutoCloseable {
    * avoid those reads: a measurement is tested before it selects a group, and a rejected
    * measurement selects nothing. The predicate must have no false negatives, because a {@link
    * BloomFilter} has none; do not pass one for an offset-addressed external TsFile whose
-   * BloomFilter may not cover the series.
+   * BloomFilter may not cover the series. It receives the bare measurement name, while a
+   * BloomFilter stores full {@code device.measurement} paths, so the caller has to build the path
+   * inside the predicate.
    *
-   * <p>A returned measurement that is missing from the result was rejected by {@code mayExist}, or
-   * its floor group was visited and does not contain it; a measurement before the first key is
-   * missing without a read. With {@code mayExist}, every searched measurement missing from the
-   * result is therefore absent from the file.
+   * <p>A searched measurement that is also requested for return is missing from the result only if
+   * {@code mayExist} rejected it (it then selects no group), or its floor group was visited and
+   * does not contain it (a measurement before the first key needs no read). A measurement in {@code
+   * returnedMeasurements} that is not in {@code measurements} is warmed only when it shares a
+   * visited group; a missing one is inconclusive, because its own group may not have been visited.
    *
    * @param measurements measurements that select the leaf groups to visit
    * @param returnedMeasurements measurements to deserialize from the visited groups; null means
    *     {@code measurements}. It may contain measurements outside {@code measurements}, which is
    *     how a caller warms the metadata cache with the siblings of a single requested measurement
    * @param mayExist optional filter tested on a measurement before it selects a group; null reads
-   *     every floor group
+   *     every floor group. It receives the bare measurement name; build the full path for a
+   *     BloomFilter lookup.
    * @return the metadata of the returned measurements found in the visited leaf groups
    */
   @SuppressWarnings("unchecked")
@@ -1179,8 +1183,9 @@ public class TsFileSequenceReader implements AutoCloseable {
             : measurements instanceof Set
                 ? (Set<String>) measurements
                 : new HashSet<>(measurements);
-    Map<String, TimeseriesMetadata> result =
-        new HashMap<>(Math.max(16, (int) (returned.size() / 0.75f) + 1));
+    // size from the searched set: the return set may include many cache-warming siblings that
+    // live in groups this call does not visit
+    Map<String, TimeseriesMetadata> result = new HashMap<>(Math.max(16, measurements.size()));
     readMeasurementsInIndexNode(
         measurementIndexNode, measurements, returned, mayExist, result, ioSizeRecorder);
     return result;
@@ -1357,14 +1362,21 @@ public class TsFileSequenceReader implements AutoCloseable {
       return;
     }
     // a group larger than Integer.MAX_VALUE cannot be held in one buffer
-    if (ioSizeRecorder != null) {
-      ioSizeRecorder.accept(endOffset - startOffset);
-    }
     synchronized (this) {
       tsFileInput.position(startOffset);
       while (tsFileInput.position() < endOffset) {
+        long recordStart = tsFileInput.position();
         TimeseriesMetadata metadata = deserializeTimeseriesMetadata(tsFileInput, isReturned);
-        if (isReturned.test(metadata.getMeasurementId())) {
+        boolean returnedMeasurement = isReturned.test(metadata.getMeasurementId());
+        if (ioSizeRecorder != null) {
+          // the selective deserializer seeks past the chunk list of a series it does not return
+          long consumed = tsFileInput.position() - recordStart;
+          if (!returnedMeasurement) {
+            consumed -= metadata.getDataSizeOfChunkMetaDataList();
+          }
+          ioSizeRecorder.accept(consumed);
+        }
+        if (returnedMeasurement) {
           result.put(metadata.getMeasurementId(), metadata);
         }
       }
