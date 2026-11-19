@@ -49,6 +49,10 @@ import static org.apache.tsfile.utils.Preconditions.checkArgument;
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfCharArray;
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfObjectArray;
 
+/**
+ * Metadata for one time series. Chunk metadata may be loaded lazily from an in-memory buffer or
+ * temporary file; callers must initialize the loader before requesting deferred chunk metadata.
+ */
 public class TimeseriesMetadata implements ITimeSeriesMetadata {
 
   private static final int INSTANCE_SIZE =

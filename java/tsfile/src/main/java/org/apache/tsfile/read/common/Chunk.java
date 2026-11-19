@@ -137,6 +137,12 @@ public class Chunk implements AutoCloseable {
     this.deleteIntervalList = list;
   }
 
+  /**
+   * Appends the pages of another compatible chunk. When two single-page chunks are merged, the
+   * resulting chunk must be marked as multi-page and the original chunk statistics must be written
+   * into their page headers. Chunks must have compatible data types, codecs, and measurement
+   * semantics.
+   */
   public void mergeChunkByAppendPage(Chunk chunk) throws IOException {
     if ((encryptParam != null && encryptParam.isTdePageAead())
         || (chunk.encryptParam != null && chunk.encryptParam.isTdePageAead())) {
@@ -237,6 +243,10 @@ public class Chunk implements AutoCloseable {
         + (authenticationSize == 0 ? 0 : sizeOfByteArray(authenticationSize));
   }
 
+  /**
+   * Re-encodes this chunk using the target data type and schema. Null values are represented using
+   * the target type's null sentinel, and statistics are recomputed from the rewritten records.
+   */
   public Chunk rewrite(TSDataType newType, Chunk timeChunk) throws IOException {
     if (newType == null || newType == chunkHeader.getDataType()) {
       return this;
