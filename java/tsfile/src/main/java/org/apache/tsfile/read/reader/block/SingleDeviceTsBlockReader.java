@@ -42,10 +42,12 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 public class SingleDeviceTsBlockReader implements TsBlockReader {
 
@@ -115,23 +117,16 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
     try {
       if (seriesReader.hasNextBatch()) {
         if (chunkMetadata instanceof AbstractAlignedChunkMetadata) {
-          final List<String> currentChunkMeasurementNames =
-              seriesReader.getCurrentChunkMeasurementNames();
-          List<List<Integer>> posInResult = new ArrayList<>();
-          for (String currentChunkMeasurementName : currentChunkMeasurementNames) {
-            posInResult.add(task.getColumnMapping().getColumnPos(currentChunkMeasurementName));
-          }
           measureColumnContextMap.put(
-              "",
-              new VectorMeasurementColumnContext(
-                  posInResult, seriesReader.nextBatch(), seriesReader));
+              "", new VectorMeasurementColumnContext(task, seriesReader.nextBatch(), seriesReader));
         } else {
           final String measurementUid = chunkMetadata.getMeasurementUid();
+          final String resolved = task.getTableSchema().resolveColumnName(measurementUid);
           measureColumnContextMap.put(
               measurementUid,
               new SingleMeasurementColumnContext(
                   measurementUid,
-                  task.getColumnMapping().getColumnPos(measurementUid),
+                  task.getColumnMapping().getColumnPos(resolved),
                   seriesReader.nextBatch(),
                   seriesReader));
         }
@@ -376,14 +371,12 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
 
   public static class VectorMeasurementColumnContext extends MeasurementColumnContext {
 
-    private final List<List<Integer>> posInResult;
+    private final DeviceQueryTask task;
 
     public VectorMeasurementColumnContext(
-        List<List<Integer>> posInResult,
-        BatchData currentBatch,
-        AbstractFileSeriesReader seriesReader) {
+        DeviceQueryTask task, BatchData currentBatch, AbstractFileSeriesReader seriesReader) {
       super(seriesReader, currentBatch);
-      this.posInResult = posInResult;
+      this.task = task;
     }
 
     @Override
@@ -394,9 +387,32 @@ public class SingleDeviceTsBlockReader implements TsBlockReader {
     @Override
     void fillInto(TsBlock block, int blockRowNum) {
       final TsPrimitiveType[] vector = currentBatch.getVector();
+      // The value columns in a chunk group can differ between chunk groups when a column was
+      // added or renamed (a missing column yields a null name), so the result positions are
+      // resolved per batch from the current chunk's measurement names rather than captured once.
+      final List<String> measurementNames = seriesReader.getCurrentChunkMeasurementNames();
+      final Set<String> presentNames = new HashSet<>();
+      for (String name : measurementNames) {
+        if (name != null) {
+          presentNames.add(task.getTableSchema().resolveColumnName(name));
+        }
+      }
+      // A queried column with no value in this chunk group must be null-filled explicitly:
+      // fillTrailingNulls only repairs trailing gaps, not interior ones.
+      for (String measurementColumn : task.getColumnMapping().getMeasurementColumns()) {
+        final String resolvedColumn = task.getTableSchema().resolveColumnName(measurementColumn);
+        if (presentNames.contains(resolvedColumn)) {
+          continue;
+        }
+        for (Integer pos : task.getColumnMapping().getColumnPos(measurementColumn)) {
+          block.getColumn(pos).setNull(blockRowNum, blockRowNum + 1);
+        }
+      }
       for (int i = 0; i < vector.length; i++) {
         final TsPrimitiveType value = vector[i];
-        final List<Integer> columnPositions = posInResult.get(i);
+        final String name = i < measurementNames.size() ? measurementNames.get(i) : null;
+        final String resolved = name == null ? null : task.getTableSchema().resolveColumnName(name);
+        final List<Integer> columnPositions = task.getColumnMapping().getColumnPos(resolved);
         final Type type = value == null ? null : Type.fromTsDataType(value.getDataType());
         for (Integer pos : columnPositions) {
           if (value != null) {

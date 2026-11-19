@@ -394,6 +394,15 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
     this.chunkMetadataList = new ArrayList<>(chunkMetadataList);
   }
 
+  /**
+   * Set the chunk metadata list from {@link IChunkMetadata} elements. Used when merging aliased
+   * series during table-model schema-evolution reads, where the merged list is declared as {@code
+   * List<IChunkMetadata>} rather than {@code List<ChunkMetadata>}.
+   */
+  public void setIChunkMetadataList(List<IChunkMetadata> chunkMetadataList) {
+    this.chunkMetadataList = new ArrayList<>(chunkMetadataList);
+  }
+
   // it's only used for query cache, field chunkMetadataListBuffer and chunkMetadataLoader should
   // always be null
   public long getRetainedSizeInBytes() {

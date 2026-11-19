@@ -99,6 +99,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
@@ -1258,9 +1259,11 @@ public class TsFileSequenceReader implements AutoCloseable {
         timeColumnMetadata != null ? new ArrayList<>() : null;
 
     List<ITimeSeriesMetadata> resultTimeseriesMetadataList = new ArrayList<>();
-    List<String> measurementList = new ArrayList<>(measurements);
+    final Set<String> expandedMeasurements =
+        expandMeasurementNamesWithAliases(device, measurements);
+    List<String> measurementList = new ArrayList<>(expandedMeasurements);
     measurementList.sort(null);
-    boolean[] measurementFound = new boolean[measurements.size()];
+    boolean[] measurementFound = new boolean[expandedMeasurements.size()];
     int measurementFoundCnt = 0;
 
     List<TimeseriesMetadata> timeseriesMetadataList = new ArrayList<>();
@@ -1288,6 +1291,7 @@ public class TsFileSequenceReader implements AutoCloseable {
               mergeAlignedSeries);
     }
     if (valueTimeseriesMetadataList != null && !valueTimeseriesMetadataList.isEmpty()) {
+      mergeAliasedValueColumns(device, valueTimeseriesMetadataList);
       if (this.tsFileMetaData.getTableSchemaMap().containsKey(device.getTableName())) {
         resultTimeseriesMetadataList.add(
             new TableDeviceTimeSeriesMetadata(timeColumnMetadata, valueTimeseriesMetadataList));
@@ -1297,6 +1301,111 @@ public class TsFileSequenceReader implements AutoCloseable {
       }
     }
     return resultTimeseriesMetadataList;
+  }
+
+  /**
+   * For a table that has undergone renames, expand the requested measurement names with their
+   * historical aliases so the metadata index (keyed by the on-disk measurement name) can find
+   * series written before the rename.
+   */
+  private Set<String> expandMeasurementNamesWithAliases(
+      IDeviceID device, Set<String> measurements) {
+    if (this.tsFileMetaData == null || this.tsFileMetaData.getTableSchemaMap() == null) {
+      return measurements;
+    }
+    final TableSchema tableSchema =
+        this.tsFileMetaData.getTableSchemaMap().get(device.getTableName());
+    if (tableSchema == null || tableSchema.getColumnAliases().isEmpty()) {
+      return measurements;
+    }
+    final Map<String, String> aliases = tableSchema.getColumnAliases();
+    final Set<String> expanded = new HashSet<>(measurements.size() * 2);
+    for (String name : measurements) {
+      final String current = tableSchema.resolveColumnName(name);
+      expanded.add(current);
+      for (Map.Entry<String, String> alias : aliases.entrySet()) {
+        if (alias.getValue().equals(current)) {
+          expanded.add(alias.getKey());
+        }
+      }
+    }
+    return expanded;
+  }
+
+  /**
+   * Collapse value columns whose measurement id resolves to the same current name (historical
+   * aliases of a renamed column) into a single {@link TimeseriesMetadata} labeled with the current
+   * name and carrying the time-sorted union of their chunks. Because a rename is a strict
+   * write-order boundary, the merged column has one chunk per chunk group again, so the positional
+   * aligned assembly in {@link AbstractAlignedTimeSeriesMetadata} keeps working.
+   */
+  private void mergeAliasedValueColumns(IDeviceID device, List<TimeseriesMetadata> valueColumns) {
+    if (this.tsFileMetaData == null || this.tsFileMetaData.getTableSchemaMap() == null) {
+      return;
+    }
+    final TableSchema tableSchema =
+        this.tsFileMetaData.getTableSchemaMap().get(device.getTableName());
+    if (tableSchema == null) {
+      return;
+    }
+    final Map<String, String> aliases = tableSchema.getColumnAliases();
+    if (aliases.isEmpty()) {
+      return;
+    }
+    boolean hasAlias = false;
+    final Map<String, List<TimeseriesMetadata>> grouped = new LinkedHashMap<>();
+    for (TimeseriesMetadata valueColumn : valueColumns) {
+      final String current =
+          aliases.getOrDefault(valueColumn.getMeasurementId(), valueColumn.getMeasurementId());
+      if (!current.equals(valueColumn.getMeasurementId())) {
+        hasAlias = true;
+      }
+      grouped.computeIfAbsent(current, k -> new ArrayList<>()).add(valueColumn);
+    }
+    if (!hasAlias) {
+      return;
+    }
+    valueColumns.clear();
+    for (Map.Entry<String, List<TimeseriesMetadata>> entry : grouped.entrySet()) {
+      final List<TimeseriesMetadata> members = entry.getValue();
+      if (members.size() == 1) {
+        members.get(0).setMeasurementId(entry.getKey());
+        valueColumns.add(members.get(0));
+      } else {
+        valueColumns.add(mergeTimeseriesMetadata(entry.getKey(), members));
+      }
+    }
+  }
+
+  private TimeseriesMetadata mergeTimeseriesMetadata(
+      String name, List<TimeseriesMetadata> members) {
+    final List<IChunkMetadata> merged = new ArrayList<>();
+    TSDataType dataType = null;
+    Statistics<? extends Serializable> statistics = null;
+    for (TimeseriesMetadata member : members) {
+      if (member.getTsDataType() != null) {
+        dataType = member.getTsDataType();
+      }
+      if (member.getChunkMetadataList() != null) {
+        merged.addAll(member.getChunkMetadataList());
+      }
+      if (member.getStatistics() != null) {
+        if (statistics == null) {
+          statistics = member.getStatistics();
+        } else {
+          statistics.mergeStatistics(member.getStatistics());
+        }
+      }
+    }
+    merged.sort(
+        Comparator.comparingLong(IChunkMetadata::getStartTime)
+            .thenComparingLong(IChunkMetadata::getOffsetOfChunkHeader));
+    final TimeseriesMetadata result = new TimeseriesMetadata();
+    result.setMeasurementId(name);
+    result.setTsDataType(dataType);
+    result.setStatistics(statistics);
+    result.setIChunkMetadataList(merged);
+    return result;
   }
 
   private int searchInTimeseriesList(
