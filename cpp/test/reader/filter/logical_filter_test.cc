@@ -71,9 +71,9 @@ std::vector<bool> run_batch(Filter& filter, const std::vector<int64_t>& times) {
 }
 
 TEST(LogicalFilterTest, AndCombinesPruningAndRowPredicates) {
-    TimeBetween between(2, 4, /*not_between=*/false);
-    TimeEq eq(3);
-    AndFilter filter(&between, &eq);
+    TimeBetween* between = new TimeBetween(2, 4, /*not_between=*/false);
+    TimeEq* eq = new TimeEq(3);
+    AndFilter filter(between, eq);
 
     Statistic spanning = make_stat(2, 5);
     Statistic without_point = make_stat(4, 6);
@@ -95,9 +95,9 @@ TEST(LogicalFilterTest, AndCombinesPruningAndRowPredicates) {
 }
 
 TEST(LogicalFilterTest, OrUnionsPruningAndRowPredicates) {
-    TimeBetween between(2, 4, /*not_between=*/false);
-    TimeGt gt(5);
-    OrFilter filter(&between, &gt);
+    TimeBetween* between = new TimeBetween(2, 4, /*not_between=*/false);
+    TimeGt* gt = new TimeGt(5);
+    OrFilter filter(between, gt);
 
     Statistic low = make_stat(1, 2);
     Statistic high = make_stat(6, 8);
@@ -124,11 +124,11 @@ TEST(LogicalFilterTest, OrUnionsPruningAndRowPredicates) {
 }
 
 TEST(LogicalFilterTest, NestedLogicalFiltersPropagate) {
-    TimeBetween between(1, 3, /*not_between=*/false);
-    TimeGt gt(6);
-    OrFilter outer_or(&between, &gt);
-    TimeEq eq(2);
-    AndFilter nested(&outer_or, &eq);
+    TimeBetween* between = new TimeBetween(1, 3, /*not_between=*/false);
+    TimeGt* gt = new TimeGt(6);
+    OrFilter* outer_or = new OrFilter(between, gt);
+    TimeEq* eq = new TimeEq(2);
+    AndFilter nested(outer_or, eq);
 
     EXPECT_TRUE(nested.satisfy(2, 0));
     EXPECT_FALSE(nested.satisfy(3, 0));

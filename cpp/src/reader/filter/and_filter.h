@@ -101,6 +101,14 @@ class AndFilter : public BinaryFilter {
                 }
             }
         }
+        for (TimeRange* range : *left_time_ranges) {
+            delete range;
+        }
+        for (TimeRange* range : *right_time_ranges) {
+            delete range;
+        }
+        delete left_time_ranges;
+        delete right_time_ranges;
         return result;
     }
 
