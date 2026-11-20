@@ -55,6 +55,22 @@ public interface IChunkWriter {
   void clearPageWriter();
 
   /**
+   * Layout hint: whether the next chunk is expected to have more than one page. The value is
+   * clamped by the implementation and is only used to decide whether the first-page statistics can
+   * be written up front. It does not size any buffer.
+   */
+  default void setExpectedPageCount(int expectedPageCount) {}
+
+  /**
+   * Retained heap bytes of this writer's buffers, used by the global flush memory threshold. It is
+   * deliberately separate from {@link #estimateMaxSeriesMemSize()}, which keeps the logical
+   * serialized size used for chunk/page decisions.
+   */
+  default long getRetainedMemSize() {
+    return estimateMaxSeriesMemSize();
+  }
+
+  /**
    * used for compaction to check whether the chunk is over threshold or not. Return true if there
    * is no unsealed chunk.
    */

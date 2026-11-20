@@ -64,7 +64,17 @@ public class ValueChunkWriter {
   private long chunkOrdinal = -1;
 
   /** all pages of this chunk. */
-  private final PublicBAOS pageBuffer;
+  private ChunkPageBuffer pageBuffer;
+
+  /** Expected number of pages of the next chunk, used to size the chunk buffer once. */
+  private int expectedPageCount;
+
+  private static final int MAX_PAGE_HINT = 16;
+
+  /** True when the first page statistics were written up front (multi-page chunk). */
+  private boolean firstPageStatisticsWritten;
+
+  private int firstPageStatisticsSize;
 
   private int numOfPages;
 
@@ -102,7 +112,7 @@ public class ValueChunkWriter {
     this.compressionType = compressionType;
     this.encryptParam = EncryptUtils.getEncryptParameter();
     this.chunkOrdinal = nextChunkOrdinal();
-    this.pageBuffer = new PublicBAOS();
+    this.pageBuffer = new ChunkPageBuffer();
     this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
     this.maxNumberOfPointsInPage =
         TSFileDescriptor.getInstance().getConfig().getMaxNumberOfPointsInPage();
@@ -130,7 +140,7 @@ public class ValueChunkWriter {
     this.compressionType = compressionType;
     this.encryptParam = encryptParam;
     this.chunkOrdinal = nextChunkOrdinal();
-    this.pageBuffer = new PublicBAOS();
+    this.pageBuffer = new ChunkPageBuffer();
     this.pageSizeThreshold = TSFileDescriptor.getInstance().getConfig().getPageSizeInByte();
     this.maxNumberOfPointsInPage =
         TSFileDescriptor.getInstance().getConfig().getMaxNumberOfPointsInPage();
@@ -205,35 +215,57 @@ public class ValueChunkWriter {
   }
 
   public void writeEmptyPageToPageBuffer() throws IOException {
-    if (numOfPages == 1 && firstPageStatistics != null) {
+    pageBuffer.beginPage();
+    if (!firstPageStatisticsWritten && numOfPages == 1 && firstPageStatistics != null) {
       // if the first page is not an empty page
-      byte[] b = pageBuffer.toByteArray();
-      pageBuffer.reset();
-      pageBuffer.write(b, 0, this.sizeWithoutStatistic);
-      firstPageStatistics.serialize(pageBuffer);
-      pageBuffer.write(b, this.sizeWithoutStatistic, b.length - this.sizeWithoutStatistic);
+      insertFirstPageStatistics();
       firstPageStatistics = null;
     }
     pageWriter.writeEmptyPageIntoBuff(pageBuffer);
+    pageBuffer.endPage();
     numOfPages++;
+  }
+
+  /** Inserts the first page statistics between the first page header and its data. */
+  private void insertFirstPageStatistics() throws IOException {
+    byte[] firstPage = pageBuffer.getFirstPage();
+    PublicBAOS statisticsBuffer = new PublicBAOS();
+    firstPageStatistics.serialize(statisticsBuffer);
+    byte[] statisticsBytes = statisticsBuffer.toByteArray();
+    byte[] newPage = new byte[firstPage.length + statisticsBytes.length];
+    System.arraycopy(firstPage, 0, newPage, 0, sizeWithoutStatistic);
+    System.arraycopy(statisticsBytes, 0, newPage, sizeWithoutStatistic, statisticsBytes.length);
+    System.arraycopy(
+        firstPage,
+        sizeWithoutStatistic,
+        newPage,
+        sizeWithoutStatistic + statisticsBytes.length,
+        firstPage.length - sizeWithoutStatistic);
+    pageBuffer.replaceFirstPage(newPage);
   }
 
   public void writePageToPageBuffer() {
     try {
+      pageBuffer.beginPage();
       if (numOfPages == 0) {
+        boolean includeFirstPageStatistics = expectedPageCount > 1;
         if (pageWriter.getStatistics().getCount() != 0) {
           // record the firstPageStatistics if it is not empty page
           this.firstPageStatistics = pageWriter.getStatistics();
+          this.firstPageStatisticsSize =
+              includeFirstPageStatistics ? firstPageStatistics.getSerializedSize() : 0;
         }
         this.sizeWithoutStatistic =
-            pageWriter.writePageHeaderAndDataIntoBuff(pageBuffer, true, numOfPages);
+            pageWriter.writePageHeaderAndDataIntoBuff(
+                pageBuffer, true, numOfPages, includeFirstPageStatistics);
+        this.firstPageStatisticsWritten = includeFirstPageStatistics && firstPageStatisticsSize > 0;
+        if (firstPageStatisticsWritten) {
+          this.firstPageStatistics = null;
+        }
       } else if (numOfPages == 1) { // put the firstPageStatistics into pageBuffer
-        if (firstPageStatistics != null) { // Consider previous page is an empty page
-          byte[] b = pageBuffer.toByteArray();
-          pageBuffer.reset();
-          pageBuffer.write(b, 0, this.sizeWithoutStatistic);
-          firstPageStatistics.serialize(pageBuffer);
-          pageBuffer.write(b, this.sizeWithoutStatistic, b.length - this.sizeWithoutStatistic);
+        if (!firstPageStatisticsWritten && firstPageStatistics != null) {
+          // Fallback when the chunk turned out to have a second page but no page count was known.
+          insertFirstPageStatistics();
         }
         pageWriter.writePageHeaderAndDataIntoBuff(pageBuffer, false, numOfPages);
         firstPageStatistics = null;
@@ -241,6 +273,7 @@ public class ValueChunkWriter {
         pageWriter.writePageHeaderAndDataIntoBuff(pageBuffer, false, numOfPages);
       }
 
+      pageBuffer.endPage();
       // update statistics of this chunk
       numOfPages++;
       this.statistics.mergeStatistics(pageWriter.getStatistics());
@@ -258,6 +291,7 @@ public class ValueChunkWriter {
       throw new org.apache.tsfile.exception.encrypt.EncryptException(
           Messages.get("error.write.aead_raw_page_copy_unsupported"));
     }
+    pageBuffer.beginPage();
     // write the page header to pageBuffer
     try {
       logger.debug(Messages.get("log.write.page_header_flush_start"), pageBuffer.size());
@@ -276,11 +310,7 @@ public class ValueChunkWriter {
         }
       } else if (numOfPages == 1) { // put the firstPageStatistics into pageBuffer
         if (firstPageStatistics != null) {
-          byte[] b = pageBuffer.toByteArray();
-          pageBuffer.reset();
-          pageBuffer.write(b, 0, this.sizeWithoutStatistic);
-          firstPageStatistics.serialize(pageBuffer);
-          pageBuffer.write(b, this.sizeWithoutStatistic, b.length - this.sizeWithoutStatistic);
+          insertFirstPageStatistics();
         }
         ReadWriteForEncodingUtils.writeUnsignedVarInt(header.getUncompressedSize(), pageBuffer);
         if (header.getUncompressedSize() != 0) {
@@ -312,6 +342,7 @@ public class ValueChunkWriter {
     } catch (IOException e) {
       throw new PageException(e);
     }
+    pageBuffer.endPage();
   }
 
   public void writeToFileWriter(TsFileIOWriter tsfileWriter) throws IOException {
@@ -322,10 +353,16 @@ public class ValueChunkWriter {
       TsFileIOWriter tsfileWriter, Function<String, String> measurementNameRemapper)
       throws IOException {
     sealCurrentPage();
+    compactPreWrittenFirstPageStatistics();
     writeAllPagesOfChunkToTsFile(tsfileWriter, measurementNameRemapper);
 
-    // reinit this chunk writer
+    // reinit this chunk writer so that a recycled writer behaves like a fresh one: reset the page
+    // size check heuristic (and SDT last point), otherwise the first page of the next chunk could
+    // be sized differently.
     pageBuffer.reset();
+    firstPageStatisticsWritten = false;
+    firstPageStatisticsSize = 0;
+    this.valueCountInOnePageForNextCheck = MINIMUM_RECORD_COUNT_FOR_CHECK;
     numOfPages = 0;
     sizeWithoutStatistic = 0;
     firstPageStatistics = null;
@@ -403,6 +440,32 @@ public class ValueChunkWriter {
 
   public void clearPageWriter() {
     pageWriter = null;
+  }
+
+  public void setExpectedPageCount(int expectedPageCount) {
+    this.expectedPageCount = Math.max(0, Math.min(expectedPageCount, MAX_PAGE_HINT));
+  }
+
+  /**
+   * Removes the first page statistics that were written up front when the chunk ends up with a
+   * single page. Shifts the page data in place, so no new array is allocated.
+   */
+  private void compactPreWrittenFirstPageStatistics() {
+    if (!firstPageStatisticsWritten || numOfPages != 1) {
+      return;
+    }
+    byte[] firstPage = pageBuffer.getFirstPage();
+    int dataStart = sizeWithoutStatistic + firstPageStatisticsSize;
+    int tail = firstPage.length - dataStart;
+    byte[] compacted = new byte[sizeWithoutStatistic + tail];
+    System.arraycopy(firstPage, 0, compacted, 0, sizeWithoutStatistic);
+    System.arraycopy(firstPage, dataStart, compacted, sizeWithoutStatistic, tail);
+    pageBuffer.replaceFirstPage(compacted);
+    firstPageStatisticsWritten = false;
+  }
+
+  public long getRetainedMemSize() {
+    return pageBuffer.retainedBytes() + pageWriter.retainedBufferBytes();
   }
 
   public int getNumOfPages() {
@@ -495,9 +558,16 @@ public class ValueChunkWriter {
     return compressionType;
   }
 
-  /** only used for test */
+  /**
+   * @deprecated test-only snapshot of the page bytes; the returned buffer is not live. Use {@link
+   *     #getByteBuffer()} when possible.
+   */
+  @Deprecated
   public PublicBAOS getPageBuffer() {
-    return pageBuffer;
+    PublicBAOS copy = new PublicBAOS();
+    byte[] bytes = pageBuffer.toByteArray();
+    copy.write(bytes, 0, bytes.length);
+    return copy;
   }
 
   public boolean checkIsUnsealedPageOverThreshold(long size) {

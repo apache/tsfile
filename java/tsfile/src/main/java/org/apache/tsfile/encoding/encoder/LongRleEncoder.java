@@ -16,7 +16,6 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-
 package org.apache.tsfile.encoding.encoder;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
@@ -38,7 +37,7 @@ public class LongRleEncoder extends RleEncoder<Long> {
     super();
     bufferedValues = new Long[TSFileConfig.RLE_MIN_REPEATED_NUM];
     preValue = (long) 0;
-    values = new ArrayList<Long>();
+    values = new ArrayList<>();
   }
 
   @Override
@@ -70,7 +69,7 @@ public class LongRleEncoder extends RleEncoder<Long> {
   }
 
   /**
-   * write bytes to OutputStream using rle rle format: [header][value].
+   * write bytes to OutputStream using rle format: [header][value].
    *
    * @throws IOException cannot write rle run
    */
@@ -92,15 +91,13 @@ public class LongRleEncoder extends RleEncoder<Long> {
 
   @Override
   protected void convertBuffer() {
-    byte[] bytes = new byte[bitWidth];
+    byte[] bytes = packScratch(bitWidth);
     long[] tmpBuffer = new long[TSFileConfig.RLE_MIN_REPEATED_NUM];
     for (int i = 0; i < TSFileConfig.RLE_MIN_REPEATED_NUM; i++) {
       tmpBuffer[i] = bufferedValues[i];
     }
     packer.pack8Values(tmpBuffer, 0, bytes);
-    // we'll not write bit-packing group to OutputStream immediately
-    // we buffer them in list
-    bytesBuffer.add(bytes);
+    appendBitPackedGroup(bytes, bitWidth);
   }
 
   @Override

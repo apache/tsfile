@@ -64,6 +64,10 @@ public class ValuePageWriter {
 
   private final PublicBAOS bitmapOut;
 
+  // Reused across the pages of a chunk so that encoding and compression do not allocate the page
+  // body buffers for every page.
+  private final PageBodyBuffer pageBodyBuffer = new PageBodyBuffer();
+
   private static final int MASK = 1 << 7;
 
   private static final byte[] NULL_BITMAP_BATCH = new byte[1024];
@@ -394,6 +398,26 @@ public class ValuePageWriter {
     return buffer;
   }
 
+  /** Retained heap bytes of this page writer's buffers, for the global flush threshold. */
+  public long retainedBufferBytes() {
+    return (long) bitmapOut.getBuf().length
+        + valueOut.getBuf().length
+        + pageBodyBuffer.retainedBytes();
+  }
+
+  /** Same as {@link #getUncompressedBytes()} but reuses the writer's scratch buffer. */
+  private ByteBuffer getUncompressedBytesForWriting() throws IOException {
+    prepareEndWriteOnePage();
+    int bitmapSize = bitmapOut.size();
+    int valueSize = valueOut.size();
+    ByteBuffer buffer = pageBodyBuffer.uncompressed(Integer.BYTES + bitmapSize + valueSize);
+    buffer.putInt(size);
+    buffer.put(bitmapOut.getBuf(), 0, bitmapSize);
+    buffer.put(valueOut.getBuf(), 0, valueSize);
+    buffer.flip();
+    return buffer;
+  }
+
   public int writeEmptyPageIntoBuff(PublicBAOS pageBuffer) {
     return ReadWriteForEncodingUtils.writeUnsignedVarInt(0, pageBuffer);
   }
@@ -407,6 +431,12 @@ public class ValuePageWriter {
   /** write the page header and data into the PageWriter's output stream. */
   public int writePageHeaderAndDataIntoBuff(PublicBAOS pageBuffer, boolean first, int pageIndex)
       throws IOException {
+    return writePageHeaderAndDataIntoBuff(pageBuffer, first, pageIndex, false);
+  }
+
+  public int writePageHeaderAndDataIntoBuff(
+      PublicBAOS pageBuffer, boolean first, int pageIndex, boolean includeFirstPageStatistics)
+      throws IOException {
     if (size == 0) {
       return 0;
     } else if (statistics.getCount() == 0) {
@@ -414,11 +444,17 @@ public class ValuePageWriter {
       return writeEmptyPageIntoBuff(pageBuffer);
     }
 
-    ByteBuffer pageData = getUncompressedBytes();
+    ByteBuffer pageData = getUncompressedBytesForWriting();
     int uncompressedSize = pageData.remaining();
     ByteBuffer pageBody =
         PageBodyEncoder.encode(
-            pageData, uncompressedSize, compressor, encryptParam, pageIndex, chunkOrdinal);
+            pageData,
+            uncompressedSize,
+            compressor,
+            encryptParam,
+            pageIndex,
+            chunkOrdinal,
+            pageBodyBuffer);
     int pageBodySize = pageBody.remaining();
 
     // write the page header to IOWriter
@@ -428,6 +464,9 @@ public class ValuePageWriter {
           ReadWriteForEncodingUtils.writeUnsignedVarInt(uncompressedSize, pageBuffer);
       sizeWithoutStatistic +=
           ReadWriteForEncodingUtils.writeUnsignedVarInt(pageBodySize, pageBuffer);
+      if (includeFirstPageStatistics) {
+        statistics.serialize(pageBuffer);
+      }
     } else {
       ReadWriteForEncodingUtils.writeUnsignedVarInt(uncompressedSize, pageBuffer);
       ReadWriteForEncodingUtils.writeUnsignedVarInt(pageBodySize, pageBuffer);
@@ -447,7 +486,12 @@ public class ValuePageWriter {
    * @return allocated size in time, value and outputStream
    */
   public long estimateMaxMemSize() {
-    return Integer.BYTES + bitmapOut.size() + 1 + valueOut.size() + valueEncoder.getMaxByteSize();
+    return Integer.BYTES
+        + bitmapOut.size()
+        + 1
+        + valueOut.size()
+        + valueEncoder.getPendingByteCount()
+        + valueEncoder.getMaxByteSize();
   }
 
   /** reset this page */

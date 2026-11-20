@@ -267,9 +267,9 @@ public class AlignedChunkGroupWriterImpl implements IChunkGroupWriter {
 
   @Override
   public long updateMaxGroupMemSize() {
-    long bufferSize = timeChunkWriter.estimateMaxSeriesMemSize();
+    long bufferSize = timeChunkWriter.getRetainedMemSize();
     for (ValueChunkWriter valueChunkWriter : valueChunkWriterMap.values()) {
-      bufferSize += valueChunkWriter.estimateMaxSeriesMemSize();
+      bufferSize += valueChunkWriter.getRetainedMemSize();
     }
     return bufferSize;
   }

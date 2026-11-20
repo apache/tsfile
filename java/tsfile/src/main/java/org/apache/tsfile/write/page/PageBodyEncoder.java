@@ -43,6 +43,24 @@ class PageBodyEncoder {
       int pageIndex,
       long chunkOrdinal)
       throws IOException {
+    return encode(
+        pageData, uncompressedSize, compressor, encryptParameter, pageIndex, chunkOrdinal, null);
+  }
+
+  /**
+   * Encodes the page body, reusing the caller's compressor output buffer when it is large enough.
+   * The returned buffer (and the reusable arrays it may reference) is only valid until the caller
+   * has copied the page body; it must not be retained.
+   */
+  static ByteBuffer encode(
+      ByteBuffer pageData,
+      int uncompressedSize,
+      ICompressor compressor,
+      EncryptParameter encryptParameter,
+      int pageIndex,
+      long chunkOrdinal,
+      PageBodyBuffer buffer)
+      throws IOException {
     byte[] plaintext;
     int plaintextOffset = 0;
     int compressedSize;
@@ -56,7 +74,11 @@ class PageBodyEncoder {
       plaintext = compressor.compress(pageData.array(), inputOffset, uncompressedSize);
       compressedSize = plaintext.length;
     } else {
-      plaintext = new byte[compressor.getMaxBytesForCompression(uncompressedSize)];
+      int maxBytesForCompression = compressor.getMaxBytesForCompression(uncompressedSize);
+      plaintext =
+          buffer == null
+              ? new byte[maxBytesForCompression]
+              : buffer.compressed(maxBytesForCompression);
       compressedSize =
           compressor.compress(pageData.array(), inputOffset, uncompressedSize, plaintext);
     }
