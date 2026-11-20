@@ -37,6 +37,7 @@ extern "C" {
 #include "cwrapper/tsfile_cwrapper.h"
 }
 
+#include "common/global.h"
 #include "common/tsblock/tsblock.h"
 #include "utils/db_utils.h"
 
@@ -291,7 +292,9 @@ TEST(CWrapperExtendedTest, GlobalTimeConfigRoundTripsAndValidates) {
     EXPECT_EQ(TS_COMPRESSION_UNCOMPRESSED, get_global_time_compression());
 
     EXPECT_EQ(RET_OK, set_allow_non_decreasing_timestamps(true));
+    EXPECT_TRUE(common::g_config_value_.allow_non_decreasing_timestamps_);
     EXPECT_EQ(RET_OK, set_allow_non_decreasing_timestamps(false));
+    EXPECT_FALSE(common::g_config_value_.allow_non_decreasing_timestamps_);
 
     EXPECT_EQ(RET_OK, set_global_time_encoding(original_encoding));
     EXPECT_EQ(RET_OK, set_global_time_compression(original_compression));
@@ -401,6 +404,8 @@ TEST(CWrapperExtendedTest, BatchQueryMetadataAndArrowBlocks) {
         }
         ASSERT_EQ(RET_OK, ret);
         EXPECT_GT(array.length, 0);
+        // The query asked for batch_size = 3.
+        EXPECT_LE(array.length, 3);
         total_rows += array.length;
         if (array.release != nullptr) {
             array.release(&array);
@@ -518,7 +523,19 @@ TEST(CWrapperExtendedTest, TagFilterCombinations) {
         &err);
     ASSERT_EQ(RET_OK, err);
     ASSERT_NE(nullptr, not_result);
-    EXPECT_EQ(5, count_result_rows(not_result, &err));
+    // Both tag values have five rows, so the count alone cannot tell the
+    // negated filter from its input; check the TAG of every returned row.
+    int negated_rows = 0;
+    while (tsfile_result_set_next(not_result, &err) && err == RET_OK) {
+        char* tag =
+            tsfile_result_set_get_value_by_name_string(not_result, "TAG");
+        ASSERT_NE(nullptr, tag);
+        EXPECT_STREQ("devB", tag);
+        tsfile_free_buffer(tag);
+        ++negated_rows;
+    }
+    EXPECT_EQ(RET_OK, err);
+    EXPECT_EQ(5, negated_rows);
     free_tsfile_result_set(&not_result);
     tsfile_tag_filter_free(negated);
 
