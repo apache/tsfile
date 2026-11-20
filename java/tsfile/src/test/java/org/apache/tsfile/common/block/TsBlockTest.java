@@ -31,6 +31,7 @@ import org.apache.tsfile.read.common.block.column.FloatColumn;
 import org.apache.tsfile.read.common.block.column.IntColumn;
 import org.apache.tsfile.read.common.block.column.LongColumn;
 import org.apache.tsfile.read.common.block.column.RunLengthEncodedColumn;
+import org.apache.tsfile.read.common.block.column.TimeColumn;
 import org.apache.tsfile.utils.Binary;
 
 import org.junit.Assert;
@@ -192,6 +193,32 @@ public class TsBlockTest {
     // the builder allocates more slots than the only row needs
     assertTrue(tsBlock.getColumn(0).getBinaries().length > tsBlock.getPositionCount());
     assertTrue(tsBlock.getSizeInBytes() >= bytes.length);
+  }
+
+  @Test
+  public void testBinaryTsBlockSizeAfterRefill() {
+    Column time = new TimeColumn(1);
+    Column column = new BinaryColumn(1);
+    TsBlock block = new TsBlock(time, column);
+    long emptySize = block.getSizeInBytes();
+    Binary small = new Binary(new byte[16]);
+    Binary large = new Binary(new byte[4096]);
+
+    column.getBinaries()[0] = small;
+    column.setPositionCount(1);
+    time.setPositionCount(1);
+    block.setPositionCount(1);
+    long smallBlockSize = block.getSizeInBytes();
+    assertTrue(smallBlockSize >= emptySize + small.ramBytesUsed());
+
+    block.reset();
+    assertEquals(emptySize, block.getSizeInBytes());
+    column.getBinaries()[0] = large;
+    column.setPositionCount(1);
+    time.setPositionCount(1);
+    block.setPositionCount(1);
+    assertEquals(
+        smallBlockSize - small.ramBytesUsed() + large.ramBytesUsed(), block.getSizeInBytes());
   }
 
   @Test

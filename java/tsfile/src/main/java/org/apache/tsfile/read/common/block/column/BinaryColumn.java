@@ -39,7 +39,6 @@ import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkArrayRa
 import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkReadablePosition;
 import static org.apache.tsfile.read.common.block.column.ColumnUtil.checkValidRegion;
 import static org.apache.tsfile.utils.RamUsageEstimator.NUM_BYTES_OBJECT_REF;
-import static org.apache.tsfile.utils.RamUsageEstimator.sizeOf;
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfBooleanArray;
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfObjectArray;
 
@@ -56,8 +55,9 @@ public class BinaryColumn implements Column {
   private final Binary[] values;
 
   private final long retainedSizeInBytes;
-  // calculated on demand, -1 means that it has to be calculated
-  private volatile long sizeInBytes = -1;
+  // A view uses the same value bytes and row count as the column they were measured on.
+  private long measuredValueSizeInBytes;
+  private int measuredPositionCount;
 
   public BinaryColumn(int initialCapacity) {
     this(0, 0, null, new Binary[initialCapacity]);
@@ -68,35 +68,15 @@ public class BinaryColumn implements Column {
   }
 
   public BinaryColumn(int arrayOffset, int positionCount, boolean[] valueIsNull, Binary[] values) {
-    if (arrayOffset < 0) {
-      throw new IllegalArgumentException(Messages.get("error.read.col_array_offset_negative"));
-    }
-    this.arrayOffset = arrayOffset;
-    if (positionCount < 0) {
-      throw new IllegalArgumentException(Messages.get("error.read.col_position_count_negative"));
-    }
-    this.positionCount = positionCount;
-
-    if (values.length - arrayOffset < positionCount) {
-      throw new IllegalArgumentException(Messages.get("error.read.col_values_length_lt_position"));
-    }
-    this.values = values;
-
-    if (valueIsNull != null && valueIsNull.length - arrayOffset < positionCount) {
-      throw new IllegalArgumentException(Messages.get("error.read.col_isnull_length_lt_position"));
-    }
-    this.valueIsNull = valueIsNull;
-
-    retainedSizeInBytes = INSTANCE_SIZE + sizeOfBooleanArray(positionCount) + sizeOf(values);
+    this(arrayOffset, positionCount, valueIsNull, values, null);
   }
 
-  // called by getRegion which already knows the underlying retainedSizeInBytes
   private BinaryColumn(
       int arrayOffset,
       int positionCount,
       boolean[] valueIsNull,
       Binary[] values,
-      long retainedSizeInBytes) {
+      BinaryColumn parent) {
     if (arrayOffset < 0) {
       throw new IllegalArgumentException(Messages.get("error.read.col_array_offset_negative"));
     }
@@ -115,7 +95,22 @@ public class BinaryColumn implements Column {
       throw new IllegalArgumentException(Messages.get("error.read.col_isnull_length_lt_position"));
     }
     this.valueIsNull = valueIsNull;
-    this.retainedSizeInBytes = retainedSizeInBytes;
+    if (parent == null) {
+      int end = arrayOffset + positionCount;
+      measuredPositionCount = positionCount;
+      measuredValueSizeInBytes = sizeOfValues(arrayOffset, end);
+      retainedSizeInBytes =
+          INSTANCE_SIZE
+              + sizeOfBooleanArray(positionCount)
+              + sizeOfObjectArray(values.length)
+              + measuredValueSizeInBytes
+              + sizeOfValues(0, arrayOffset)
+              + sizeOfValues(end, values.length);
+    } else {
+      retainedSizeInBytes = parent.retainedSizeInBytes;
+      measuredPositionCount = parent.measuredPositionCount;
+      measuredValueSizeInBytes = parent.measuredValueSizeInBytes;
+    }
   }
 
   @Override
@@ -231,24 +226,25 @@ public class BinaryColumn implements Column {
     return retainedSizeInBytes;
   }
 
+  /** Shared regions estimate their value bytes using the average over the measured positions. */
   @Override
   public long getSizeInBytes() {
-    long size = sizeInBytes;
-    if (size < 0) {
-      size = calculateSizeInBytes();
-      sizeInBytes = size;
+    long shallowSize =
+        INSTANCE_SIZE + sizeOfBooleanArray(positionCount) + sizeOfObjectArray(positionCount);
+    if (positionCount == measuredPositionCount) {
+      return shallowSize + measuredValueSizeInBytes;
     }
-    return size;
+    // Scale only the values. Dividing first avoids overflowing when the column is large.
+    long bytesPerPosition = measuredValueSizeInBytes / measuredPositionCount;
+    long remainder = measuredValueSizeInBytes % measuredPositionCount;
+    return shallowSize
+        + bytesPerPosition * positionCount
+        + remainder * positionCount / measuredPositionCount;
   }
 
-  /**
-   * Only the positions of this column count. The array can be longer than that: a builder
-   * over-allocates it, and a region shares the array of the column it was taken from.
-   */
-  private long calculateSizeInBytes() {
-    long size =
-        INSTANCE_SIZE + sizeOfBooleanArray(positionCount) + sizeOfObjectArray(positionCount);
-    for (int i = arrayOffset, end = arrayOffset + positionCount; i < end; i++) {
+  private long sizeOfValues(int from, int end) {
+    long size = 0;
+    for (int i = from; i < end; i++) {
       Binary value = values[i];
       if (value != null) {
         size += value.ramBytesUsed();
@@ -260,8 +256,7 @@ public class BinaryColumn implements Column {
   @Override
   public Column getRegion(int positionOffset, int length) {
     checkValidRegion(getPositionCount(), positionOffset, length);
-    return new BinaryColumn(
-        positionOffset + arrayOffset, length, valueIsNull, values, getRetainedSizeInBytes());
+    return new BinaryColumn(positionOffset + arrayOffset, length, valueIsNull, values, this);
   }
 
   @Override
@@ -282,8 +277,7 @@ public class BinaryColumn implements Column {
     if (fromIndex > positionCount) {
       throw new IllegalArgumentException(Messages.get("error.read.col_from_index_invalid"));
     }
-    return new BinaryColumn(
-        arrayOffset + fromIndex, positionCount - fromIndex, valueIsNull, values);
+    return getRegion(fromIndex, positionCount - fromIndex);
   }
 
   @Override
@@ -352,8 +346,19 @@ public class BinaryColumn implements Column {
 
   @Override
   public void setPositionCount(int count) {
+    int capacity =
+        valueIsNull == null ? values.length : Math.min(values.length, valueIsNull.length);
+    checkValidRegion(capacity - arrayOffset, 0, count);
+    if (count > positionCount && positionCount == measuredPositionCount) {
+      // Readers fill the backing array in place and publish the newly written positions here.
+      measuredValueSizeInBytes += sizeOfValues(arrayOffset + positionCount, arrayOffset + count);
+      measuredPositionCount = count;
+    } else if (count >= positionCount && count > 0) {
+      // The previous range was estimated, or existing positions have been filled again.
+      measuredValueSizeInBytes = sizeOfValues(arrayOffset, arrayOffset + count);
+      measuredPositionCount = count;
+    }
     positionCount = count;
-    sizeInBytes = -1;
   }
 
   @Override

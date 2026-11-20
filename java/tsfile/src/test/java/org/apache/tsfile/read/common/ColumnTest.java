@@ -46,6 +46,7 @@ import org.apache.tsfile.utils.TsPrimitiveType;
 
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -502,29 +503,61 @@ public class ColumnTest {
         new BinaryColumn(2, Optional.of(new boolean[] {true, false}), new Binary[] {null, value});
     Assert.assertEquals(compactColumn.getSizeInBytes(), overAllocatedColumn.getSizeInBytes());
     Assert.assertTrue(overAllocatedColumn.getSizeInBytes() >= 1024);
+    Assert.assertEquals(
+        compactColumn.getRegion(1, 1).getSizeInBytes(),
+        overAllocatedColumn.getRegion(1, 1).getSizeInBytes());
   }
 
   @Test
   public void binaryColumnSizeOfRegionTest() {
     Binary largeValue = new Binary(new byte[4096]);
     Binary smallValue = new Binary(new byte[16]);
-    Column column =
-        new BinaryColumn(
-            4, Optional.empty(), new Binary[] {largeValue, smallValue, smallValue, smallValue});
+    Binary[] values = new Binary[8];
+    Arrays.fill(values, smallValue);
+    values[2] = largeValue;
+    Column column = new BinaryColumn(8, Optional.empty(), values);
+    long smallBytes = smallValue.ramBytesUsed();
+    long largeBytes = largeValue.ramBytesUsed();
+    long threeRows = new BinaryColumn(3, Optional.empty(), new Binary[3]).getSizeInBytes();
 
-    // a region only counts its own positions, whatever else the shared array holds
-    Column largeRegion = column.getRegion(0, 1);
-    Assert.assertSame(column.getBinaries(), largeRegion.getBinaries());
-    Assert.assertEquals(column.getRegionCopy(0, 1).getSizeInBytes(), largeRegion.getSizeInBytes());
-    Assert.assertTrue(largeRegion.getSizeInBytes() >= 4096);
+    // A directly constructed range measures its own values during the retained-size scan.
+    Column direct = new BinaryColumn(2, 3, null, values);
+    Assert.assertEquals(threeRows + largeBytes + 2 * smallBytes, direct.getSizeInBytes());
+    Assert.assertEquals(column.getRegionCopy(2, 3).getSizeInBytes(), direct.getSizeInBytes());
+    long retainedArrays = new BinaryColumn(2, 3, null, new Binary[8]).getRetainedSizeInBytes();
+    Assert.assertEquals(
+        retainedArrays + largeBytes + 7 * smallBytes, direct.getRetainedSizeInBytes());
 
-    Column smallRegion = column.getRegion(1, 3);
-    Assert.assertEquals(column.getRegionCopy(1, 3).getSizeInBytes(), smallRegion.getSizeInBytes());
-    Assert.assertTrue(smallRegion.getSizeInBytes() < 4096);
+    // A shared view of the same positions takes three eighths of its parent's value bytes.
+    Column region = column.getRegion(2, 3);
+    long estimate = threeRows + (largeBytes + 7 * smallBytes) * 3 / 8;
+    Assert.assertSame(values, region.getBinaries());
+    Assert.assertEquals(column.getRetainedSizeInBytes(), region.getRetainedSizeInBytes());
+    Assert.assertEquals(estimate, region.getSizeInBytes());
+    Assert.assertEquals(estimate, column.getRegion(1, 4).subColumn(1).getSizeInBytes());
+    Assert.assertEquals(estimate, column.subColumn(5).getSizeInBytes());
 
-    Column subColumn = column.subColumn(1);
-    Assert.assertSame(column.getBinaries(), subColumn.getBinaries());
-    Assert.assertEquals(column.subColumnCopy(1).getSizeInBytes(), subColumn.getSizeInBytes());
+    long oneRow = new BinaryColumn(1, Optional.empty(), new Binary[1]).getSizeInBytes();
+    Assert.assertEquals(
+        oneRow + (largeBytes + 2 * smallBytes) / 3, direct.subColumn(2).getSizeInBytes());
+    Assert.assertEquals(new BinaryColumn(0).getSizeInBytes(), direct.subColumn(3).getSizeInBytes());
+  }
+
+  @Test
+  public void binaryColumnSizeReadsEachValueOnceTest() {
+    Binary value = Mockito.mock(Binary.class);
+    // The sum fits in a long, but multiplying it by the region length would overflow.
+    long bytes = Long.MAX_VALUE / 10;
+    Mockito.when(value.ramBytesUsed()).thenReturn(bytes);
+    Binary[] values = new Binary[8];
+    Arrays.fill(values, value);
+    Column column = new BinaryColumn(8, Optional.empty(), values);
+    long threeRows = new BinaryColumn(3, Optional.empty(), new Binary[3]).getSizeInBytes();
+
+    Assert.assertEquals(column.getRetainedSizeInBytes(), column.getSizeInBytes());
+    Assert.assertEquals(threeRows + 3 * bytes, column.getRegion(2, 3).getSizeInBytes());
+    Assert.assertEquals(threeRows + 3 * bytes, column.subColumn(5).getSizeInBytes());
+    Mockito.verify(value, Mockito.times(values.length)).ramBytesUsed();
   }
 
   @Test
@@ -536,6 +569,34 @@ public class ColumnTest {
     column.setPositionCount(1);
     Column compactColumn = new BinaryColumn(1, Optional.empty(), new Binary[] {value});
     Assert.assertEquals(compactColumn.getSizeInBytes(), column.getSizeInBytes());
+  }
+
+  @Test
+  public void binaryColumnSizeAfterInPlaceWritesTest() {
+    Binary small = new Binary(new byte[16]);
+    Binary large = new Binary(new byte[4096]);
+    Column column = new BinaryColumn(2);
+    long emptySize = column.getSizeInBytes();
+    column.getBinaries()[0] = small;
+    column.setPositionCount(1);
+    Assert.assertEquals(
+        new BinaryColumn(1, Optional.empty(), new Binary[] {small}).getSizeInBytes(),
+        column.getSizeInBytes());
+    column.getBinaries()[1] = large;
+    column.setPositionCount(2);
+    long fullSize =
+        new BinaryColumn(2, Optional.empty(), new Binary[] {small, large}).getSizeInBytes();
+    Assert.assertEquals(fullSize, column.getSizeInBytes());
+
+    column.setPositionCount(1);
+    column.setPositionCount(2);
+    Assert.assertEquals(fullSize, column.getSizeInBytes());
+    column.getBinaries()[0] = large;
+    column.setPositionCount(2);
+    Assert.assertEquals(
+        fullSize - small.ramBytesUsed() + large.ramBytesUsed(), column.getSizeInBytes());
+    column.reset();
+    Assert.assertEquals(emptySize, column.getSizeInBytes());
   }
 
   @Test
