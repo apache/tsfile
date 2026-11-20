@@ -35,6 +35,9 @@ an explicit portable encoding for numbers or structures.
   `TsFileProperties` value distinguishes null from an empty byte vector.
 - C: use the declarations and matching free function in
   `cpp/src/cwrapper/tsfile_cwrapper.h`; do not guess buffer ownership.
+- Go: call `Writer.AddProperty(string, []byte)`. Both the key and the value must
+  be non-empty, and the current binding has no property reader; use another
+  binding to inspect properties.
 
 The Java table point-count metadata is a reserved use of file properties. Use
 `references/java-tools.md` for inspection or backfill instead of editing those
@@ -66,9 +69,14 @@ arguments. TAG values are strings; do not apply a TAG builder to FIELD columns.
 - C wrapper: construct `TagFilterHandle` values with the declared factory and
   composition functions, pass them to the tag-filter query entry point, and
   release them with `tsfile_tag_filter_free`.
+- Go factories: `tsfile.Eq`, `Neq`, `Lt`, `Lte`, `Gt`, `Gte`, and `Between`,
+  composed with `And`, `Or`, and `Not`, then passed as `tsfile.WithTagFilter`
+  to `Reader.Query`. The current binding has no regexp, LIKE, or explicit
+  null-predicate factories.
 
 Do not translate operator names mechanically across bindings: Java additionally
-exposes LIKE, while current C++/Python expose explicit null predicates.
+exposes LIKE; current C++/Python expose explicit null predicates; current Go
+exposes only comparison, range, and logical composition.
 
 ## Source Anchors
 
@@ -79,6 +87,7 @@ exposes LIKE, while current C++/Python expose explicit null predicates.
   `python/tests/test_tag_filter*.py`
 - C/C++: `cpp/src/reader/filter/tag_filter.h`,
   `cpp/src/reader/tsfile_reader.h`, and `cpp/src/cwrapper/tsfile_cwrapper.h`
+- Go: `go/tsfile/tag_filter.go`, `go/tsfile/reader.go`, and `go/tsfile/writer.go`
 - Properties: the current writer/reader interfaces plus
   `python/tests/test_tsfile_properties.py` and
   `cpp/test/writer/tsfile_properties_test.cc`

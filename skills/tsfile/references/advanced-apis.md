@@ -41,8 +41,9 @@ Before writer creation, use Java config `setAllowNonDecreasingTimestamps(true)`,
 C++ `common::set_allow_non_decreasing_timestamps(true)` (C: without `common::`),
 or Python writer argument `allow_non_decreasing_timestamps=True` (default `False`).
 This is process-wide, including Python constructor defaults; avoid conflicting
-writers. Decreases remain invalid. See `properties-filters.md` for the persisted
-policy; CLI `write` has no opt-in.
+writers. Decreases remain invalid. Go exposes no timestamp-policy switch and
+follows the process-wide native default. See `properties-filters.md` for the
+persisted policy; CLI `write` has no opt-in.
 
 ## Timeseries Metadata
 

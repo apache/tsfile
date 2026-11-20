@@ -88,6 +88,26 @@ check_python() {
     echo "Python ${version}"
 }
 
+check_go() {
+    if ! command_exists go; then
+        echo "Go 1.22 or newer is required" >&2
+        return 1
+    fi
+
+    local version major minor
+    version="$(go env GOVERSION)"
+    version="${version#go}"
+    major="${version%%.*}"
+    version="${version#*.}"
+    minor="${version%%[!0-9]*}"
+    if [[ ! "${major}" =~ ^[0-9]+$ ]] || [[ ! "${minor}" =~ ^[0-9]+$ ]] \
+        || (( major < 1 || (major == 1 && minor < 22) )); then
+        echo "Go 1.22 or newer is required; found ${major}.${minor}" >&2
+        return 1
+    fi
+    echo "Go ${major}.${minor}"
+}
+
 build_tsfile() {
     case "${1}" in
         java)
@@ -102,10 +122,18 @@ build_tsfile() {
             check_python
             "${MVNW}" -P with-python clean package -DskipTests
             ;;
+        go)
+            check_cpp
+            check_go
+            "${MVNW}" -P with-cpp -Dbuild.test=OFF -DskipTests package
+            (cd go && go build ./...)
+            ;;
         all)
             check_cpp
             check_python
+            check_go
             "${MVNW}" -P with-java,with-python clean package -DskipTests
+            (cd go && go build ./...)
             ;;
         *)
             echo "Unknown language: ${1}" >&2
@@ -145,10 +173,18 @@ test_tsfile() {
             check_python
             "${MVNW}" -P with-python clean verify
             ;;
+        go)
+            check_cpp
+            check_go
+            "${MVNW}" -P with-cpp -Dbuild.test=OFF -DskipTests package
+            (cd go && go vet ./... && go test ./... && go test -race ./...)
+            ;;
         all)
             check_cpp
             check_python
+            check_go
             "${MVNW}" -P with-java,with-python clean verify
+            (cd go && go vet ./... && go test ./... && go test -race ./...)
             ;;
         *)
             echo "Unknown test target: ${1}" >&2
@@ -166,9 +202,9 @@ Usage: build_tsfile.sh <command> [language]
 Commands:
   check
   validate-assets
-  build <java|cpp|python|all>
+  build <java|cpp|python|go|all>
   install <java|all>
-  test <java|cpp|python|all>
+  test <java|cpp|python|go|all>
   clean
 
 Baseline:
@@ -176,6 +212,7 @@ Baseline:
   Maven: repository ./mvnw (Maven 3.6+)
   C++: CMake 3.11+, C++11 compiler, make, clang-format, UUID headers where required
   Python: Python 3.9+, C++ prerequisites
+  Go: Go 1.22+, cgo-enabled C/C++ toolchain, C++ prerequisites
 EOF
 }
 
@@ -185,6 +222,7 @@ case "${1:-}" in
         check_maven
         check_cpp
         check_python
+        check_go
         ;;
     validate-assets)
         "${SCRIPT_DIR}/validate-assets.sh" --root "${TSFILE_ROOT}"

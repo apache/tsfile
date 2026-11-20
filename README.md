@@ -46,21 +46,21 @@ TsFile is the first existing standard file format for time series data. Despite 
 
 TsFile offers several distinctive features and benefits:
 
-- Multi Language Independent Use: Multiple language SDK can be used to directly read and write TsFile, making it possible for some lightweight data reading and writing scenarios.
+- Multi Language Support: SDKs for Java, C++, Python, and Go can directly read and write TsFile, making some lightweight data reading and writing scenarios possible.
 
 - Efficient Writing and Compression: A column storage format tailored for time series, organizing data by device and ensuring continuous storage of data for each sequence, minimizing storage space. Compared to CSV, the compression ratio can be increased by more than 90%.
 
-- High Query Performance: By indexing devices, measurement, and time dimensions, TsFile implements fast filtering and querying of temporal data based on specific time ranges. Compared to general file formats, query throughput can be increased by 2-10 times.
+- High Query Performance: By indexing devices, measurements, and time dimensions, TsFile implements fast filtering and querying of temporal data based on specific time ranges. Compared to general file formats, query throughput can be increased by 2-10 times.
 
-- Open Integration: TsFile is the underlying storage file format of the temporal database IoTDB, which can form a pluggable storage computing separation architecture with IoTDB. TsFile supports compatibility with Spark Flink and other big data software establish seamless ecosystem integration to ensure compatibility and interoperability across different data processing environments, and achieve deep analysis of temporal data across ecosystems.
+- Open Integration: TsFile is the underlying storage file format of the time-series database IoTDB, and together they form a pluggable storage-compute separation architecture. TsFile integrates seamlessly with Spark, Flink, and other big data software, ensuring interoperability across different data processing environments and enabling deep analysis of time-series data across ecosystems.
 
 ## TsFile Basic Concepts
 
-TsFile can manage the time series data of multiple devices. Each device can have different measurement.
+TsFile can manage the time series data of multiple devices. Each device can have different measurements.
 
 Each measurement of each device corresponds to a time series.
 
-The TsFile Scheme defines a set of measurement for all devices, as shown in the table below (m1~m5)
+The TsFile schema defines a set of measurements for all devices, as shown in the table below (m1~m5)
 
 | Time | deviceId | m1 | m2 | m3 | m4 | m5 |
 |------|----------|----|----|----|----|----|
@@ -131,6 +131,13 @@ For the full encoding/compression matrix, see [Docs](https://iotdb.apache.org/Us
 [C++](./cpp/README.md)
 
 [Python](./python/README.md)
+
+[Go](./go/README.md)
+
+The Go SDK is a cgo binding over the C++ implementation: build the C++ library first and
+keep `CGO_ENABLED=1` (Go 1.22 or newer). It currently covers the table model, with Tablet
+and Arrow batch writes and queries that take time-range, tag-filter, pagination, and
+batch-size options.
 
 ## Command-Line Tool (tsfile-cli)
 

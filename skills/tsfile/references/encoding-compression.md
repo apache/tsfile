@@ -70,6 +70,8 @@ allocations with `CompressorFactory::free`.
 
 Python exposes schema encoding/compression enums through the native binding but
 does not expose these Java/C++ low-level factories as an equivalent Python API.
+Go writes through the C++ table writer and therefore uses the C++ defaults; the
+current Go binding exposes no encoding or compression selectors.
 
 ALP is C++/Python-only; Java cannot query ALP series. CLI encoding overrides
 follow the C++ encoder/decoder factory support matrix.

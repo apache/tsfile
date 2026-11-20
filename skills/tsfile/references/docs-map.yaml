@@ -30,6 +30,8 @@ skill_baseline:
   java_release: "17"
   cpp_sdk_version: "2.5.1.dev"
   python_package_version: "2.5.1.dev"
+  go_module: github.com/apache/tsfile/go
+  go_language_version: "1.22.0"
 
 official_url_prefixes:
   - https://tsfile.apache.org/
@@ -109,6 +111,14 @@ language_guides:
       - cpp/examples/c_examples/
       - cpp/src/cwrapper/tsfile_cwrapper.h
       - skills/tsfile/references/c.md
+  go:
+    version_scope: current-source
+    official_guide: none
+    local_authorities:
+      - go/README.md
+      - go/examples/table_read_write/
+      - go/tsfile/
+      - skills/tsfile/references/go.md
 
 dataframe:
   guide_zh: https://tsfile.apache.org/zh/UserGuide/latest/DataFrame/TsFileDataFrame.html
@@ -145,6 +155,9 @@ current_capabilities:
       - python/tsfile/tsfile_reader.pyx
       - python/tsfile/tsfile_writer.pyx
       - python/tsfile/tsfile_table_writer.py
+      - go/tsfile/tag_filter.go
+      - go/tsfile/reader.go
+      - go/tsfile/writer.go
       - skills/tsfile/references/properties-filters.md
   cpp_build_and_parallel_write:
     local_authorities:

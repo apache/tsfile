@@ -31,7 +31,7 @@ current-source baseline.
 
 Usage: resolve-version.sh [--root <checkout>]
 
-Output is line-oriented key=value data for Maven/Java, C++, Python, and Git.
+Output is line-oriented key=value data for Maven/Java, C++, Python, Go, and Git.
 If no checkout is discovered, version fields come from the skill baseline in
 references/docs-map.yaml. An invalid explicit --root remains an error.
 EOF
@@ -75,6 +75,8 @@ extract_skill_metadata() {
     baseline_java_release="$(read_baseline_value java_release)"
     baseline_cpp_version="$(read_baseline_value cpp_sdk_version)"
     baseline_python_version="$(read_baseline_value python_package_version)"
+    baseline_go_module="$(read_baseline_value go_module)"
+    baseline_go_version="$(read_baseline_value go_language_version)"
 
     [[ -n "${baseline_scope}" ]] || fail "skill baseline scope not found"
     [[ -n "${baseline_source_ref}" ]] || fail "skill baseline source ref not found"
@@ -86,6 +88,10 @@ extract_skill_metadata() {
         fail "skill baseline C++ version not found"
     [[ -n "${baseline_python_version}" ]] || \
         fail "skill baseline Python version not found"
+    [[ -n "${baseline_go_module}" ]] || \
+        fail "skill baseline Go module not found"
+    [[ -n "${baseline_go_version}" ]] || \
+        fail "skill baseline Go language version not found"
     offline_reference_scope="${baseline_scope}"
 }
 
@@ -97,6 +103,8 @@ print_result() {
     printf 'java_release=%s\n' "${java_release}"
     printf 'cpp_sdk_version=%s\n' "${cpp_version}"
     printf 'python_package_version=%s\n' "${python_version}"
+    printf 'go_module=%s\n' "${go_module}"
+    printf 'go_language_version=%s\n' "${go_version}"
     printf 'git_commit=%s\n' "${git_commit}"
     printf 'git_ref=%s\n' "${git_ref}"
     printf 'git_dirty=%s\n' "${git_dirty}"
@@ -112,6 +120,8 @@ print_baseline_result() {
     java_release="${baseline_java_release}"
     cpp_version="${baseline_cpp_version}"
     python_version="${baseline_python_version}"
+    go_module="${baseline_go_module}"
+    go_version="${baseline_go_version}"
     git_commit="not-recorded"
     git_ref="${baseline_source_ref}"
     git_dirty="not-applicable"
@@ -217,6 +227,17 @@ python_version="$(
         "${TSFILE_ROOT}/python/pyproject.toml" | sed -n '1p'
 )"
 [[ -n "${python_version}" ]] || fail "Python package version not found"
+
+[[ -f "${TSFILE_ROOT}/go/go.mod" ]] || \
+    fail "Go metadata not found: ${TSFILE_ROOT}/go/go.mod"
+go_module="$(
+    awk '$1 == "module" { print $2; exit }' "${TSFILE_ROOT}/go/go.mod"
+)"
+[[ -n "${go_module}" ]] || fail "Go module path not found"
+go_version="$(
+    awk '$1 == "go" { print $2; exit }' "${TSFILE_ROOT}/go/go.mod"
+)"
+[[ -n "${go_version}" ]] || fail "Go language version not found"
 
 git_commit="not-recorded"
 git_ref="not-recorded"

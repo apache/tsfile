@@ -18,7 +18,8 @@
 name: tsfile
 description: >-
   Work with the current Apache TsFile SDKs, tools, and file format. Use for
-  Java, Python, C++, or C reads and writes; Python DataFrame and Arrow batches;
+  Java, Python, C++, Go, or C reads and writes; Go cgo table-model bindings;
+  Python DataFrame and Arrow batches;
   Java CSV/Parquet/Arrow import; file properties; TAG filters; query-by-row and
   metadata APIs; C++ incomplete-writer recovery and append; static/shared C++
   builds; parallel and TsBlock writes; encoding/compression factories; schema
@@ -84,6 +85,8 @@ Read only the files required by the current task:
 - Python SDK code, seekable sources, local read backends, and parallel controls:
   `references/python.md`
 - C++ SDK code and resource management: `references/cpp.md`
+- Go SDK code, cgo build prerequisites, table-model read/write, Arrow batches,
+  and result-set or Tag-filter usage: `references/go.md`
 - C wrapper entry points and lifecycle: `references/c.md`
 - Version resolution, build requirements, and cross-version checks:
   `references/compatibility.md`
@@ -120,6 +123,8 @@ or language bindings.
 - Use `references/advanced-apis.md` for C++ crash recovery and append through
   `RestorableTsFileIOWriter`, plus the remaining current advanced read and write
   surfaces listed in Offline Reference Routing.
+- Use `references/go.md` for the cgo-backed Go SDK. It covers the table model
+  only; do not invent tree-model bindings or claim MSVC Go test coverage.
 
 Treat these as baseline capabilities. Do not add alternate calls, degraded
 results, or compatibility branches for earlier TsFile source lines unless the
@@ -142,13 +147,13 @@ user explicitly targets a different checkout or release.
 ## Bundled Resources
 
 - Run `scripts/resolve-version.sh [--root <checkout>]` to obtain Maven, C++,
-  Python, and Git version metadata without loading or copying source files. Its
+  Python, Go, and Git version metadata without loading or copying source files. Its
   output schema remains stable when no checkout is discovered and then reports
   the baseline shipped with this skill.
 - When a compatible checkout is available, use maintained examples from the
-  same commit: `java/examples/`, `python/examples/example.py`, or
-  `cpp/examples/`. Do not copy an `assets/` template merely to answer an API
-  question.
+  same commit: `java/examples/`, `python/examples/example.py`,
+  `cpp/examples/`, or `go/examples/table_read_write/`. Do not copy an `assets/`
+  template merely to answer an API question.
 - When no compatible checkout is available and the user requests a starter
   project, copy only the needed files from `assets/`. Supply the target Java
   dependency as `-Dtsfile.version=<version>`; the template intentionally

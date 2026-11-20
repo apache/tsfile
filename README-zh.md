@@ -48,7 +48,7 @@ TsFile 通过自研实现了时序数据高效率管理、高灵活传输，并�
 
 - 时序模型：专门为物联网设计的数据模型，每个时间序列与特定设备相关联，所有设备通过分层结构相互连接；
 
-- 跨语言独立使用：可以使用多种语言的 SDK 直接读写 TsFile，使得一些轻量级的数据读写场景成为可能。
+- 跨语言独立使用：可以使用 Java、C++、Python、Go 等多种语言的 SDK 直接读写 TsFile，使得一些轻量级的数据读写场景成为可能。
 
 - 高效写入和压缩：为时间序列量身定制的列式存储格式，将数据按设备进行组织，并保证每个序列的数据连续存储，最小化存储空间。相比 CSV，压缩比可提升 90% 以上。
 
@@ -132,6 +132,11 @@ TsFile、CSV 和 Parquet 三种文件格式的比较
 
 [Python](./python/README-zh.md)
 
+[Go](./go/README.md)（英文）
+
+Go SDK 通过 cgo 封装 C++ 实现：需要先构建 C++ 库，并保持 `CGO_ENABLED=1`（Go 1.22 及以上）。
+目前支持表模型，可用 Tablet 和 Arrow 批量写入，查询支持时间范围、标签过滤、分页和批次大小等选项。
+
 ## 命令行工具（tsfile-cli）
 
 Apache TsFile 提供了命令行工具 `tsfile-cli`，这是一个单文件、对管道友好的工具，可直接在
@@ -162,7 +167,7 @@ shell 中查看**并**导入 `.tsfile` 文件。`ls`、`meta`、`schema`、`stat
 
 ```bash
 tsfile-cli ls data.tsfile                          # 列出表 / 设备
-tsfile-cli meta data.tsfile                        # 文件概览（模型、数量、时间范围、大小）
+tsfile-cli meta data.tsfile                        # 文件概览（大小、格式版本、数据模型）
 tsfile-cli head -n 20 data.tsfile                  # 前 20 行
 tsfile-cli cat -m temp -m humidity -f csv data.tsfile # 以 CSV 流式输出指定列
 
@@ -199,3 +204,8 @@ cpp/target/build/bin/tsfile-cli --help
 ```
 
 完整的命令与选项说明见 [`cpp/tools/README.md`](./cpp/tools/README.md)。
+
+## 网站贡献
+
+如需修改 [Apache TsFile 官网](https://tsfile.apache.org/) 的内容，请以
+[`docs/dev`](https://github.com/apache/tsfile/tree/docs/dev) 分支为基线提交 PR。

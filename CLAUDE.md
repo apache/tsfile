@@ -25,7 +25,7 @@ This file provides repository-wide guidance for coding agents. `AGENTS.md` is a 
 
 ## Project Overview
 
-Apache TsFile is a columnar storage file format designed for time series data. The project provides implementations in three languages, each in its own top-level directory. The main branch is `develop`.
+Apache TsFile is a columnar storage file format designed for time series data. The project provides implementations in four languages, each in its own top-level directory. The main branch is `develop`.
 
 TsFile uses a hierarchical storage model: **Page → Chunk → ChunkGroup → File**. Data is organized by device, with each device's measurements stored as individual time series. Two write models exist: **aligned** (all measurements share timestamps) and **non-aligned** (independent timestamps per measurement).
 
@@ -36,14 +36,20 @@ TsFile uses a hierarchical storage model: **Page → Chunk → ChunkGroup → Fi
 | `java/`   | Java     | Maven        | [java/CLAUDE.md](java/CLAUDE.md) |
 | `cpp/`    | C++      | CMake        | [cpp/CLAUDE.md](cpp/CLAUDE.md) |
 | `python/` | Python   | setuptools + Cython | [python/CLAUDE.md](python/CLAUDE.md) |
+| `go/`     | Go       | Go toolchain (cgo) | [go/README.md](go/README.md) |
 
-The root `pom.xml` orchestrates all three via Maven profiles:
+The root `pom.xml` orchestrates Java, C++, and Python via Maven profiles:
 
 ```bash
 ./mvnw clean verify -P with-java       # Java only
 ./mvnw clean verify -P with-cpp        # C++ only
 ./mvnw clean verify -P with-python     # Python (requires C++ built first)
 ```
+
+The Go module is not part of the Maven build. It is a cgo binding to the C++
+library and is built and tested with the Go toolchain in `go/` (`make test`,
+`make race`, `make vet`), against a C++ library already built under
+`cpp/target/build`.
 
 ### Local Iteration vs. Pre-Push Verification
 
@@ -55,6 +61,7 @@ These two entry points serve different purposes and are not interchangeable.
 ./cpp/build/Release/lib/TsFile_Test                      # C++ test binary
 ./cpp/build/Release/lib/TsFile_Test --gtest_filter=Foo.*  # narrow to relevant cases
 cd python && pytest tests/                                # Python tests
+cd go && make test                                        # Go tests (C++ already built)
 ```
 
 **Before committing or pushing**, run the Maven entry point that CI uses, from the repository root:
@@ -72,8 +79,9 @@ CI compiles, links, and packages through Maven, so running the test binary alone
 ## Cross-Module Dependencies
 
 - **Python depends on C++**: The Python module uses Cython to bind to the C++ shared library (`libtsfile`). C++ must be built before Python (`-P with-python` implies C++ build).
+- **Go depends on C++**: The Go module uses cgo against the C++ headers and shared library under `cpp/target/build`. C++ must be built before the Go tests.
 - **Java is independent**: The Java implementation shares no build-time dependency with C++ or Python.
-- All three implementations read/write the same TsFile binary format.
+- All implementations read/write the same TsFile binary format.
 
 ## Codec and File-Format Compatibility
 
@@ -91,8 +99,9 @@ CI compiles, links, and packages through Maven, so running the test binary alone
 ## Code Formatting
 
 ```bash
-./mvnw spotless:apply    # Format all languages (Java: Google Java Format, C++: clang-format, Python: Black)
+./mvnw spotless:apply    # Format Java, C++, and Python (Google Java Format, clang-format, Black)
 ./mvnw spotless:check    # Check formatting without modifying
+cd go && make fmt        # Format Go sources with gofmt
 ```
 
 ## Required Checks Before Pushing
@@ -112,8 +121,11 @@ For changes requiring full verification, run:
 ./mvnw clean verify -P with-cpp -Denable.asan=ON \
   -Dbuild.type=RelWithDebInfo -Denable.lzma2=ON
 
-# Explicit formatting check across all three language modules.
+# Explicit formatting check across the Java, C++, and Python modules.
 ./mvnw spotless:check -P with-java,with-python
+
+# Go module: build C++ first, then run vet, tests, and the race detector.
+cd go && make vet && make test && make race
 ```
 
 - Do not substitute focused tests, a build-only command, or an earlier revision's results for the full suite. Do not bypass tests, formatting, or other validation with skip flags in these verification runs.
@@ -132,7 +144,7 @@ Java logs and exception messages use a runtime `ResourceBundle` approach so the 
 
 Use the complete ASF source header in new TsFile-authored files that support comments.
 Match the comment syntax to the file format. Use `<!-- -->` for Markdown, `/* */`
-for Java and C++, and `#` for Python. Preserve third-party license and copyright
+for Java and C++, `//` for Go, and `#` for Python. Preserve third-party license and copyright
 notices. [ASF source header policy](https://www.apache.org/legal/src-headers.html)
 
 Keep license headers intact during bulk replacements and refactors. When adding

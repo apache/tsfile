@@ -20,10 +20,11 @@ under the License.
 # TsFile Go API
 
 This module provides a cgo binding to the Apache TsFile C++ implementation.
-It supports Linux and macOS with cgo enabled. Windows MinGW builds are covered
-by CI; MSVC CI verifies the native DLL/import-library artifacts. The native
-library must be built locally before running Go code; this module does not
-download or install native dependencies.
+It supports Linux, macOS, and Windows with a cgo-enabled toolchain; CI runs the
+Go tests on Linux, macOS, and Windows MinGW, and verifies that the MSVC build
+produces the native DLL/import-library artifacts. The native library must be
+built locally before running Go code; this module does not download or install
+native dependencies.
 
 Prerequisites are Go 1.22 or newer, a C/C++ toolchain, CMake, Maven, a JDK,
 and `CGO_ENABLED=1`.

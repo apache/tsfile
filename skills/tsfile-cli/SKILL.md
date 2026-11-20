@@ -30,8 +30,8 @@ files. Source `cpp/tools/`. Result data goes to stdout except `export`,
 
 ## Scope
 
-Use this skill only for the C++ `tsfile-cli` binary. For Java, Python, C++, or C
-SDK integration, schema design, Java CSV/Parquet/Arrow import, Java table
+Use this skill only for the C++ `tsfile-cli` binary. For Java, Python, C++, Go,
+or C SDK integration, schema design, Java CSV/Parquet/Arrow import, Java table
 point-count metadata checks or backfill, and programmatic tree-model writes,
 load the sibling `tsfile` skill at `../tsfile/SKILL.md`.
 
