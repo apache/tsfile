@@ -393,6 +393,42 @@ not be modified or truncated while a mapped reader is open. After a mapping is
 created successfully, the original file descriptor is closed; the mapping
 itself remains valid until the reader closes.
 
+### Object Storage Read Backend
+
+With `ENABLE_S3=ON` (the default) and libcurl available at configure time, the
+SDK can read a TsFile directly from S3-compatible object storage (AWS S3,
+Alibaba Cloud OSS, MinIO, ...) with signed HTTP range requests. Check
+`s3_support_available()` when the build environment is unknown.
+
+```cpp
+#include "file/cached_random_access_read_file.h"
+#include "file/s3_random_access_read_file.h"
+#include "reader/tsfile_reader.h"
+
+storage::S3Options options;
+options.endpoint = "https://oss-cn-beijing.aliyuncs.com";  // or AWS/MinIO
+options.bucket = "bucket";
+options.key = "path/example.tsfile";
+options.access_key_id = "...";       // empty pair => anonymous access
+options.secret_access_key = "...";
+options.region = "cn-beijing";       // derived from the endpoint when empty
+std::string error;
+std::unique_ptr<storage::RandomAccessReadFile> source =
+    storage::open_s3_read_file(options, &error);
+
+storage::ReadCacheOptions cache;
+cache.prefetch_threads = 4;          // background grouped range GETs
+source = storage::make_cached_read_file(std::move(source), cache);
+
+storage::TsFileReader reader;
+reader.open(std::move(source));
+```
+
+Signing failures and HTTP problems surface through `error`, and `read()`
+retries transient failures `max_retries` times. The block cache wrapper is
+optional but strongly recommended for remote sources; see
+`ReadCacheOptions` for block size, capacity and read-ahead.
+
 ## Use TsFile
 
 You can find examples on how to read and write data in `demo_read.cpp` and `demo_write.cpp` located under `./examples/cpp_examples`. There are also examples under `./examples/c_examples` on how to use a C-style API to read and write data in a C environment. The examples will be built automatically when you run the main build command.

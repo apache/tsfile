@@ -83,7 +83,21 @@ with TsFileReader("data.tsfile") as reader:
   config keys: `parallel_read_enabled_`, `parallel_write_enabled_`, `thread_count_`.
 - `TsFileReader` also accepts binary objects with `seek`, `tell`, and `read(size)`
   (e.g. fsspec streams); it retains the object, preserves its cursor, and does
-  not close it. The caller owns the source.
+  not close it. The caller owns the source. File objects are served through a
+  block cache with sequential read-ahead (`read_cache_enabled_`,
+  `read_cache_block_size_`, `read_cache_capacity_`,
+  `read_cache_max_readahead_blocks_`; defaults on/256 KiB/256 MiB/8), so a
+  remote scan issues roughly `file_size / block_size` requests. Local paths are
+  not cached this way.
+- `TsFileReader("s3://bucket/key", s3={...})` reads object storage natively
+  over signed HTTP range requests when the build has libcurl
+  (`s3_available()`); `oss://` works through the same S3-compatible API.
+  `s3` keys: `endpoint`, `region`, `access_key_id`, `secret_access_key`,
+  `session_token`, `path_style` (default True), `connect_timeout_ms`,
+  `request_timeout_ms`, `max_retries`, `prefetch_threads` (default 4, 0 =
+  synchronous only). Environment fallbacks: TSFILE_S3_* / AWS_*; empty
+  credentials mean anonymous access. Prefetch workers fetch contiguous block
+  groups in parallel during scans.
 - For local paths, `set_file_read_backend(FileReadBackend.MMAP)`
   affects subsequently opened files; PREAD is default. See `advanced-apis.md`
   for backend semantics. File objects do not use this setting.

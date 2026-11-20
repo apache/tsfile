@@ -79,6 +79,20 @@ typedef struct ConfigValue {
     // being reset by init_config_value(), so a setter called before
     // libtsfile_init() is not clobbered.
     bool allow_non_decreasing_timestamps_ = false;
+    // Block cache for non-local byte sources: a Python file object today, a
+    // native object-storage backend later.  A source opened from a path never
+    // goes through this cache (pread/mmap plus the OS page cache is cheaper).
+    // Remote reads arrive as small, scattered page reads; serving them out of
+    // block-aligned cache entries with sequential read-ahead collapses a full
+    // scan into roughly file_size / block_size requests.
+    //
+    // Like thread_count_/sync_on_close_ these keep their in-class defaults
+    // instead of being reset by init_config_value(), so a setter called before
+    // the first reader is not clobbered by init-time defaults.
+    bool read_cache_enabled_ = true;
+    uint32_t read_cache_block_size_ = 256 * 1024;
+    uint32_t read_cache_capacity_ = 256 * 1024 * 1024;
+    uint32_t read_cache_max_readahead_blocks_ = 8;
 } ConfigValue;
 
 extern void init_config_value();

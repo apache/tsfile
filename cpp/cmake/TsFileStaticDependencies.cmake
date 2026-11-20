@@ -153,6 +153,10 @@ tsfile_install_static_dependency(LZOKAY "${TSFILE_LZOKAY_SOURCE}" lzokay::lzokay
         "find_dependency(lzokay ${TSFILE_LZOKAY_MIN_VERSION} CONFIG)")
 tsfile_install_static_dependency(ZLIB "${TSFILE_ZLIB_SOURCE}" ZLIB::ZLIB
         "find_dependency(ZLIB ${TSFILE_ZLIB_MIN_VERSION})")
+if (ENABLE_S3 AND CURL_FOUND)
+    tsfile_install_static_dependency(CURL "SYSTEM" CURL::libcurl
+            "find_dependency(CURL)")
+endif ()
 tsfile_install_static_dependency(ZSTD "${TSFILE_ZSTD_SOURCE}"
         "${TSFILE_ZSTD_SYSTEM_TARGET}"
         "find_dependency(zstd ${TSFILE_ZSTD_MIN_VERSION} CONFIG)")

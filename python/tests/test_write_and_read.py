@@ -1109,3 +1109,38 @@ def test_tree_all_datatype_query_to_dataframe_variants():
 if __name__ == "__main__":
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     pytest.main(["test_write_and_read.py::test_row_record_write_and_read", "-s", "-v"])
+
+
+def test_read_cache_config_keys():
+    from tsfile import get_tsfile_config, set_tsfile_config
+
+    original = get_tsfile_config()
+    cache_keys = (
+        "read_cache_enabled_",
+        "read_cache_block_size_",
+        "read_cache_capacity_",
+        "read_cache_max_readahead_blocks_",
+    )
+    assert set(cache_keys) <= set(original)
+    try:
+        set_tsfile_config(
+            {
+                "read_cache_enabled_": False,
+                "read_cache_block_size_": 1 << 20,
+                "read_cache_capacity_": 64 * 1024 * 1024,
+                "read_cache_max_readahead_blocks_": 4,
+            }
+        )
+        config = get_tsfile_config()
+        assert config["read_cache_enabled_"] is False
+        assert config["read_cache_block_size_"] == 1 << 20
+        assert config["read_cache_capacity_"] == 64 * 1024 * 1024
+        assert config["read_cache_max_readahead_blocks_"] == 4
+        with pytest.raises(TypeError):
+            set_tsfile_config({"read_cache_enabled_": 1})
+        with pytest.raises(TypeError):
+            set_tsfile_config({"read_cache_block_size_": -1})
+        with pytest.raises(TypeError):
+            set_tsfile_config({"read_cache_capacity_": 1 << 40})
+    finally:
+        set_tsfile_config({key: original[key] for key in cache_keys})

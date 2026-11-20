@@ -137,9 +137,9 @@ jobs:
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             if command -v apt-get >/dev/null 2>&1; then
               sudo apt-get update
-              sudo apt-get install -y uuid-dev
+              sudo apt-get install -y uuid-dev libcurl4-openssl-dev
             elif command -v yum >/dev/null 2>&1; then
-              sudo yum install -y libuuid-devel
+              sudo yum install -y libuuid-devel libcurl-devel
             fi
             python -m venv "$RUNNER_TEMP/clang-format"
             "$RUNNER_TEMP/clang-format/bin/python" -m pip install --only-binary=:all: clang-format==17.0.6

@@ -404,8 +404,15 @@ exts = [
     Extension("tsfile.tsfile_py_cpp", ["tsfile/tsfile_py_cpp.pyx"], **common),
     Extension(
         "tsfile.tsfile_reader",
-        ["tsfile/tsfile_reader.pyx", "tsfile/python_random_access_read_file.cc"],
-        depends=["tsfile/python_random_access_read_file.h"],
+        [
+            "tsfile/tsfile_reader.pyx",
+            "tsfile/python_random_access_read_file.cc",
+            "tsfile/python_s3_read_file.cc",
+        ],
+        depends=[
+            "tsfile/python_random_access_read_file.h",
+            "tsfile/python_s3_read_file.h",
+        ],
         **common,
     ),
     Extension(

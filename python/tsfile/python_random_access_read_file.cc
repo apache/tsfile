@@ -28,6 +28,9 @@
 #include <string>
 #include <utility>
 
+#include "common/config/config.h"
+#include "common/global.h"
+#include "file/cached_random_access_read_file.h"
 #include "file/random_access_read_file.h"
 #include "reader/tsfile_reader.h"
 #include "utils/errno_define.h"
@@ -294,6 +297,17 @@ void* create_tsfile_reader_from_python_file(PyObject* source,
         }
         std::unique_ptr<storage::RandomAccessReadFile> random_access_read_file(
             new PythonRandomAccessReadFile(source, size, source_name(source)));
+        if (common::g_config_value_.read_cache_enabled_) {
+            storage::ReadCacheOptions options;
+            options.block_size = static_cast<int32_t>(
+                common::g_config_value_.read_cache_block_size_);
+            options.capacity_bytes = static_cast<int64_t>(
+                common::g_config_value_.read_cache_capacity_);
+            options.max_readahead_blocks = static_cast<int32_t>(
+                common::g_config_value_.read_cache_max_readahead_blocks_);
+            random_access_read_file = storage::make_cached_read_file(
+                std::move(random_access_read_file), options);
+        }
         std::unique_ptr<storage::TsFileReader> reader(
             new storage::TsFileReader());
         *error_code = reader->open(std::move(random_access_read_file));

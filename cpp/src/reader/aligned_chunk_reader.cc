@@ -1394,6 +1394,21 @@ bool AlignedChunkReader::has_variable_length_value_column() const {
     return false;
 }
 
+namespace {
+
+// Population count of one byte, used by the null-bitmap prefix counter.
+inline int popcount_byte(uint8_t value) {
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_popcount(static_cast<unsigned>(value));
+#else
+    value = static_cast<uint8_t>(value - ((value >> 1) & 0x55));
+    value = static_cast<uint8_t>((value & 0x33) + ((value >> 2) & 0x33));
+    return (value + (value >> 4)) & 0x0F;
+#endif
+}
+
+}  // namespace
+
 int AlignedChunkReader::count_non_null_prefix(
     const std::vector<uint8_t>& bitmap, int32_t row_limit) const {
     if (row_limit <= 0 || bitmap.empty()) {
@@ -1402,12 +1417,18 @@ int AlignedChunkReader::count_non_null_prefix(
     if (static_cast<uint64_t>(row_limit) >
         static_cast<uint64_t>(bitmap.size()) * 8U)
         return -1;
-    const uint32_t mask_base = 1 << 7;
+    // The bitmap is MSB-first: row i lives in bitmap[i / 8] at bit 7-(i%8).
+    // Count whole bytes with a popcount instead of one branch per row.
+    const int32_t full_bytes = row_limit / 8;
     int count = 0;
-    for (int32_t i = 0; i < row_limit; i++) {
-        if (((bitmap[i / 8] & 0xFF) & (mask_base >> (i % 8))) != 0) {
-            count++;
-        }
+    for (int32_t b = 0; b < full_bytes; b++) {
+        count += popcount_byte(bitmap[static_cast<size_t>(b)]);
+    }
+    const int32_t remainder = row_limit % 8;
+    if (remainder != 0) {
+        const uint8_t mask = static_cast<uint8_t>(0xFF << (8 - remainder));
+        count += popcount_byte(static_cast<uint8_t>(
+            bitmap[static_cast<size_t>(full_bytes)] & mask));
     }
     return count;
 }
@@ -2167,16 +2188,30 @@ int AlignedChunkReader::decode_all_planned_pages() {
         }
 
         std::vector<std::future<void>> futures;
-        std::vector<int> col_rets(value_columns_.size(), E_OK);
-        for (uint32_t c = 0; c < value_columns_.size(); c++) {
-            if (field_filter_ != nullptr && !filter_column_mask_[c]) continue;
-            int* col_ret = &col_rets[c];
-            futures.push_back(decode_pool_->submit([this, c, col_ret]() {
-                for (size_t p = 0; p < chunk_pages_.size(); p++) {
-                    int r = decode_value_page_for_slot(c, p);
-                    if (IS_FAIL(r)) {
-                        *col_ret = r;
-                        return;
+        // One task per column keeps workers busy but makes the submitting
+        // thread pay a packaged_task allocation, a queue lock and a future per
+        // column per chunk (thousands per query).  Group the columns into a
+        // small multiple of the worker count instead: each task still owns
+        // whole columns, so no two workers touch the same per-column state.
+        const size_t value_task_count = std::min<size_t>(
+            value_columns_.size(), std::max<size_t>(1, worker_count * 2));
+        std::vector<int> group_rets(value_task_count, E_OK);
+        for (size_t g = 0; g < value_task_count; g++) {
+            int* group_ret = &group_rets[g];
+            futures.push_back(decode_pool_->submit([this, g, group_ret,
+                                                    value_task_count]() {
+                for (uint32_t c = static_cast<uint32_t>(g);
+                     c < value_columns_.size();
+                     c += static_cast<uint32_t>(value_task_count)) {
+                    if (field_filter_ != nullptr && !filter_column_mask_[c]) {
+                        continue;
+                    }
+                    for (size_t p = 0; p < chunk_pages_.size(); p++) {
+                        int r = decode_value_page_for_slot(c, p);
+                        if (IS_FAIL(r)) {
+                            *group_ret = r;
+                            return;
+                        }
                     }
                 }
             }));
@@ -2220,8 +2255,8 @@ int AlignedChunkReader::decode_all_planned_pages() {
         for (auto r : time_rets) {
             if (IS_FAIL(r)) return r;
         }
-        for (uint32_t c = 0; c < value_columns_.size(); c++) {
-            if (IS_FAIL(col_rets[c])) return col_rets[c];
+        for (auto r : group_rets) {
+            if (IS_FAIL(r)) return r;
         }
         return E_OK;
     }

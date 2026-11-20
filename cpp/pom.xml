@@ -59,6 +59,7 @@
         <enable.lzokay>ON</enable.lzokay>
         <enable.zlib>ON</enable.zlib>
         <enable.zstd>ON</enable.zstd>
+        <enable.s3>ON</enable.s3>
         <!--
             Keep Maven's default build compatible with CMake 3.11-era
             industrial toolchains. Bundled XZ Utils requires CMake 3.20+;
@@ -137,6 +138,7 @@
                                 <option>-DENABLE_LZOKAY=${enable.lzokay}</option>
                                 <option>-DENABLE_ZLIB=${enable.zlib}</option>
                                 <option>-DENABLE_ZSTD=${enable.zstd}</option>
+                                <option>-DENABLE_S3=${enable.s3}</option>
                                 <option>-DENABLE_LZMA2=${enable.lzma2}</option>
                                 <option>-DENABLE_SIMD=${enable.simd}</option>
                                 <option>-DTSFILE_ENABLE_CPACK=${enable.cpack}</option>

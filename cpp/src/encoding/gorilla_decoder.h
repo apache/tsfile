@@ -182,6 +182,19 @@ struct GorillaBitReader {
     }
 
     FORCE_INLINE uint8_t read_control_bits(int max_bits) {
+        // Gorilla control words stop at the first zero bit.  The two-bit form
+        // is the only one the decoder uses, and peeking both bits at once
+        // avoids two read_bit() refill checks for the common '10'/'11' case.
+        if (LIKELY(max_bits == 2 && bits >= 2 && !exhausted && !invalid)) {
+            bits -= 2;
+            const uint8_t pair =
+                static_cast<uint8_t>((buffer >> bits) & uint64_t{0x3});
+            if (LIKELY(pair >= 2)) {
+                return pair;
+            }
+            bits += 1;  // the first bit was a lone zero
+            return 0;
+        }
         uint8_t value = 0x00;
         for (int i = 0; i < max_bits; i++) {
             value <<= 1;
@@ -522,8 +535,12 @@ class GorillaDecoder : public Decoder {
             // gives the compiler one contiguous range to vectorize. Integer
             // and floating-point outputs are copied without arithmetic, so
             // special IEEE-754 bit patterns remain unchanged.
-            std::fill_n(out + actual, run_length, decoded);
-            actual += run_length;
+            if (LIKELY(run_length == 1)) {
+                out[actual++] = decoded;
+            } else {
+                std::fill_n(out + actual, run_length, decoded);
+                actual += run_length;
+            }
 
             // Prime the next value even when the repeated run exactly fills the
             // caller's buffer. This preserves the scalar decoder invariant that
