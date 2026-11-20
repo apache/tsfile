@@ -23,7 +23,6 @@
 
 #include <cstring>
 
-#include "common/allocator/byte_stream.h"
 #include "common/container/byte_buffer.h"
 #include "common/global.h"
 #include "common/logger/elog.h"
@@ -72,12 +71,6 @@ class TsBlock {
 
     FORCE_INLINE uint32_t get_max_row_count() const { return max_row_count_; }
 
-    FORCE_INLINE uint32_t get_capacity() const { return capacity_; }
-
-    FORCE_INLINE void update_capacity(uint32_t extend_size) {
-        capacity_ += extend_size;
-    }
-
     FORCE_INLINE void fill_trailling_nulls() {
         for (uint32_t i = 0; i < get_column_count(); ++i) {
             for (uint32_t j = vectors_[i]->get_row_num(); j < row_count_; ++j) {
@@ -109,21 +102,17 @@ class TsBlock {
     }
 
     int init();
-    void tsblock_to_json(ByteStream* byte_stream);
 
     std::string debug_string();
 
    private:
     int build_vector(common::TSDataType type, uint32_t row_count);
-    void write_data(ByteStream* __restrict byte_stream, char* __restrict val,
-                    uint32_t len, bool has_null, TSDataType type);
 
    private:
     uint32_t capacity_;   // maximum memory capacity
     uint32_t row_count_;  // real row count
     uint32_t max_row_count_;
 
-    common::BitMap select_list_;
     TupleDesc* tuple_desc_;
     std::vector<Vector*> vectors_;
 };
@@ -401,8 +390,6 @@ class ColIterator {
     const TsBlock* tsblock_;
     Vector* vec_;
 };
-
-int merge_tsblock_by_row(TsBlock* sea, TsBlock* river);
 
 }  // end namespace common
 #endif  // COMMON_TSBLOCK_TSBLOCK_H
