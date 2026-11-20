@@ -64,6 +64,12 @@ class Filter {
         return nullptr;
     }
 
+    // Returns an independent copy owned by the caller, or nullptr when the
+    // filter cannot be cloned. Callers that must attach the same predicate to
+    // several owners (e.g. pushing a global time filter into every series
+    // leaf) treat nullptr as a failure rather than sharing ownership.
+    virtual Filter* clone() const { return nullptr; }
+
     // True when the predicate accepts every timestamp (e.g. TimeBetween over
     // the full int64 range). Callers may then skip per-row evaluation.
     virtual bool is_unbounded_time_filter() const { return false; }

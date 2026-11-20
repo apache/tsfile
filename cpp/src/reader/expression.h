@@ -118,22 +118,21 @@ class QueryExpression {
     void destory();
 
    private:
-    Expression* combine_two_global_time_filter(Expression* left,
-                                               Expression* right,
+    Expression* combine_two_global_time_filter(Expression* parent,
                                                ExpressionType type);
     Expression* handle_one_global_time_filter(
-        Expression* left, Expression* expression,
+        Expression* parent, Expression* global, Expression* rest,
         std::vector<Path>& selected_series, ExpressionType type);
-    void add_time_filter_to_query_filter(Filter* time_filter,
+    bool add_time_filter_to_query_filter(Filter* time_filter,
                                          Expression* expression);
-    void add_time_filter_to_series_filter(Filter* time_filter,
+    bool add_time_filter_to_series_filter(Filter* time_filter,
                                           Expression* single_series_expr);
     Expression* push_global_time_filter_to_all_series(
-        Expression* time_filter, std::vector<Path>& selected_series);
+        Filter* time_filter, std::vector<Path>& selected_series);
     Expression* merge_second_tree_to_first_tree(Expression* left_expression,
                                                 Expression* right_expression);
     bool update_filter_with_or(Expression* expression, Filter* filter,
-                               Path& path);
+                               const Path& path);
 
    public:
     bool has_filter_;

@@ -71,6 +71,8 @@ int TsFileExecutor::execute(QueryExpression* query_expr, ResultSet*& ret_qds) {
     if (query_exprs_->has_filter_) {
         regular_expr = query_exprs_->optimize(origin_expr, paths);
         if (regular_expr == nullptr) {
+            // optimize() consumes the input tree, including on failure.
+            query_exprs_->expression_ = nullptr;
             return E_INVALID_ARG;
         }
         query_exprs_->set_expression(regular_expr);
