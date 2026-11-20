@@ -103,6 +103,9 @@ public class TsBlock {
 
   public void setPositionCount(int positionCount) {
     this.positionCount = positionCount;
+    if (sizeInBytes >= 0) {
+      sizeInBytes = -1;
+    }
   }
 
   public long getStartTime() {
@@ -270,7 +273,7 @@ public class TsBlock {
     if (positionCount == 0) {
       return;
     }
-    positionCount = 0;
+    setPositionCount(0);
     timeColumn.reset();
     for (Column valueColumn : valueColumns) {
       valueColumn.reset();

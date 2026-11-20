@@ -41,6 +41,11 @@ than a universal setting.
   result set.
 - Separate metadata inspection from page decoding when the available tool or
   API supports it.
+- Java `BinaryColumn.getSizeInBytes()` counts the values in the column's
+  logical range at construction. Shared views from `getRegion()` and
+  `subColumn()` estimate value bytes in proportion to their row count.
+  Equal-length views of the same column get the same estimate even when
+  their strings or blobs differ in length. A copied region counts its own values.
 
 ## Encoding and Compression
 
