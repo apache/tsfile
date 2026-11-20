@@ -54,13 +54,13 @@ public class TimeDuration implements Serializable {
    * @return the total duration of this timeDuration in current precision
    */
   public long getTotalDuration(TimeUnit currPrecision) {
-    return currPrecision.convert(monthDuration * 30 * 86400_000L, TimeUnit.MILLISECONDS)
+    return currPrecision.convert(monthDuration * 30L * 86400_000L, TimeUnit.MILLISECONDS)
         + nonMonthDuration;
   }
 
   /** Think month as 31 days. */
   public long getMaxTotalDuration(TimeUnit currPrecision) {
-    return currPrecision.convert(monthDuration * 31 * 86400_000L, TimeUnit.MILLISECONDS)
+    return currPrecision.convert(monthDuration * 31L * 86400_000L, TimeUnit.MILLISECONDS)
         + nonMonthDuration;
   }
 
@@ -84,7 +84,7 @@ public class TimeDuration implements Serializable {
 
   /** Think month as 28 days. */
   public long getMinTotalDuration(TimeUnit currPrecision) {
-    return currPrecision.convert(monthDuration * 28 * 86400_000L, TimeUnit.MILLISECONDS)
+    return currPrecision.convert(monthDuration * 28L * 86400_000L, TimeUnit.MILLISECONDS)
         + nonMonthDuration;
   }
 

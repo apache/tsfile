@@ -62,7 +62,6 @@ public class ReadInPartitionTest {
   private static final String FILE_PATH = TsFileGeneratorForTest.outputDataFile;
   private static TsFileReader roTsFile = null;
   private ArrayList<TimeRange> d1s6timeRangeList = new ArrayList<>();
-  private ArrayList<TimeRange> d2s1timeRangeList = new ArrayList<>();
   private ArrayList<long[]> d1chunkGroupMetaDataOffsetList = new ArrayList<>();
 
   @Before
@@ -90,12 +89,6 @@ public class ReadInPartitionTest {
               + Short.BYTES
               + chunkMetaData.getStatistics().getSerializedSize();
       d1chunkGroupMetaDataOffsetList.add(startEndOffsets);
-    }
-
-    List<ChunkMetadata> d2s1List = reader.getChunkMetadataList(new Path("d2", "s1", true));
-    for (ChunkMetadata chunkMetaData : d2s1List) {
-      d2s1timeRangeList.add(
-          new TimeRange(chunkMetaData.getStartTime(), chunkMetaData.getEndTime()));
     }
   }
 

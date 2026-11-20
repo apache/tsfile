@@ -30,7 +30,6 @@ import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.read.TsFileSequenceReader;
 import org.apache.tsfile.read.common.Path;
-import org.apache.tsfile.read.common.RowRecord;
 import org.apache.tsfile.read.common.block.TsBlock;
 import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.read.common.type.service.TypeService;
@@ -497,9 +496,8 @@ public class TableViewTest {
       final QueryExpression queryExpression = QueryExpression.create(selectedSeries, null);
       final QueryDataSet queryDataSet = queryExecutor.execute(queryExpression);
       cnt = 0;
-      List<RowRecord> rowRecords = new ArrayList<>();
       while (queryDataSet.hasNext()) {
-        rowRecords.add(queryDataSet.next());
+        queryDataSet.next();
         cnt++;
       }
       assertEquals(10, cnt);

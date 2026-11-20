@@ -784,11 +784,17 @@ public class FileUtils {
     requireDirectory(srcDir, "srcDir");
     requireCanonicalPathsNotEquals(srcDir, destDir);
 
-    // Cater for destination being directory within the source directory (see IO-141)
+    // Cater for destination being directory within the source directory (see IO-141).
+    // Compare against a path prefix that ends with the separator, so a sibling
+    // such as "/a/bc" is not mistaken for a child of "/a/b".
     List<String> exclusionList = null;
     final String srcDirCanonicalPath = srcDir.getCanonicalPath();
     final String destDirCanonicalPath = destDir.getCanonicalPath();
-    if (destDirCanonicalPath.startsWith(srcDirCanonicalPath)) {
+    final String srcDirPrefix =
+        srcDirCanonicalPath.endsWith(File.separator)
+            ? srcDirCanonicalPath
+            : srcDirCanonicalPath + File.separator;
+    if (destDirCanonicalPath.startsWith(srcDirPrefix)) {
       final File[] srcFiles = listFiles(srcDir, fileFilter);
       if (srcFiles.length > 0) {
         exclusionList = new ArrayList<>(srcFiles.length);
