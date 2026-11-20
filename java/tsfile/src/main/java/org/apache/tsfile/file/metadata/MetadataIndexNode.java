@@ -125,8 +125,17 @@ public class MetadataIndexNode {
     return new MetadataIndexNode(children, offset, nodeType);
   }
 
+  /**
+   * Searches the floor child entry of the given key.
+   *
+   * <p>In floor mode a key that sorts before the first child returns child 0, so a caller that must
+   * not read a group which cannot hold the key should compare the key with the first child first.
+   */
   public Pair<IMetadataIndexEntry, Long> getChildIndexEntry(Comparable key, boolean exactSearch) {
-    int index = binarySearchInChildren(key, exactSearch);
+    return getChildIndexEntry(binarySearchInChildren(key, exactSearch));
+  }
+
+  private Pair<IMetadataIndexEntry, Long> getChildIndexEntry(int index) {
     if (index == -1) {
       return null;
     }

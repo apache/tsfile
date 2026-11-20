@@ -33,19 +33,19 @@ public class MetadataIndexNodeTest {
   @Test
   public void testBinarySearchInChildren() {
     List<IMetadataIndexEntry> list = new ArrayList<>();
-    list.add(new MeasurementMetadataIndexEntry("s0", -1L));
-    list.add(new MeasurementMetadataIndexEntry("s5", -1L));
-    list.add(new MeasurementMetadataIndexEntry("s10", -1L));
-    list.add(new MeasurementMetadataIndexEntry("s15", -1L));
-    list.add(new MeasurementMetadataIndexEntry("s20", -1L));
+    list.add(new MeasurementMetadataIndexEntry("a", -1L));
+    list.add(new MeasurementMetadataIndexEntry("c", -1L));
+    list.add(new MeasurementMetadataIndexEntry("f", -1L));
+    list.add(new MeasurementMetadataIndexEntry("m", -1L));
+    list.add(new MeasurementMetadataIndexEntry("z", -1L));
 
     MetadataIndexNode metadataIndexNode =
         new MetadataIndexNode(list, -1L, MetadataIndexNodeType.LEAF_MEASUREMENT);
-    Assert.assertEquals(0, metadataIndexNode.binarySearchInChildren("s0", false));
-    Assert.assertEquals(2, metadataIndexNode.binarySearchInChildren("s10", false));
-    Assert.assertEquals(2, metadataIndexNode.binarySearchInChildren("s13", false));
-    Assert.assertEquals(4, metadataIndexNode.binarySearchInChildren("s23", false));
-    Assert.assertEquals(-1, metadataIndexNode.binarySearchInChildren("s13", true));
-    Assert.assertEquals(-1, metadataIndexNode.binarySearchInChildren("s23", true));
+    Assert.assertEquals(0, metadataIndexNode.binarySearchInChildren("a", false));
+    Assert.assertEquals(2, metadataIndexNode.binarySearchInChildren("f", false));
+    Assert.assertEquals(2, metadataIndexNode.binarySearchInChildren("g", false));
+    Assert.assertEquals(4, metadataIndexNode.binarySearchInChildren("zz", false));
+    Assert.assertEquals(-1, metadataIndexNode.binarySearchInChildren("g", true));
+    Assert.assertEquals(-1, metadataIndexNode.binarySearchInChildren("zz", true));
   }
 }

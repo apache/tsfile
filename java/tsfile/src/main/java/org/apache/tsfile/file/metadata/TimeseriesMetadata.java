@@ -44,6 +44,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 
 import static org.apache.tsfile.utils.Preconditions.checkArgument;
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfCharArray;
@@ -167,6 +168,23 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
       boolean needChunkMetadataForDataTypeWithValuesInStatistics,
       boolean needChunkMetadataForDataTypeWithoutValuesInStatistics)
       throws IOException {
+    return deserializeFrom(
+        tsFileInput,
+        id -> true,
+        needChunkMetadataForDataTypeWithValuesInStatistics,
+        needChunkMetadataForDataTypeWithoutValuesInStatistics);
+  }
+
+  /**
+   * Deserializes one TimeseriesMetadata from a file input and decodes its chunk metadata only when
+   * {@code decodeChunkMetadata} accepts the measurement.
+   */
+  public static TimeseriesMetadata deserializeFrom(
+      TsFileInput tsFileInput,
+      Predicate<String> decodeChunkMetadata,
+      boolean needChunkMetadataForDataTypeWithValuesInStatistics,
+      boolean needChunkMetadataForDataTypeWithoutValuesInStatistics)
+      throws IOException {
     InputStream inputStream = tsFileInput.wrapAsInputStream();
     TimeseriesMetadata timeseriesMetaData = new TimeseriesMetadata();
     timeseriesMetaData.setTimeSeriesMetadataType(ReadWriteIOUtils.readByte(inputStream));
@@ -177,10 +195,11 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
     timeseriesMetaData.setStatistics(
         Statistics.deserialize(inputStream, timeseriesMetaData.dataType));
     long startOffset = tsFileInput.position();
-    if ((!timeseriesMetaData.getTsDataType().hasNoValueInStatistics()
-            && needChunkMetadataForDataTypeWithValuesInStatistics)
-        || (timeseriesMetaData.getTsDataType().hasNoValueInStatistics()
-            && needChunkMetadataForDataTypeWithoutValuesInStatistics)) {
+    if (decodeChunkMetadata.test(timeseriesMetaData.getMeasurementId())
+        && ((!timeseriesMetaData.getTsDataType().hasNoValueInStatistics()
+                && needChunkMetadataForDataTypeWithValuesInStatistics)
+            || (timeseriesMetaData.getTsDataType().hasNoValueInStatistics()
+                && needChunkMetadataForDataTypeWithoutValuesInStatistics))) {
       timeseriesMetaData.chunkMetadataList = new ArrayList<>();
       while (tsFileInput.position() < startOffset + chunkMetaDataListDataSize) {
         timeseriesMetaData.chunkMetadataList.add(
@@ -208,6 +227,23 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
       Set<String> excludedMeasurements,
       boolean needChunkMetadataForDataTypeWithValuesInStatistics,
       boolean needChunkMetadataForDataTypeWithoutValuesInStatistics) {
+    return deserializeFrom(
+        buffer,
+        measurementId -> !excludedMeasurements.contains(measurementId),
+        needChunkMetadataForDataTypeWithValuesInStatistics,
+        needChunkMetadataForDataTypeWithoutValuesInStatistics);
+  }
+
+  /**
+   * Deserializes one TimeseriesMetadata and decodes its chunk metadata only when {@code
+   * decodeChunkMetadata} accepts the measurement. Statistics are always read; the chunk metadata
+   * region is skipped when it is not decoded.
+   */
+  public static TimeseriesMetadata deserializeFrom(
+      ByteBuffer buffer,
+      Predicate<String> decodeChunkMetadata,
+      boolean needChunkMetadataForDataTypeWithValuesInStatistics,
+      boolean needChunkMetadataForDataTypeWithoutValuesInStatistics) {
     byte timeseriesType = ReadWriteIOUtils.readByte(buffer);
     String measurementID = ReadWriteIOUtils.readVarIntString(buffer);
     TSDataType tsDataType = ReadWriteIOUtils.readDataType(buffer);
@@ -221,12 +257,11 @@ public class TimeseriesMetadata implements ITimeSeriesMetadata {
     timeseriesMetaData.setDataSizeOfChunkMetaDataList(chunkMetaDataListDataSize);
     timeseriesMetaData.setStatistics(statistics);
 
-    if (!excludedMeasurements.contains(measurementID)
+    if (decodeChunkMetadata.test(measurementID)
         && ((!tsDataType.hasNoValueInStatistics()
                 && needChunkMetadataForDataTypeWithValuesInStatistics)
             || (tsDataType.hasNoValueInStatistics()
                 && needChunkMetadataForDataTypeWithoutValuesInStatistics))) {
-      // measurement is not in the excluded set and need chunk metadata
       ByteBuffer byteBuffer = buffer.slice();
       byteBuffer.limit(chunkMetaDataListDataSize);
       timeseriesMetaData.chunkMetadataList = new ArrayList<>();
