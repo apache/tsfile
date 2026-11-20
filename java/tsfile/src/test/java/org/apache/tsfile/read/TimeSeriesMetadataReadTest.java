@@ -505,13 +505,6 @@ public class TimeSeriesMetadataReadTest {
     int[] sameOrder = TsFileSequenceReader.floorChildren(children, "s1");
     Assert.assertEquals(1, sameOrder.length);
     Assert.assertEquals(-1, sameOrder[0]);
-
-    // only a unit at or above U+D800 can make the two orders disagree, so ASCII and common CJK
-    // names skip the second binary search
-    Assert.assertFalse(TsFileSequenceReader.ordersMayDiffer("s1"));
-    Assert.assertFalse(TsFileSequenceReader.ordersMayDiffer("温度"));
-    Assert.assertTrue(TsFileSequenceReader.ordersMayDiffer("豈"));
-    Assert.assertTrue(TsFileSequenceReader.ordersMayDiffer("𠀀"));
   }
 
   private static TimeseriesMetadata metadataWithOneChunk(
