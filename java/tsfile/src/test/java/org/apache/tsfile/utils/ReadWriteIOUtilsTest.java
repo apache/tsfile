@@ -228,6 +228,25 @@ public class ReadWriteIOUtilsTest {
   }
 
   @Test
+  public void testFixedWidthDataInputStreamReaderHandlesShortAndZeroReads() throws IOException {
+    int expectedInt = 0x12345678;
+    InputStream intInput =
+        new DataInputStream(
+            new FragmentedInputStream(
+                ByteBuffer.allocate(Integer.BYTES).putInt(expectedInt).array(), 2));
+    Assert.assertEquals(expectedInt, ReadWriteIOUtils.readInt(intInput));
+    Assert.assertEquals(-1, intInput.read());
+
+    long expectedLong = 0x123456789ABCDEFL;
+    InputStream longInput =
+        new DataInputStream(
+            new FragmentedInputStream(
+                ByteBuffer.allocate(Long.BYTES).putLong(expectedLong).array(), 3));
+    Assert.assertEquals(expectedLong, BytesUtils.readLong(longInput));
+    Assert.assertEquals(-1, longInput.read());
+  }
+
+  @Test
   public void testFixedWidthDataInputStreamReaderSupportsReentrancy() throws IOException {
     long expected = 0x123456789ABCDEFL;
     ReentrantInputStream underlying =
