@@ -590,7 +590,8 @@ public class ReadWriteIOUtils {
   /** read a short var from inputStream. */
   public static short readShort(InputStream inputStream) throws IOException {
     if (inputStream instanceof DataInputStream && inputStream.getClass() == DataInputStream.class) {
-      return (short) readFixedWidthFromDataInputStream(inputStream, SHORT_LEN, false);
+      return (short)
+          FixedWidthDataInputStreamReader.read((DataInputStream) inputStream, SHORT_LEN, false);
     }
     byte[] bytes = new byte[SHORT_LEN];
     int readLen = readAtMost(inputStream, bytes);
@@ -609,7 +610,9 @@ public class ReadWriteIOUtils {
   public static float readFloat(InputStream inputStream) throws IOException {
     if (inputStream instanceof DataInputStream && inputStream.getClass() == DataInputStream.class) {
       return Float.intBitsToFloat(
-          (int) readFixedWidthFromDataInputStream(inputStream, FLOAT_LEN, false));
+          (int)
+              FixedWidthDataInputStreamReader.read(
+                  (DataInputStream) inputStream, FLOAT_LEN, false));
     }
     byte[] bytes = new byte[FLOAT_LEN];
     int readLen = readAtMost(inputStream, bytes);
@@ -632,7 +635,7 @@ public class ReadWriteIOUtils {
   public static double readDouble(InputStream inputStream) throws IOException {
     if (inputStream instanceof DataInputStream && inputStream.getClass() == DataInputStream.class) {
       return Double.longBitsToDouble(
-          readFixedWidthFromDataInputStream(inputStream, DOUBLE_LEN, false));
+          FixedWidthDataInputStreamReader.read((DataInputStream) inputStream, DOUBLE_LEN, false));
     }
     byte[] bytes = new byte[DOUBLE_LEN];
     int readLen = readAtMost(inputStream, bytes);
@@ -654,7 +657,8 @@ public class ReadWriteIOUtils {
   /** Read an int var from inputStream. */
   public static int readInt(InputStream inputStream) throws IOException {
     if (inputStream instanceof DataInputStream && inputStream.getClass() == DataInputStream.class) {
-      return (int) readFixedWidthFromDataInputStream(inputStream, INT_LEN, false);
+      return (int)
+          FixedWidthDataInputStreamReader.read((DataInputStream) inputStream, INT_LEN, false);
     }
     byte[] bytes = new byte[INT_LEN];
     int readLen = readAtMost(inputStream, bytes);
@@ -684,7 +688,7 @@ public class ReadWriteIOUtils {
   /** Read a long var from inputStream. */
   public static long readLong(InputStream inputStream) throws IOException {
     if (inputStream instanceof DataInputStream && inputStream.getClass() == DataInputStream.class) {
-      return readFixedWidthFromDataInputStream(inputStream, LONG_LEN, true);
+      return FixedWidthDataInputStreamReader.read((DataInputStream) inputStream, LONG_LEN, true);
     }
     byte[] bytes = new byte[LONG_LEN];
     int readLen = readAtMost(inputStream, bytes);
@@ -749,25 +753,6 @@ public class ReadWriteIOUtils {
       }
     }
     return readLen;
-  }
-
-  private static long readFixedWidthFromDataInputStream(
-      InputStream inputStream, int length, boolean eofException) throws IOException {
-    long value = 0;
-    int readLen = 0;
-    while (readLen < length) {
-      int currentByte = inputStream.read();
-      if (currentByte < 0) {
-        String message = Messages.format(RETURN_ERROR_KEY, length, readLen);
-        if (eofException) {
-          throw new EOFException(message);
-        }
-        throw new IOException(message);
-      }
-      value = (value << Byte.SIZE) | currentByte;
-      readLen++;
-    }
-    return value;
   }
 
   /** Read string from byteBuffer. */

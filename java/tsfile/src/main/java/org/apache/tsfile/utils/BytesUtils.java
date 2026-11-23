@@ -838,7 +838,8 @@ public class BytesUtils {
    */
   public static double readDouble(InputStream in) throws IOException {
     if (in instanceof DataInputStream && in.getClass() == DataInputStream.class) {
-      return Double.longBitsToDouble(readFixedWidthFromDataInputStream((DataInputStream) in, 8));
+      return Double.longBitsToDouble(
+          FixedWidthDataInputStreamReader.read((DataInputStream) in, Long.BYTES, false));
     }
     byte[] b = safeReadInputStreamToBytes(8, in);
     return BytesUtils.bytesToDouble(b);
@@ -853,7 +854,8 @@ public class BytesUtils {
    */
   public static float readFloat(InputStream in) throws IOException {
     if (in instanceof DataInputStream && in.getClass() == DataInputStream.class) {
-      return Float.intBitsToFloat((int) readFixedWidthFromDataInputStream((DataInputStream) in, 4));
+      return Float.intBitsToFloat(
+          (int) FixedWidthDataInputStreamReader.read((DataInputStream) in, Float.BYTES, false));
     }
     byte[] b = safeReadInputStreamToBytes(4, in);
     return BytesUtils.bytesToFloat(b);
@@ -868,7 +870,7 @@ public class BytesUtils {
    */
   public static boolean readBool(InputStream in) throws IOException {
     if (in instanceof DataInputStream && in.getClass() == DataInputStream.class) {
-      return byteToBool((byte) readFixedWidthFromDataInputStream((DataInputStream) in, 1));
+      return byteToBool((byte) readByteFromDataInputStream((DataInputStream) in));
     }
     byte[] b = safeReadInputStreamToBytes(1, in);
     return byteToBool(b[0]);
@@ -883,7 +885,7 @@ public class BytesUtils {
    */
   public static int readInt(InputStream in) throws IOException {
     if (in instanceof DataInputStream && in.getClass() == DataInputStream.class) {
-      return (int) readFixedWidthFromDataInputStream((DataInputStream) in, 4);
+      return (int) FixedWidthDataInputStreamReader.read((DataInputStream) in, Integer.BYTES, false);
     }
     byte[] b = safeReadInputStreamToBytes(4, in);
     return BytesUtils.bytesToInt(b);
@@ -898,23 +900,16 @@ public class BytesUtils {
    */
   public static long readLong(InputStream in) throws IOException {
     if (in instanceof DataInputStream && in.getClass() == DataInputStream.class) {
-      return readFixedWidthFromDataInputStream((DataInputStream) in, 8);
+      return FixedWidthDataInputStreamReader.read((DataInputStream) in, Long.BYTES, false);
     }
     byte[] b = safeReadInputStreamToBytes(8, in);
     return BytesUtils.bytesToLong(b);
   }
 
-  private static long readFixedWidthFromDataInputStream(DataInputStream in, int count)
-      throws IOException {
-    long value = 0;
-    int readCount = 0;
-    while (readCount < count) {
-      int currentByte = in.read();
-      if (currentByte < 0) {
-        throw new IOException(Messages.format("error.utils.rwio_short_read", count, readCount));
-      }
-      value = (value << Byte.SIZE) | currentByte;
-      readCount++;
+  private static int readByteFromDataInputStream(DataInputStream in) throws IOException {
+    int value = in.read();
+    if (value < 0) {
+      throw new IOException(Messages.format("error.utils.rwio_short_read", 1, 0));
     }
     return value;
   }

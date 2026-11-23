@@ -206,7 +206,7 @@ public class ReadWriteIOUtilsTest {
   }
 
   @Test
-  public void testFixedWidthReadersUseDataInputStreamPrimitives() throws IOException {
+  public void testFixedWidthReadersFromDataInputStream() throws IOException {
     ByteBuffer encoded =
         ByteBuffer.allocate(Short.BYTES + Integer.BYTES + Long.BYTES + Float.BYTES + Double.BYTES);
     encoded.putShort((short) 0x1234);
@@ -214,14 +214,27 @@ public class ReadWriteIOUtilsTest {
     encoded.putLong(0x123456789ABCDEFL);
     encoded.putFloat(1.25F);
     encoded.putDouble(-2.5D);
-    InputStream input = new DataInputStream(new ByteArrayInputStream(encoded.array()));
+    BulkReadTrackingInputStream underlying = new BulkReadTrackingInputStream(encoded.array());
+    InputStream input = new DataInputStream(underlying);
 
     Assert.assertEquals((short) 0x1234, ReadWriteIOUtils.readShort(input));
     Assert.assertEquals(0x12345678, ReadWriteIOUtils.readInt(input));
     Assert.assertEquals(0x123456789ABCDEFL, ReadWriteIOUtils.readLong(input));
     Assert.assertEquals(1.25F, ReadWriteIOUtils.readFloat(input), 0.0F);
     Assert.assertEquals(-2.5D, ReadWriteIOUtils.readDouble(input), 0.0D);
+    Assert.assertTrue(underlying.bulkReadCount > 0);
+    Assert.assertEquals(0, underlying.singleByteReadCount);
     Assert.assertEquals(-1, input.read());
+  }
+
+  @Test
+  public void testFixedWidthDataInputStreamReaderSupportsReentrancy() throws IOException {
+    long expected = 0x123456789ABCDEFL;
+    ReentrantInputStream underlying =
+        new ReentrantInputStream(ByteBuffer.allocate(Long.BYTES).putLong(expected).array());
+
+    Assert.assertEquals(expected, ReadWriteIOUtils.readLong(new DataInputStream(underlying)));
+    Assert.assertEquals(0x76543210, underlying.nestedInt);
   }
 
   @Test
@@ -463,6 +476,51 @@ public class ReadWriteIOUtilsTest {
         return 0;
       }
       return super.read(bytes, offset, Math.min(length, maxReadLength));
+    }
+  }
+
+  private static final class BulkReadTrackingInputStream extends ByteArrayInputStream {
+    private int bulkReadCount;
+    private int singleByteReadCount;
+
+    private BulkReadTrackingInputStream(byte[] bytes) {
+      super(bytes);
+    }
+
+    @Override
+    public synchronized int read(byte[] bytes, int offset, int length) {
+      bulkReadCount++;
+      return super.read(bytes, offset, length);
+    }
+
+    @Override
+    public synchronized int read() {
+      singleByteReadCount++;
+      return super.read();
+    }
+  }
+
+  private static final class ReentrantInputStream extends ByteArrayInputStream {
+    private int nestedInt;
+    private boolean reentered;
+
+    private ReentrantInputStream(byte[] bytes) {
+      super(bytes);
+    }
+
+    @Override
+    public synchronized int read(byte[] bytes, int offset, int length) {
+      if (!reentered) {
+        reentered = true;
+        byte[] nestedBytes = ByteBuffer.allocate(Integer.BYTES).putInt(0x76543210).array();
+        try {
+          nestedInt =
+              ReadWriteIOUtils.readInt(new DataInputStream(new ByteArrayInputStream(nestedBytes)));
+        } catch (IOException e) {
+          throw new AssertionError(e);
+        }
+      }
+      return super.read(bytes, offset, length);
     }
   }
 

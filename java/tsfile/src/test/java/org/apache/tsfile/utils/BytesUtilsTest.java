@@ -458,6 +458,18 @@ public class BytesUtilsTest {
   }
 
   @Test
+  public void testFixedWidthDataInputStreamReaderUsesBulkReads() throws IOException {
+    int expected = 0x12345678;
+    BulkReadTrackingInputStream underlying =
+        new BulkReadTrackingInputStream(BytesUtils.intToBytes(expected));
+    DataInputStream input = new DataInputStream(underlying);
+
+    Assert.assertEquals(expected, BytesUtils.readInt(input));
+    assertTrue(underlying.bulkReadCount > 0);
+    assertEquals(0, underlying.singleByteReadCount);
+  }
+
+  @Test
   public void testDataInputStreamTruncationMatchesInputStreamBehavior() {
     assertDataInputStreamTruncationMatches(input -> BytesUtils.readBool(input), 1);
     assertDataInputStreamTruncationMatches(input -> BytesUtils.readInt(input), Integer.BYTES);
@@ -575,6 +587,27 @@ public class BytesUtilsTest {
         return 0;
       }
       return super.read(bytes, offset, Math.min(length, maxReadLength));
+    }
+  }
+
+  private static final class BulkReadTrackingInputStream extends ByteArrayInputStream {
+    private int bulkReadCount;
+    private int singleByteReadCount;
+
+    private BulkReadTrackingInputStream(byte[] bytes) {
+      super(bytes);
+    }
+
+    @Override
+    public synchronized int read(byte[] bytes, int offset, int length) {
+      bulkReadCount++;
+      return super.read(bytes, offset, length);
+    }
+
+    @Override
+    public synchronized int read() {
+      singleByteReadCount++;
+      return super.read();
     }
   }
 }
