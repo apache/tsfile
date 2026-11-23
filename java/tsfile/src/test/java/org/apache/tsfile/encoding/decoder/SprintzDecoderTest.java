@@ -32,8 +32,10 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
@@ -369,6 +371,42 @@ public class SprintzDecoderTest {
     if (decoder.hasNext(buffer)) {
       fail();
     }
+  }
+
+  @Test
+  public void testSprintzBlockAnchorsRemainBigEndian() throws IOException {
+    float floatValue = Float.intBitsToFloat(0x7fc12345);
+    ByteArrayOutputStream floatOutput = new ByteArrayOutputStream();
+    FloatSprintzEncoder floatEncoder = new FloatSprintzEncoder();
+    for (int index = 0; index < 9; index++) {
+      floatEncoder.encode(floatValue, floatOutput);
+    }
+    floatEncoder.flush(floatOutput);
+    assertArrayEquals(
+        ByteBuffer.allocate(Float.BYTES).putFloat(floatValue).array(),
+        Arrays.copyOfRange(floatOutput.toByteArray(), 1, 1 + Float.BYTES));
+
+    double doubleValue = Double.longBitsToDouble(0x7ff8123456789abcL);
+    ByteArrayOutputStream doubleOutput = new ByteArrayOutputStream();
+    DoubleSprintzEncoder doubleEncoder = new DoubleSprintzEncoder();
+    for (int index = 0; index < 9; index++) {
+      doubleEncoder.encode(doubleValue, doubleOutput);
+    }
+    doubleEncoder.flush(doubleOutput);
+    assertArrayEquals(
+        ByteBuffer.allocate(Double.BYTES).putDouble(doubleValue).array(),
+        Arrays.copyOfRange(doubleOutput.toByteArray(), 1, 1 + Double.BYTES));
+
+    long longValue = 0x0123456789abcdefL;
+    ByteArrayOutputStream longOutput = new ByteArrayOutputStream();
+    LongSprintzEncoder longEncoder = new LongSprintzEncoder();
+    for (int index = 0; index < 9; index++) {
+      longEncoder.encode(longValue, longOutput);
+    }
+    longEncoder.flush(longOutput);
+    assertArrayEquals(
+        ByteBuffer.allocate(Long.BYTES).putLong(longValue).array(),
+        Arrays.copyOfRange(longOutput.toByteArray(), 1, 1 + Long.BYTES));
   }
 
   @Test

@@ -27,7 +27,6 @@ import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.Vector;
 
 public class FloatSprintzEncoder extends SprintzEncoder {
@@ -92,7 +91,7 @@ public class FloatSprintzEncoder extends SprintzEncoder {
     byte[] bytes = new byte[bitWidth];
     packer.pack8Values(convertBuffer, 0, bytes);
     ReadWriteForEncodingUtils.writeIntLittleEndianPaddedOnBitWidth(bitWidth, byteCache, 1);
-    byteCache.write(ByteBuffer.allocate(Float.BYTES).putFloat(preValue).array());
+    writeBigEndian(Float.floatToRawIntBits(preValue), Float.BYTES);
     byteCache.write(bytes, 0, bytes.length);
   }
 

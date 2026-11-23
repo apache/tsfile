@@ -26,6 +26,7 @@ import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.read.reader.TsFileInput;
 
+import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
@@ -33,6 +34,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.CharacterCodingException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -268,6 +270,10 @@ public class ReadWriteIOUtils {
    * @return The number of bytes used to represent n.
    */
   public static int write(short n, OutputStream outputStream) throws IOException {
+    if (outputStream instanceof DataOutputStream
+        && outputStream.getClass() == DataOutputStream.class) {
+      return write(n, (DataOutputStream) outputStream);
+    }
     byte[] bytes = BytesUtils.shortToBytes(n);
     outputStream.write(bytes);
     return bytes.length;
@@ -316,6 +322,10 @@ public class ReadWriteIOUtils {
    * @return The number of bytes used to represent n.
    */
   public static int write(int n, OutputStream outputStream) throws IOException {
+    if (outputStream instanceof DataOutputStream
+        && outputStream.getClass() == DataOutputStream.class) {
+      return write(n, (DataOutputStream) outputStream);
+    }
     byte[] bytes = BytesUtils.intToBytes(n);
     outputStream.write(bytes);
     return INT_LEN;
@@ -328,6 +338,10 @@ public class ReadWriteIOUtils {
 
   /** write the size (int) of the binary and then the bytes in binary */
   public static int write(Binary binary, OutputStream outputStream) throws IOException {
+    if (outputStream instanceof DataOutputStream
+        && outputStream.getClass() == DataOutputStream.class) {
+      return write(binary, (DataOutputStream) outputStream);
+    }
     byte[] size = BytesUtils.intToBytes(binary.getValues().length);
     outputStream.write(size);
     outputStream.write(binary.getValues());
@@ -357,6 +371,10 @@ public class ReadWriteIOUtils {
    * @return The number of bytes used to represent n.
    */
   public static int write(float n, OutputStream outputStream) throws IOException {
+    if (outputStream instanceof DataOutputStream
+        && outputStream.getClass() == DataOutputStream.class) {
+      return write(n, (DataOutputStream) outputStream);
+    }
     byte[] bytes = BytesUtils.floatToBytes(n);
     outputStream.write(bytes);
     return FLOAT_LEN;
@@ -373,6 +391,10 @@ public class ReadWriteIOUtils {
    * @return The number of bytes used to represent n.
    */
   public static int write(double n, OutputStream outputStream) throws IOException {
+    if (outputStream instanceof DataOutputStream
+        && outputStream.getClass() == DataOutputStream.class) {
+      return write(n, (DataOutputStream) outputStream);
+    }
     byte[] bytes = BytesUtils.doubleToBytes(n);
     outputStream.write(bytes);
     return DOUBLE_LEN;
@@ -389,6 +411,10 @@ public class ReadWriteIOUtils {
    * @return The number of bytes used to represent n.
    */
   public static int write(long n, OutputStream outputStream) throws IOException {
+    if (outputStream instanceof DataOutputStream
+        && outputStream.getClass() == DataOutputStream.class) {
+      return write(n, (DataOutputStream) outputStream);
+    }
     byte[] bytes = BytesUtils.longToBytes(n);
     outputStream.write(bytes);
     return LONG_LEN;
@@ -563,6 +589,9 @@ public class ReadWriteIOUtils {
 
   /** read a short var from inputStream. */
   public static short readShort(InputStream inputStream) throws IOException {
+    if (inputStream instanceof DataInputStream && inputStream.getClass() == DataInputStream.class) {
+      return (short) readFixedWidthFromDataInputStream(inputStream, SHORT_LEN, false);
+    }
     byte[] bytes = new byte[SHORT_LEN];
     int readLen = readAtMost(inputStream, bytes);
     if (readLen != SHORT_LEN) {
@@ -578,6 +607,10 @@ public class ReadWriteIOUtils {
 
   /** Read a float var from inputStream. */
   public static float readFloat(InputStream inputStream) throws IOException {
+    if (inputStream instanceof DataInputStream && inputStream.getClass() == DataInputStream.class) {
+      return Float.intBitsToFloat(
+          (int) readFixedWidthFromDataInputStream(inputStream, FLOAT_LEN, false));
+    }
     byte[] bytes = new byte[FLOAT_LEN];
     int readLen = readAtMost(inputStream, bytes);
     if (readLen != FLOAT_LEN) {
@@ -588,13 +621,19 @@ public class ReadWriteIOUtils {
 
   /** Read a float var from byteBuffer. */
   public static float readFloat(ByteBuffer byteBuffer) {
-    byte[] bytes = new byte[FLOAT_LEN];
-    byteBuffer.get(bytes);
-    return BytesUtils.bytesToFloat(bytes);
+    int bits = byteBuffer.getInt();
+    if (byteBuffer.order() == ByteOrder.LITTLE_ENDIAN) {
+      bits = Integer.reverseBytes(bits);
+    }
+    return Float.intBitsToFloat(bits);
   }
 
   /** Read a double var from inputStream. */
   public static double readDouble(InputStream inputStream) throws IOException {
+    if (inputStream instanceof DataInputStream && inputStream.getClass() == DataInputStream.class) {
+      return Double.longBitsToDouble(
+          readFixedWidthFromDataInputStream(inputStream, DOUBLE_LEN, false));
+    }
     byte[] bytes = new byte[DOUBLE_LEN];
     int readLen = readAtMost(inputStream, bytes);
     if (readLen != DOUBLE_LEN) {
@@ -605,13 +644,18 @@ public class ReadWriteIOUtils {
 
   /** Read a double var from byteBuffer. */
   public static double readDouble(ByteBuffer byteBuffer) {
-    byte[] bytes = new byte[DOUBLE_LEN];
-    byteBuffer.get(bytes);
-    return BytesUtils.bytesToDouble(bytes);
+    long bits = byteBuffer.getLong();
+    if (byteBuffer.order() == ByteOrder.LITTLE_ENDIAN) {
+      bits = Long.reverseBytes(bits);
+    }
+    return Double.longBitsToDouble(bits);
   }
 
   /** Read an int var from inputStream. */
   public static int readInt(InputStream inputStream) throws IOException {
+    if (inputStream instanceof DataInputStream && inputStream.getClass() == DataInputStream.class) {
+      return (int) readFixedWidthFromDataInputStream(inputStream, INT_LEN, false);
+    }
     byte[] bytes = new byte[INT_LEN];
     int readLen = readAtMost(inputStream, bytes);
     if (readLen != INT_LEN) {
@@ -639,6 +683,9 @@ public class ReadWriteIOUtils {
 
   /** Read a long var from inputStream. */
   public static long readLong(InputStream inputStream) throws IOException {
+    if (inputStream instanceof DataInputStream && inputStream.getClass() == DataInputStream.class) {
+      return readFixedWidthFromDataInputStream(inputStream, LONG_LEN, true);
+    }
     byte[] bytes = new byte[LONG_LEN];
     int readLen = readAtMost(inputStream, bytes);
     if (readLen != LONG_LEN) {
@@ -702,6 +749,25 @@ public class ReadWriteIOUtils {
       }
     }
     return readLen;
+  }
+
+  private static long readFixedWidthFromDataInputStream(
+      InputStream inputStream, int length, boolean eofException) throws IOException {
+    long value = 0;
+    int readLen = 0;
+    while (readLen < length) {
+      int currentByte = inputStream.read();
+      if (currentByte < 0) {
+        String message = Messages.format(RETURN_ERROR_KEY, length, readLen);
+        if (eofException) {
+          throw new EOFException(message);
+        }
+        throw new IOException(message);
+      }
+      value = (value << Byte.SIZE) | currentByte;
+      readLen++;
+    }
+    return value;
   }
 
   /** Read string from byteBuffer. */

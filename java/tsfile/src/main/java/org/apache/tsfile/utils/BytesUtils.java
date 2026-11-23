@@ -24,6 +24,7 @@ import org.apache.tsfile.i18n.Messages;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
@@ -836,6 +837,9 @@ public class BytesUtils {
    * @throws IOException cannot read double from InputStream
    */
   public static double readDouble(InputStream in) throws IOException {
+    if (in instanceof DataInputStream && in.getClass() == DataInputStream.class) {
+      return Double.longBitsToDouble(readFixedWidthFromDataInputStream((DataInputStream) in, 8));
+    }
     byte[] b = safeReadInputStreamToBytes(8, in);
     return BytesUtils.bytesToDouble(b);
   }
@@ -848,6 +852,9 @@ public class BytesUtils {
    * @throws IOException cannot read float from InputStream
    */
   public static float readFloat(InputStream in) throws IOException {
+    if (in instanceof DataInputStream && in.getClass() == DataInputStream.class) {
+      return Float.intBitsToFloat((int) readFixedWidthFromDataInputStream((DataInputStream) in, 4));
+    }
     byte[] b = safeReadInputStreamToBytes(4, in);
     return BytesUtils.bytesToFloat(b);
   }
@@ -860,8 +867,11 @@ public class BytesUtils {
    * @throws IOException cannot read boolean from InputStream
    */
   public static boolean readBool(InputStream in) throws IOException {
+    if (in instanceof DataInputStream && in.getClass() == DataInputStream.class) {
+      return byteToBool((byte) readFixedWidthFromDataInputStream((DataInputStream) in, 1));
+    }
     byte[] b = safeReadInputStreamToBytes(1, in);
-    return BytesUtils.bytesToBool(b);
+    return byteToBool(b[0]);
   }
 
   /**
@@ -872,6 +882,9 @@ public class BytesUtils {
    * @throws IOException cannot read int from InputStream
    */
   public static int readInt(InputStream in) throws IOException {
+    if (in instanceof DataInputStream && in.getClass() == DataInputStream.class) {
+      return (int) readFixedWidthFromDataInputStream((DataInputStream) in, 4);
+    }
     byte[] b = safeReadInputStreamToBytes(4, in);
     return BytesUtils.bytesToInt(b);
   }
@@ -884,8 +897,26 @@ public class BytesUtils {
    * @throws IOException cannot read long from InputStream
    */
   public static long readLong(InputStream in) throws IOException {
+    if (in instanceof DataInputStream && in.getClass() == DataInputStream.class) {
+      return readFixedWidthFromDataInputStream((DataInputStream) in, 8);
+    }
     byte[] b = safeReadInputStreamToBytes(8, in);
     return BytesUtils.bytesToLong(b);
+  }
+
+  private static long readFixedWidthFromDataInputStream(DataInputStream in, int count)
+      throws IOException {
+    long value = 0;
+    int readCount = 0;
+    while (readCount < count) {
+      int currentByte = in.read();
+      if (currentByte < 0) {
+        throw new IOException(Messages.format("error.utils.rwio_short_read", count, readCount));
+      }
+      value = (value << Byte.SIZE) | currentByte;
+      readCount++;
+    }
+    return value;
   }
 
   /**

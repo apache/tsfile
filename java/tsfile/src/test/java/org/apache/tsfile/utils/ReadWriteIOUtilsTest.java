@@ -28,12 +28,15 @@ import org.mockito.Mockito;
 import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -105,6 +108,56 @@ public class ReadWriteIOUtilsTest {
   }
 
   @Test
+  public void testOutputStreamOverloadsUseDataOutputStreamFastPath() throws IOException {
+    ByteArrayOutputStream reference = new ByteArrayOutputStream();
+    writeOutputStreamValues(reference);
+
+    ByteArrayOutputStream actual = new ByteArrayOutputStream();
+    OutputStream outputStream = new DataOutputStream(actual);
+    writeOutputStreamValues(outputStream);
+
+    Assert.assertArrayEquals(reference.toByteArray(), actual.toByteArray());
+  }
+
+  @Test
+  public void testOutputStreamOverloadsPreserveDataOutputStreamSubclassBehavior()
+      throws IOException {
+    ByteArrayOutputStream reference = new ByteArrayOutputStream();
+    writeOutputStreamValues(reference);
+
+    ByteArrayOutputStream actual = new ByteArrayOutputStream();
+    CountingDataOutputStream dataOutputStream = new CountingDataOutputStream(actual);
+    writeOutputStreamValues(dataOutputStream);
+
+    Assert.assertEquals(9, dataOutputStream.byteArrayWriteCount);
+    Assert.assertArrayEquals(reference.toByteArray(), actual.toByteArray());
+  }
+
+  private static void writeOutputStreamValues(OutputStream outputStream) throws IOException {
+    ReadWriteIOUtils.write((short) 0x1234, outputStream);
+    ReadWriteIOUtils.write(0x12345678, outputStream);
+    ReadWriteIOUtils.write(0x123456789ABCDEFL, outputStream);
+    ReadWriteIOUtils.write(Float.intBitsToFloat(0x7fa12345), outputStream);
+    ReadWriteIOUtils.write(Double.longBitsToDouble(0x7ff123456789abcdL), outputStream);
+    ReadWriteIOUtils.write(new Binary(new byte[] {0, -1, 1, 0}), outputStream);
+    ReadWriteIOUtils.write(String.valueOf(42), outputStream);
+  }
+
+  private static final class CountingDataOutputStream extends DataOutputStream {
+    private int byteArrayWriteCount;
+
+    private CountingDataOutputStream(OutputStream outputStream) {
+      super(outputStream);
+    }
+
+    @Override
+    public void write(byte[] bytes) throws IOException {
+      byteArrayWriteCount++;
+      super.write(bytes);
+    }
+  }
+
+  @Test
   public void testReadLongFromFragmentedStream() throws IOException {
     long expected = 0x8123456789ABCDEFL;
     byte[] encoded = ByteBuffer.allocate(Long.BYTES).putLong(expected).array();
@@ -150,6 +203,93 @@ public class ReadWriteIOUtilsTest {
     byte[] doubleBytes = ByteBuffer.allocate(Double.BYTES).putDouble(1.25D).array();
     Assert.assertEquals(
         1.25D, ReadWriteIOUtils.readDouble(new FragmentedInputStream(doubleBytes, 3)), 0.0D);
+  }
+
+  @Test
+  public void testFixedWidthReadersUseDataInputStreamPrimitives() throws IOException {
+    ByteBuffer encoded =
+        ByteBuffer.allocate(Short.BYTES + Integer.BYTES + Long.BYTES + Float.BYTES + Double.BYTES);
+    encoded.putShort((short) 0x1234);
+    encoded.putInt(0x12345678);
+    encoded.putLong(0x123456789ABCDEFL);
+    encoded.putFloat(1.25F);
+    encoded.putDouble(-2.5D);
+    InputStream input = new DataInputStream(new ByteArrayInputStream(encoded.array()));
+
+    Assert.assertEquals((short) 0x1234, ReadWriteIOUtils.readShort(input));
+    Assert.assertEquals(0x12345678, ReadWriteIOUtils.readInt(input));
+    Assert.assertEquals(0x123456789ABCDEFL, ReadWriteIOUtils.readLong(input));
+    Assert.assertEquals(1.25F, ReadWriteIOUtils.readFloat(input), 0.0F);
+    Assert.assertEquals(-2.5D, ReadWriteIOUtils.readDouble(input), 0.0D);
+    Assert.assertEquals(-1, input.read());
+  }
+
+  @Test
+  public void testDataInputStreamTruncationMatchesInputStreamBehavior() {
+    assertDataInputStreamTruncationMatches(input -> ReadWriteIOUtils.readShort(input), Short.BYTES);
+    assertDataInputStreamTruncationMatches(input -> ReadWriteIOUtils.readInt(input), Integer.BYTES);
+    assertDataInputStreamTruncationMatches(input -> ReadWriteIOUtils.readFloat(input), Float.BYTES);
+    assertDataInputStreamTruncationMatches(
+        input -> ReadWriteIOUtils.readDouble(input), Double.BYTES);
+    assertDataInputStreamTruncationMatches(input -> ReadWriteIOUtils.readLong(input), Long.BYTES);
+  }
+
+  @Test
+  public void testDataInputStreamSubclassSingleByteReadsArePreserved() throws IOException {
+    int expected = 0x12345678;
+    SingleByteReadTrackingDataInputStream input =
+        new SingleByteReadTrackingDataInputStream(
+            new FragmentedInputStream(
+                ByteBuffer.allocate(Integer.BYTES).putInt(expected).array(), Integer.BYTES));
+
+    Assert.assertEquals(expected, ReadWriteIOUtils.readInt(input));
+    Assert.assertTrue(input.singleByteReadCount > 0);
+    Assert.assertEquals(-1, input.read());
+  }
+
+  @Test
+  public void testFloatingPointReadersPreserveBigEndianDecoding() {
+    for (ByteOrder order : new ByteOrder[] {ByteOrder.BIG_ENDIAN, ByteOrder.LITTLE_ENDIAN}) {
+      byte[] floatBytes = ByteBuffer.allocate(Float.BYTES).order(order).putFloat(-123.5F).array();
+      ByteBuffer floatBuffer = ByteBuffer.wrap(floatBytes).order(order);
+      Assert.assertEquals(
+          BytesUtils.bytesToFloat(floatBytes), ReadWriteIOUtils.readFloat(floatBuffer), 0.0F);
+
+      byte[] doubleBytes =
+          ByteBuffer.allocate(Double.BYTES).order(order).putDouble(9876.125D).array();
+      ByteBuffer doubleBuffer = ByteBuffer.wrap(doubleBytes).order(order);
+      Assert.assertEquals(
+          BytesUtils.bytesToDouble(doubleBytes), ReadWriteIOUtils.readDouble(doubleBuffer), 0.0D);
+    }
+  }
+
+  @Test
+  public void testFloatingPointReadersPreserveNaNBitsAndBufferPosition() {
+    int floatNaNBits = 0x7fc12345;
+    byte[] floatBytes = ByteBuffer.allocate(Float.BYTES).putInt(floatNaNBits).array();
+    ByteBuffer floatBuffer = ByteBuffer.wrap(floatBytes);
+    Assert.assertEquals(
+        floatNaNBits, Float.floatToRawIntBits(ReadWriteIOUtils.readFloat(floatBuffer)));
+    Assert.assertEquals(Float.BYTES, floatBuffer.position());
+
+    long doubleNaNBits = 0x7ff8123456789abcL;
+    byte[] doubleBytes = ByteBuffer.allocate(Double.BYTES).putLong(doubleNaNBits).array();
+    ByteBuffer doubleBuffer = ByteBuffer.wrap(doubleBytes);
+    Assert.assertEquals(
+        doubleNaNBits, Double.doubleToRawLongBits(ReadWriteIOUtils.readDouble(doubleBuffer)));
+    Assert.assertEquals(Double.BYTES, doubleBuffer.position());
+
+    ByteBuffer truncatedFloat = ByteBuffer.allocate(Float.BYTES);
+    truncatedFloat.position(1);
+    Assert.assertThrows(
+        BufferUnderflowException.class, () -> ReadWriteIOUtils.readFloat(truncatedFloat));
+    Assert.assertEquals(1, truncatedFloat.position());
+
+    ByteBuffer truncatedDouble = ByteBuffer.allocate(Double.BYTES);
+    truncatedDouble.position(1);
+    Assert.assertThrows(
+        BufferUnderflowException.class, () -> ReadWriteIOUtils.readDouble(truncatedDouble));
+    Assert.assertEquals(1, truncatedDouble.position());
   }
 
   @Test
@@ -271,6 +411,40 @@ public class ReadWriteIOUtilsTest {
     Assert.assertThrows(EOFException.class, () -> ReadWriteIOUtils.readByte(input));
     Assert.assertThrows(EOFException.class, () -> ReadWriteIOUtils.readBool(input));
     Assert.assertThrows(EOFException.class, () -> ReadWriteIOUtils.readBoolean(input));
+  }
+
+  private static void assertDataInputStreamTruncationMatches(
+      InputStreamReadOperation readOperation, int width) {
+    for (int length = 0; length < width; length++) {
+      byte[] truncated = new byte[length];
+      IOException expected =
+          Assert.assertThrows(
+              IOException.class, () -> readOperation.read(new ByteArrayInputStream(truncated)));
+      IOException actual =
+          Assert.assertThrows(
+              IOException.class,
+              () -> readOperation.read(new DataInputStream(new ByteArrayInputStream(truncated))));
+      Assert.assertEquals(expected.getClass(), actual.getClass());
+      Assert.assertEquals(expected.getMessage(), actual.getMessage());
+    }
+  }
+
+  private interface InputStreamReadOperation {
+    Object read(InputStream inputStream) throws IOException;
+  }
+
+  private static final class SingleByteReadTrackingDataInputStream extends DataInputStream {
+    private int singleByteReadCount;
+
+    private SingleByteReadTrackingDataInputStream(InputStream inputStream) {
+      super(inputStream);
+    }
+
+    @Override
+    public int read() throws IOException {
+      singleByteReadCount++;
+      return super.read();
+    }
   }
 
   private static final class FragmentedInputStream extends ByteArrayInputStream {
