@@ -22,7 +22,6 @@ import java.util.Arrays;
 
 public class Murmur128Hash {
 
-  private static final int BLOCK_BYTES = 16;
   private static final long C1 = 0x87c37b91114253d5L;
   private static final long C2 = 0x4cf5ad432745937fL;
 
@@ -38,8 +37,7 @@ public class Murmur128Hash {
    * @return hashcode of value
    */
   public static int hash(String value, int seed) {
-    byte[] bytes = value.getBytes();
-    return (int) innerHash(bytes, bytes.length, bytes.length, seed, seed);
+    return (int) innerHash(value.getBytes(), 0, value.getBytes().length, seed);
   }
 
   /**
@@ -51,18 +49,18 @@ public class Murmur128Hash {
    * @return hashcode of value
    */
   public static int hash(String value1, long value2, int seed) {
-    int length = value1.length() + Long.BYTES;
     return (int)
         innerHash(
             BytesUtils.concatByteArray(value1.getBytes(), BytesUtils.longToBytes(value2)),
-            length,
-            length,
-            seed,
+            0,
+            value1.length() + 8,
             seed);
   }
 
   /** Methods to perform murmur 128 hash. */
-  private static long getBlock(byte[] key, int blockOffset) {
+  private static long getBlock(byte[] key, int offset, int index) {
+    int i8 = index << 3;
+    int blockOffset = offset + i8;
     return ((long) key[blockOffset] & 0xff)
         + (((long) key[blockOffset + 1] & 0xff) << 8)
         + (((long) key[blockOffset + 2] & 0xff) << 16)
@@ -86,68 +84,25 @@ public class Murmur128Hash {
     return k;
   }
 
-  // A complete 16-byte block updates h1 first. The new h1 feeds the update of h2.
-  private static long mixH1(long h1, long h2, long k1) {
-    h1 ^= rotl64(k1 * C1, 31) * C2;
-    return (rotl64(h1, 27) + h2) * 5 + 0x52dce729;
+  private static long innerHash(byte[] key, int offset, int length, long seed) {
+    return innerHash(key, offset, length, seed, seed);
   }
 
-  private static long mixH2(long h1, long h2, long k2) {
-    h2 ^= rotl64(k2 * C2, 33) * C1;
-    return (rotl64(h2, 31) + h1) * 5 + 0x38495ab5;
-  }
-
-  /** Hashes multiple suffixes sharing the same prefix, with one state per Bloom filter seed. */
-  static final class PrefixHasher {
-    private final long[] h1;
-    private final long[] h2;
-    private final int prefixBlockBytes;
-    private final int prefixTailBytes;
-    private byte[] buffer;
-    private int length;
-
-    PrefixHasher(byte[] prefix, int[] seeds, int seedCount) {
-      h1 = new long[seedCount];
-      h2 = new long[seedCount];
-      for (int i = 0; i < seedCount; i++) {
-        h1[i] = seeds[i];
-        h2[i] = seeds[i];
-      }
-      prefixTailBytes = prefix.length % BLOCK_BYTES;
-      prefixBlockBytes = prefix.length - prefixTailBytes;
-      for (int offset = 0; offset < prefixBlockBytes; offset += BLOCK_BYTES) {
-        long k1 = getBlock(prefix, offset);
-        long k2 = getBlock(prefix, offset + Long.BYTES);
-        for (int i = 0; i < seedCount; i++) {
-          h1[i] = mixH1(h1[i], h2[i], k1);
-          h2[i] = mixH2(h1[i], h2[i], k2);
-        }
-      }
-      // A partial prefix block must be completed with bytes from the current measurement.
-      buffer = Arrays.copyOfRange(prefix, prefixBlockBytes, prefix.length);
+  // offset is the number of complete prefix bytes already mixed into h1 and h2.
+  private static long innerHash(byte[] key, int offset, int length, long h1, long h2) {
+    final int nblocks = (length - offset) >> 4; // Process as 128-bit blocks.
+    // ----------
+    // body
+    for (int i = 0; i < nblocks; i++) {
+      long k1 = getBlock(key, offset, i * 2);
+      long k2 = getBlock(key, offset, i * 2 + 1);
+      h1 = mixH1(h1, h2, k1);
+      h2 = mixH2(h1, h2, k2);
     }
-
-    void setSuffix(byte[] suffix) {
-      length = prefixTailBytes + suffix.length;
-      if (buffer.length < length) {
-        buffer = Arrays.copyOf(buffer, length);
-      }
-      System.arraycopy(suffix, 0, buffer, prefixTailBytes, suffix.length);
-    }
-
-    int hash(int seedIndex) {
-      return (int)
-          innerHash(buffer, length, prefixBlockBytes + length, h1[seedIndex], h2[seedIndex]);
-    }
-  }
-
-  private static long innerHash(byte[] key, int length, int totalLength, long h1, long h2) {
-    int blockBytes = length - length % BLOCK_BYTES;
-    int offset = 0;
-    for (; offset < blockBytes; offset += BLOCK_BYTES) {
-      h1 = mixH1(h1, h2, getBlock(key, offset));
-      h2 = mixH2(h1, h2, getBlock(key, offset + Long.BYTES));
-    }
+    // ----------
+    // tail
+    // Advance offset to the unprocessed tail of the data.
+    offset += nblocks * 16;
     long k1 = 0;
     long k2 = 0;
     switch (length & 15) {
@@ -210,8 +165,8 @@ public class Murmur128Hash {
     }
     // ----------
     // finalization
-    h1 ^= totalLength;
-    h2 ^= totalLength;
+    h1 ^= length;
+    h2 ^= length;
     h1 += h2;
     h2 += h1;
     h1 = fmix(h1);
@@ -219,5 +174,61 @@ public class Murmur128Hash {
     h1 += h2;
     h2 += h1;
     return h1 + h2;
+  }
+
+  private static long mixH1(long h1, long h2, long k1) {
+    k1 *= C1;
+    k1 = rotl64(k1, 31);
+    k1 *= C2;
+    h1 ^= k1;
+    h1 = rotl64(h1, 27);
+    h1 += h2;
+    return h1 * 5 + 0x52dce729;
+  }
+
+  private static long mixH2(long h1, long h2, long k2) {
+    k2 *= C2;
+    k2 = rotl64(k2, 33);
+    k2 *= C1;
+    h2 ^= k2;
+    h2 = rotl64(h2, 31);
+    h2 += h1;
+    return h2 * 5 + 0x38495ab5;
+  }
+
+  /** Reuses complete prefix blocks for all measurements in one Bloom filter lookup. */
+  static final class PrefixHasher {
+    private final long[] h1;
+    private final long[] h2;
+    private final int prefixLength;
+    private byte[] buffer;
+    private int length;
+
+    PrefixHasher(byte[] prefix, int[] seeds, int seedCount) {
+      buffer = prefix;
+      prefixLength = prefix.length;
+      h1 = new long[seedCount];
+      h2 = new long[seedCount];
+      for (int i = 0; i < seedCount; i++) {
+        h1[i] = seeds[i];
+        h2[i] = seeds[i];
+        for (int block = 0; block < prefixLength / 16; block++) {
+          h1[i] = mixH1(h1[i], h2[i], getBlock(prefix, 0, block * 2));
+          h2[i] = mixH2(h1[i], h2[i], getBlock(prefix, 0, block * 2 + 1));
+        }
+      }
+    }
+
+    void setSuffix(byte[] suffix) {
+      length = prefixLength + suffix.length;
+      if (buffer.length < length) {
+        buffer = Arrays.copyOf(buffer, length);
+      }
+      System.arraycopy(suffix, 0, buffer, prefixLength, suffix.length);
+    }
+
+    int hash(int seedIndex) {
+      return (int) innerHash(buffer, prefixLength / 16 * 16, length, h1[seedIndex], h2[seedIndex]);
+    }
   }
 }

@@ -210,8 +210,12 @@ public class BloomFilter {
     return bitIndex(Murmur128Hash.hash(value, seed), cap);
   }
 
-  private static int bitIndex(int hash, int cap) {
-    return (hash == Integer.MIN_VALUE ? 0 : Math.abs(hash)) % cap;
+  private static int bitIndex(int res, int cap) {
+    if (res == Integer.MIN_VALUE) {
+      res = 0;
+    }
+
+    return Math.abs(res) % cap;
   }
 
   public int serialize(OutputStream outputStream) throws IOException {
