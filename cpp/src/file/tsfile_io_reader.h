@@ -146,6 +146,10 @@ class TsFileIOReader {
         std::vector<ITimeseriesIndex*>& timeseries_indexs,
         common::PageArena& pa);
 
+    // Internal scan preparation for time-only and missing-FIELD projections.
+    int get_device_time_index(std::shared_ptr<IDeviceID> device_id,
+                              TimeseriesIndex*& index, common::PageArena& pa);
+
     int get_device_timeseries_meta_by_offset(
         int64_t start_offset, int64_t end_offset,
         std::vector<ITimeseriesIndex*>& timeseries_indexs,

@@ -87,25 +87,18 @@ int TableQueryExecutor::query(const std::string& table_name,
             lower_case_column_names, table_root, column_mapping,
             meta_data_querier_, tag_filter, table_schema));
 
-    std::unique_ptr<TsBlockReader> tsblock_reader;
-    switch (table_query_ordering_) {
-        case TableQueryOrdering::DEVICE:
-            tsblock_reader = std::unique_ptr<DeviceOrderedTsBlockReader>(
-                new DeviceOrderedTsBlockReader(
-                    std::move(device_task_iterator), meta_data_querier_,
-                    block_size_, tsfile_io_reader_, time_filter, field_filter));
-            break;
-        case TableQueryOrdering::TIME:
-        default:
-            delete time_filter;
-            delete field_filter;
-            ret_qds = nullptr;
-            return common::E_UNSUPPORTED_ORDER;
+    if (table_query_ordering_ != TableQueryOrdering::DEVICE) {
+        delete time_filter;
+        delete field_filter;
+        ret_qds = nullptr;
+        return common::E_UNSUPPORTED_ORDER;
     }
-    assert(tsblock_reader != nullptr);
-    ret_qds =
-        new TableResultSet(std::move(tsblock_reader), lower_case_column_names,
-                           data_types, return_mode_);
+    std::unique_ptr<QueryScanExecutor> scan(new QueryScanExecutor(
+        std::move(device_task_iterator), tsfile_io_reader_,
+        lower_case_column_names, data_types, block_size_, time_filter,
+        field_filter));
+    ret_qds = new TableResultSet(std::move(scan), lower_case_column_names,
+                                 data_types, return_mode_);
     return ret;
 }
 
@@ -171,26 +164,18 @@ int TableQueryExecutor::query(const std::string& table_name,
             lower_case_column_names, table_root, column_mapping,
             meta_data_querier_, tag_filter, table_schema));
 
-    std::unique_ptr<TsBlockReader> tsblock_reader;
-    switch (table_query_ordering_) {
-        case TableQueryOrdering::DEVICE:
-            tsblock_reader = std::unique_ptr<DeviceOrderedTsBlockReader>(
-                new DeviceOrderedTsBlockReader(std::move(device_task_iterator),
-                                               meta_data_querier_, block_size_,
-                                               tsfile_io_reader_, time_filter,
-                                               field_filter, offset, limit));
-            break;
-        case TableQueryOrdering::TIME:
-        default:
-            delete time_filter;
-            delete field_filter;
-            ret_qds = nullptr;
-            return common::E_UNSUPPORTED_ORDER;
+    if (table_query_ordering_ != TableQueryOrdering::DEVICE) {
+        delete time_filter;
+        delete field_filter;
+        ret_qds = nullptr;
+        return common::E_UNSUPPORTED_ORDER;
     }
-    assert(tsblock_reader != nullptr);
-    ret_qds =
-        new TableResultSet(std::move(tsblock_reader), lower_case_column_names,
-                           data_types, return_mode_);
+    std::unique_ptr<QueryScanExecutor> scan(new QueryScanExecutor(
+        std::move(device_task_iterator), tsfile_io_reader_,
+        lower_case_column_names, data_types, block_size_, time_filter,
+        field_filter, offset, limit));
+    ret_qds = new TableResultSet(std::move(scan), lower_case_column_names,
+                                 data_types, return_mode_);
     return ret;
 }
 
@@ -289,22 +274,18 @@ int TableQueryExecutor::query_on_tree(
         std::unique_ptr<DeviceTaskIterator>(new DeviceTaskIterator(
             schema->get_measurement_names(), index_nodes, column_mapping,
             meta_data_querier_, nullptr, schema));
-    std::unique_ptr<TsBlockReader> tsblock_reader;
-    switch (table_query_ordering_) {
-        case TableQueryOrdering::DEVICE:
-            tsblock_reader = std::unique_ptr<DeviceOrderedTsBlockReader>(
-                new DeviceOrderedTsBlockReader(
-                    std::move(device_task_iterator), meta_data_querier_,
-                    block_size_, tsfile_io_reader_, time_filter, nullptr));
-            break;
-        case TableQueryOrdering::TIME:
-        default:
-            ret = common::E_UNSUPPORTED_ORDER;
+    if (table_query_ordering_ != TableQueryOrdering::DEVICE) {
+        delete time_filter;
+        ret_qds = nullptr;
+        return common::E_UNSUPPORTED_ORDER;
     }
-    assert(tsblock_reader != nullptr);
-    ret_qds = new TableResultSet(std::move(tsblock_reader),
-                                 schema->get_measurement_names(),
-                                 schema->get_data_types());
+    std::unique_ptr<QueryScanExecutor> scan(new QueryScanExecutor(
+        std::move(device_task_iterator), tsfile_io_reader_,
+        schema->get_measurement_names(), datatypes, block_size_, time_filter,
+        nullptr));
+    ret_qds =
+        new TableResultSet(std::move(scan), schema->get_measurement_names(),
+                           datatypes, return_mode_);
     return ret;
 }
 

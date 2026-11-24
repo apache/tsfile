@@ -1013,25 +1013,15 @@ TEST_P(AlignedFieldFilterRegressionTest,
     EXPECT_EQ(actual, expected);
 }
 
-// A block that cannot hold even one row has no supported capacity; the read
-// must surface an error instead of reporting empty successful blocks forever.
-TEST_P(AlignedFieldFilterRegressionTest, UnusableTsBlockCapacityReportsError) {
+// Table scans now own Arrow batches. The legacy TsBlock scratch budget must
+// neither truncate rows nor constrain the public output batch size.
+TEST_P(AlignedFieldFilterRegressionTest,
+       LegacyTsBlockCapacityDoesNotConstrainArrow) {
     g_config_value_.tsblock_max_memory_ = 8;
     write_missing_columns();
-    LocalRandomAccessReadFile file;
-    ASSERT_EQ(file.open(filename_), E_OK);
-    TableQueryExecutor executor(&file, std::get<1>(GetParam()));
-    ResultSet* result = nullptr;
-    int ret = executor.query("t", {"v", "ghost"}, nullptr, nullptr, nullptr, 0,
-                             -1, result);
-    if (ret == E_OK) {
-        ASSERT_NE(result, nullptr);
-        bool next = false;
-        ret = result->next(next);
-        EXPECT_FALSE(next);
-        executor.destroy_query_data_set(result);
-    }
-    EXPECT_EQ(ret, E_INVALID_ARG);
+    Rows actual = scan({"v", "ghost"}, nullptr);
+    ASSERT_FALSE(actual.empty());
+    for (const auto& row : actual) EXPECT_EQ(row[2], kNull);
 }
 
 INSTANTIATE_TEST_SUITE_P(RowAndBatchParallelModes,

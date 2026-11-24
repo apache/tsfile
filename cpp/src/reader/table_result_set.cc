@@ -53,7 +53,38 @@ int TableResultSet::next(bool& has_next) {
     return ret;
 }
 
+int TableResultSet::ensure_arrow_batch() {
+    if (closed_) return common::E_NO_MORE_DATA;
+    if (read_error_ != common::E_OK) return read_error_;
+    if (arrow_batch_) return common::E_OK;
+    int ret = scan_->next(arrow_batch_);
+    if (ret != common::E_OK && ret != common::E_NO_MORE_DATA) read_error_ = ret;
+    arrow_row_ = 0;
+    return ret;
+}
+
+int TableResultSet::get_next_arrow_batch(
+    std::shared_ptr<common::ArrowBatch>& batch) {
+    batch.reset();
+    if (!scan_ || return_mode_ != RETURN_BATCH) return common::E_INVALID_ARG;
+    int ret = ensure_arrow_batch();
+    if (ret == common::E_OK) batch = std::move(arrow_batch_);
+    return ret;
+}
+
 int TableResultSet::next_internal(bool& has_next) {
+    if (scan_) {
+        if (return_mode_ == RETURN_ROW && row_ready_) {
+            ++arrow_row_;
+            row_ready_ = false;
+            row_materialized_ = false;
+            if (arrow_row_ == arrow_batch_->row_count) arrow_batch_.reset();
+        }
+        int ret = ensure_arrow_batch();
+        has_next = ret == common::E_OK;
+        row_ready_ = has_next && return_mode_ == RETURN_ROW;
+        return ret == common::E_NO_MORE_DATA ? common::E_OK : ret;
+    }
     if (return_mode_ != RETURN_ROW) {
         return tsblock_reader_->has_next(has_next);
     }
@@ -108,6 +139,19 @@ int TableResultSet::next_internal(bool& has_next) {
 }
 
 void TableResultSet::materialize_current_row() {
+    if (scan_) {
+        row_record_->reset();
+        for (size_t c = 0; c < arrow_batch_->columns.size(); ++c) {
+            char scratch[8];
+            uint32_t size;
+            auto& column = *arrow_batch_->columns[c];
+            const char* data = column.native_value(arrow_row_, scratch, size);
+            if (data)
+                row_record_->get_field(c)->set_value(
+                    column.type(), const_cast<char*>(data), size, pa_);
+        }
+        return;
+    }
     uint32_t len = 0;
     bool null = false;
     row_record_->reset();
@@ -134,6 +178,8 @@ bool TableResultSet::is_null(const std::string& column_name) {
 bool TableResultSet::is_null(uint32_t column_index) {
     ASSERT(1 <= column_index && column_index <= row_record_->get_col_num());
     if (!row_ready_) return true;
+    if (scan_)
+        return arrow_batch_->columns[column_index - 1]->is_null(arrow_row_);
     return row_iterator_->is_null_at(column_index - 1);
 }
 
@@ -148,6 +194,16 @@ bool TableResultSet::is_null(uint32_t column_index) {
 // bytes into the result.
 #define TSFILE_FAST_PRIMITIVE_READ(TYPE, DFLT)                                \
     if (!row_ready_) return DFLT;                                             \
+    if (scan_) {                                                              \
+        auto& col = *arrow_batch_->columns[column_index - 1];                 \
+        ASSERT(common::TypeMatch<TYPE>(col.type()));                          \
+        char scratch[8];                                                      \
+        uint32_t size;                                                        \
+        const char* data = col.native_value(arrow_row_, scratch, size);       \
+        TYPE value = DFLT;                                                    \
+        if (data) std::memcpy(&value, data, sizeof(value));                   \
+        return value;                                                         \
+    }                                                                         \
     common::Vector* vec = row_iterator_->get_vector(column_index - 1);        \
     ASSERT(common::TypeMatch<TYPE>(vec->get_vector_type()));                  \
     if (vec->has_null() && vec->is_null(row_iterator_->get_row_id()))         \
@@ -192,6 +248,21 @@ std::shared_ptr<ResultSetMetadata> TableResultSet::get_metadata() {
 }
 
 int TableResultSet::get_next_tsblock(common::TsBlock*& block) {
+    if (scan_) {
+        block = nullptr;
+        std::shared_ptr<common::ArrowBatch> batch;
+        int ret = get_next_arrow_batch(batch);
+        if (ret != common::E_OK) return ret;
+        common::TsBlock* converted = adapted_block_.release();
+        ret = batch->to_tsblock(adapted_desc_, converted);
+        adapted_block_.reset(converted);
+        if (ret != common::E_OK) {
+            read_error_ = ret;
+            return ret;
+        }
+        block = converted;
+        return common::E_OK;
+    }
     int ret = common::E_OK;
     block = nullptr;
     if (read_error_ != common::E_OK) {
@@ -230,6 +301,9 @@ void TableResultSet::close() {
         return;
     }
     closed_ = true;
+    if (scan_) scan_->close();
+    arrow_batch_.reset();
+    adapted_block_.reset();
     if (tsblock_reader_) {
         tsblock_reader_->close();
     }

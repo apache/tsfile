@@ -1026,15 +1026,14 @@ bool tsfile_result_set_next(ResultSet result_set, ERRNO* err_code) {
     return has_next;
 }
 
-ERRNO tsfile_result_set_get_next_tsblock_as_arrow(ResultSet result_set,
-                                                  ArrowArray* out_array,
-                                                  ArrowSchema* out_schema) {
-    if (result_set == nullptr || out_array == nullptr ||
-        out_schema == nullptr) {
+static ERRNO export_next_arrow_batch(ResultSet result_set,
+                                     ArrowArray* out_array,
+                                     ArrowSchema* out_schema) {
+    if (result_set == nullptr || out_array == nullptr) {
         return common::E_INVALID_ARG;
     }
     std::memset(out_array, 0, sizeof(*out_array));
-    std::memset(out_schema, 0, sizeof(*out_schema));
+    if (out_schema) std::memset(out_schema, 0, sizeof(*out_schema));
 
     auto* r = static_cast<storage::ResultSet*>(result_set);
     auto* table_result_set = dynamic_cast<storage::TableResultSet*>(r);
@@ -1042,18 +1041,29 @@ ERRNO tsfile_result_set_get_next_tsblock_as_arrow(ResultSet result_set,
         return common::E_INVALID_ARG;
     }
 
-    common::TsBlock* tsblock = nullptr;
-    int ret = table_result_set->get_next_tsblock(tsblock);
-    if (ret != common::E_OK) {
-        return ret;
-    }
+    std::shared_ptr<common::ArrowBatch> batch;
+    int ret = table_result_set->get_next_arrow_batch(batch);
+    if (ret != common::E_OK) return ret;
+    return batch->export_to(out_array, out_schema);
+}
 
-    if (tsblock == nullptr) {
-        return common::E_NO_MORE_DATA;
-    }
+ERRNO tsfile_result_set_get_next_arrow_batch(ResultSet result_set,
+                                             ArrowArray* out_array,
+                                             ArrowSchema* out_schema) {
+    if (!out_schema) return common::E_INVALID_ARG;
+    return export_next_arrow_batch(result_set, out_array, out_schema);
+}
 
-    ret = arrow::TsBlockToArrowStruct(*tsblock, out_array, out_schema);
-    return ret;
+ERRNO tsfile_result_set_get_next_arrow_array(ResultSet result_set,
+                                             ArrowArray* out_array) {
+    return export_next_arrow_batch(result_set, out_array, nullptr);
+}
+
+ERRNO tsfile_result_set_get_next_tsblock_as_arrow(ResultSet result_set,
+                                                  ArrowArray* out_array,
+                                                  ArrowSchema* out_schema) {
+    return tsfile_result_set_get_next_arrow_batch(result_set, out_array,
+                                                  out_schema);
 }
 
 #define TSFILE_RESULT_SET_GET_VALUE_BY_NAME_DEF(type)                          \

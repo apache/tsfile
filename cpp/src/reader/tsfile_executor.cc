@@ -131,19 +131,18 @@ int TsFileExecutor::execute_prepared(
     if (prepared == nullptr || offset < 0) {
         return E_INVALID_ARG;
     }
-    auto tsblock_reader = std::unique_ptr<PreparedSeriesTsBlockReader>(
-        new PreparedSeriesTsBlockReader());
-    int ret = tsblock_reader->init(&io_reader_, prepared,
-                                   new TimeBetween(start_time, end_time, false),
-                                   offset, limit, block_rows);
-    if (ret != E_OK) {
-        return ret;
-    }
     std::vector<std::string> column_names(1, column_name);
+    if (!prepared->index()) return E_INVALID_ARG;
     std::vector<common::TSDataType> data_types(
-        1, tsblock_reader->value_data_type());
-    ret_qds = new TableResultSet(std::move(tsblock_reader), column_names,
-                                 data_types, RETURN_BATCH);
+        1, prepared->index()->get_data_type());
+    std::unique_ptr<QueryScanExecutor> scan(new QueryScanExecutor(
+        nullptr, &io_reader_, column_names, data_types,
+        block_rows ? block_rows : 65536,
+        new TimeBetween(start_time, end_time, false), nullptr, offset, limit));
+    int ret = scan->bind_prepared({prepared});
+    if (ret != E_OK) return ret;
+    ret_qds = new TableResultSet(std::move(scan), column_names, data_types,
+                                 RETURN_BATCH);
     return E_OK;
 }
 
@@ -157,26 +156,22 @@ int TsFileExecutor::execute_prepared_multi(
         return E_INVALID_ARG;
     }
 
-    auto tsblock_reader = std::unique_ptr<PreparedSeriesTsBlockReader>(
-        new PreparedSeriesTsBlockReader());
-    int ret = tsblock_reader->init_multi(
-        &io_reader_, prepared, new TimeBetween(start_time, end_time, false),
-        offset, limit, block_rows);
-    if (ret != E_OK) {
-        return ret;
-    }
-
     std::vector<std::string> column_names;
-    column_names.reserve(prepared.size());
+    std::vector<common::TSDataType> data_types;
     for (const auto& entry : prepared) {
+        if (!entry || !entry->index()) return E_INVALID_ARG;
         column_names.push_back(
             entry->index()->get_measurement_name().to_std_string());
+        data_types.push_back(entry->index()->get_data_type());
     }
-    std::vector<common::TSDataType> data_types =
-        tsblock_reader->value_data_types();
-    ret_qds =
-        new TableResultSet(std::move(tsblock_reader), std::move(column_names),
-                           std::move(data_types), RETURN_BATCH);
+    std::unique_ptr<QueryScanExecutor> scan(new QueryScanExecutor(
+        nullptr, &io_reader_, column_names, data_types,
+        block_rows ? block_rows : 65536,
+        new TimeBetween(start_time, end_time, false), nullptr, offset, limit));
+    int ret = scan->bind_prepared(prepared);
+    if (ret != E_OK) return ret;
+    ret_qds = new TableResultSet(std::move(scan), column_names, data_types,
+                                 RETURN_BATCH);
     return E_OK;
 }
 

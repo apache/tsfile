@@ -925,6 +925,17 @@ int TsFileIOReader::read_device_meta_index(int64_t start_offset,
     return ret;
 }
 
+int TsFileIOReader::get_device_time_index(std::shared_ptr<IDeviceID> device_id,
+                                          TimeseriesIndex*& index,
+                                          common::PageArena& pa) {
+    index = nullptr;
+    CachedDeviceNode cached;
+    int ret = get_cached_device_node(device_id, pa, cached);
+    if (ret != common::E_OK) return ret;
+    if (!cached.is_aligned) return common::E_NOT_SUPPORT;
+    return get_time_column_metadata(cached.top_node, index, pa);
+}
+
 int TsFileIOReader::get_timeseries_indexes(
     std::shared_ptr<IDeviceID> device_id,
     const std::unordered_set<std::string>& measurement_names,

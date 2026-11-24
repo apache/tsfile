@@ -78,6 +78,7 @@ cdef class ResultSetPy:
     # ResultSet from C interface.
     cdef ResultSet result
     cdef object metadata
+    cdef object _arrow_schema
 
     # Tag filter handle owned by this result set (freed on close).
     cdef TagFilterHandle _tag_filter_handle
@@ -102,6 +103,7 @@ cdef class ResultSetPy:
         """
         cdef ResultSetMetaData metadata_c
         self.result = result
+        self._arrow_schema = None
         metadata_c = tsfile_result_set_get_metadata(self.result)
         try:
             self.metadata = from_c_result_set_meta_data(metadata_c)
@@ -188,42 +190,42 @@ cdef class ResultSetPy:
         return df
 
     def read_arrow_record_batch(self):
-        """Read one native TsBlock as an Arrow RecordBatch."""
+        """Read one native Arrow RecordBatch (batch_size rows, except at EOF)."""
         self.check_result_set_invalid()
         
         cdef ArrowArray arrow_array
         cdef ArrowSchema arrow_schema
         cdef ErrorCode code = 0
-        cdef ErrorCode err_code = 0
+        cdef bint need_schema = self._arrow_schema is None
 
         memset(&arrow_array, 0, sizeof(ArrowArray))
         memset(&arrow_schema, 0, sizeof(ArrowSchema))
-
-        with nogil:
-            code = tsfile_result_set_get_next_tsblock_as_arrow(
-                self.result, &arrow_array, &arrow_schema)
-
-        if code == RET_NO_MORE_DATA:
-            return None
-        if code != RET_OK:
-            check_error(code)
-
-        if arrow_schema.release == NULL or arrow_array.release == NULL:
-            raise RuntimeError("Arrow conversion returned invalid schema or array")
-
         try:
-            schema_ptr = <uintptr_t>&arrow_schema
-            array_ptr = <uintptr_t>&arrow_array
-            return pa.RecordBatch._import_from_c(array_ptr, schema_ptr)
-        except Exception as e:
+            with nogil:
+                if need_schema:
+                    code = tsfile_result_set_get_next_arrow_batch(
+                        self.result, &arrow_array, &arrow_schema)
+                else:
+                    code = tsfile_result_set_get_next_arrow_array(self.result, &arrow_array)
+            if code == RET_NO_MORE_DATA:
+                return None
+            if code != RET_OK:
+                check_error(code)
+            if arrow_array.release == NULL or (need_schema and arrow_schema.release == NULL):
+                raise RuntimeError("Arrow export returned invalid schema or array")
+            schema = <uintptr_t>&arrow_schema if need_schema else self._arrow_schema
+            batch = pa.RecordBatch._import_from_c(<uintptr_t>&arrow_array, schema)
+            if need_schema:
+                self._arrow_schema = batch.schema
+            return batch
+        finally:
             if arrow_array.release != NULL:
                 arrow_array.release(&arrow_array)
             if arrow_schema.release != NULL:
                 arrow_schema.release(&arrow_schema)
-            raise e
 
     def read_arrow_batch(self):
-        """Read one native TsBlock as an Arrow Table."""
+        """Read one native Arrow batch as an Arrow Table."""
         batch = self.read_arrow_record_batch()
         if batch is None:
             return None
@@ -340,6 +342,7 @@ cdef class ResultSetPy:
                 reader.notify_result_set_discard(self)
 
         self.result = NULL
+        self._arrow_schema = None
         self.valid = False
 
     def set_invalid_result_set(self):
@@ -435,7 +438,7 @@ cdef class TsFileReaderPy:
         ``TSFILE_QUERY_CACHE_SIZE`` (default 1024, 0 disables it).
 
         :param tag_filter: Optional TagFilter to filter by TAG column values.
-        :param batch_size: <= 0 for row-by-row mode; > 0 for batch (TsBlock) mode.
+        :param batch_size: <= 0 for row-by-row mode; > 0 sets returned rows per Arrow batch (the last batch may be shorter).
         :return: query result handler.
         """
         cdef ResultSet result

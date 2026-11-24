@@ -107,7 +107,17 @@ with TsFileTableWriter("output.tsfile", schema) as writer:
     writer.write_arrow_batch(record_batch_or_table)
 ```
 
-Use `batch_size > 0` for Arrow reads. Arrow writes accept a
+Use `batch_size > 0` for Arrow reads. It specifies returned result rows after
+filtering and OFFSET/LIMIT: every batch has that many rows except the final
+batch at end of results. Batches may cross devices, chunks, and pages. Internal
+scan windows and scratch memory are independent of this setting.
+
+C++ table scans build Arrow-layout buffers directly. Python imports these
+buffers without a TsBlock conversion; batches retain ownership after the
+result set or reader closes. Retaining batches retains their memory. Native
+`get_next_tsblock()` explicitly adapts Arrow output for TsBlock callers.
+
+Arrow writes accept a
 `pyarrow.RecordBatch` or `pyarrow.Table`; include the registered time column and
 match all remaining columns to the Table schema. Use the wrapper writer when
 possible so it resolves the time-column index from the schema.
