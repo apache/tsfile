@@ -870,10 +870,10 @@ public class BytesUtils {
    */
   public static boolean readBool(InputStream in) throws IOException {
     if (in instanceof DataInputStream && in.getClass() == DataInputStream.class) {
-      return byteToBool((byte) readByteFromDataInputStream((DataInputStream) in));
+      return readByteFromDataInputStream((DataInputStream) in) != 0;
     }
     byte[] b = safeReadInputStreamToBytes(1, in);
-    return byteToBool(b[0]);
+    return bytesToBool(b);
   }
 
   /**

@@ -449,7 +449,7 @@ public class BytesUtilsTest {
     assertEquals(-1, input.read());
 
     for (byte value : new byte[] {0, 1, 2, (byte) 0xff}) {
-      boolean expected = value == 1;
+      boolean expected = value != 0;
       assertEquals(expected, BytesUtils.readBool(new ByteArrayInputStream(new byte[] {value})));
       assertEquals(
           expected,
