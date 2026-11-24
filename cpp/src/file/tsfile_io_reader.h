@@ -161,6 +161,11 @@ class TsFileIOReader {
         int64_t& end_offset);
 
    private:
+    int load_device_index_entry(
+        std::shared_ptr<IComparable> target_name,
+        std::shared_ptr<IMetaIndexEntry>& device_index_entry,
+        int64_t& end_offset, common::PageArena* result_pa);
+
     FORCE_INLINE int64_t file_size() const { return read_file_->file_size(); }
 
     int load_tsfile_meta();

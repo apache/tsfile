@@ -33,6 +33,9 @@ Use the current Python binding and its tests as the API authority.
 - Use `references/java-tools.md` instead for Arrow file import through the Java
   `arrow2tsfile` command.
 
+TsFile `DATE` maps to Arrow `date32`. Conversion preserves the calendar date
+across host time zones and daylight-saving changes.
+
 ## pandas Conversion
 
 ```python
@@ -114,8 +117,30 @@ scan windows and scratch memory are independent of this setting.
 
 C++ table scans build Arrow-layout buffers directly. Python imports these
 buffers without a TsBlock conversion; batches retain ownership after the
-result set or reader closes. Retaining batches retains their memory. Native
+result set or reader closes. Each result set reuses its first imported PyArrow schema
+for subsequent batches. Retaining batches retains their memory. Native
 `get_next_tsblock()` explicitly adapts Arrow output for TsBlock callers.
+
+When parallel reads are enabled, the query schedules device metadata and column
+page planning, then whole column read/decompress/decode/write tasks on the
+shared pool. Output order is stable. Aligned FIELD predicates first prune by
+page statistics, then decode only predicate columns to compute a shared row
+selection; output-only columns are decoded only for pages with accepted rows.
+Selection is separate from Arrow null validity: exported batches contain only
+selected rows. A page decoder resumes across small output batches without
+rereading the payload. Each column releases its page payload and decoder after
+writing that page's last selected row (or reaching LIMIT), even when the output
+batch spans many sparsely selected pages. Only a page that still has rows for a
+later batch retains its decoder state. Unknown statistics remain candidates.
+Non-aligned sources retain timestamp union semantics and use a bounded merge
+window.
+
+Unfiltered scans without OFFSET or LIMIT can reuse compressed input across page
+planning and output. A query can retain up to 160 MiB of shared compressed ranges,
+including contiguous ranges for wide aligned projections. This budget covers
+cached input bytes. Decoders and the returned Arrow buffers use additional memory.
+Time and field predicates use task-local read-ahead windows of up to 64 KiB.
+Coalescing for filtered output stops at skipped pages and chunk boundaries.
 
 Arrow writes accept a
 `pyarrow.RecordBatch` or `pyarrow.Table`; include the registered time column and

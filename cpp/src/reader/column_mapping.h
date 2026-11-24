@@ -32,7 +32,7 @@ class ColumnMapping {
         }
 
         common::ColumnCategory column_category =
-            schema.get_column_categories()[column_index];
+            schema.get_column_category(column_index);
         column_pos_map[column_name].push_back(index);
 
         if (column_category == common::ColumnCategory::TAG) {

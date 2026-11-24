@@ -68,7 +68,7 @@ int TableQueryExecutor::query(const std::string& table_name,
             delete field_filter;
             return common::E_COLUMN_NOT_EXIST;
         }
-        data_types.push_back(table_schema->get_data_types()[ind]);
+        data_types.push_back(table_schema->get_column_type(ind));
     }
     if (auto* aligned_filter =
             dynamic_cast<AlignedFieldFilter*>(field_filter)) {
@@ -145,7 +145,7 @@ int TableQueryExecutor::query(const std::string& table_name,
             delete field_filter;
             return common::E_COLUMN_NOT_EXIST;
         }
-        data_types.push_back(table_schema->get_data_types()[ind]);
+        data_types.push_back(table_schema->get_column_type(ind));
     }
     if (auto* aligned_filter =
             dynamic_cast<AlignedFieldFilter*>(field_filter)) {

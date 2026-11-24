@@ -20,10 +20,14 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <functional>
+#include <future>
 #include <limits>
 #include <numeric>
 #include <set>
 
+#include "common/thread_pool.h"
 #include "reader/arrow/scan_page.h"
 #include "reader/filter/table_field_filter.h"
 
@@ -33,6 +37,7 @@ namespace {
 struct ScanColumn {
     std::string name;
     TSDataType type = INVALID_DATATYPE;
+    bool projected = false;
     std::vector<ArrowPageLocation> pages;
     // Non-aligned merge cursor. Only the current physical page is decoded.
     size_t next_page = 0;
@@ -49,6 +54,8 @@ struct ScanDevice {
     TimeseriesIndex* time_index = nullptr;
     std::vector<ArrowPageLocation> times;
     std::vector<ScanColumn> columns;
+    std::shared_ptr<ArrowInputRange> device_input;
+    std::vector<int32_t> output_fields;
     // Logical time page -> physical page index for every FIELD, or missing.
     std::vector<std::vector<int32_t>> value_pages;
     bool aligned = false;
@@ -79,6 +86,9 @@ struct SelectedPage {
     std::vector<uint32_t> selected;
     std::vector<std::shared_ptr<ArrowColumn>> cached;
     uint32_t consumed = 0;
+    uint32_t logical_rows = 0;
+    std::vector<uint32_t> cache_rows;
+    std::vector<std::unique_ptr<ArrowValueCursor>> cursors;
 };
 struct OutputSlice {
     std::shared_ptr<SelectedPage> page;
@@ -87,11 +97,14 @@ struct OutputSlice {
     uint32_t destination;
 };
 int append_pages(RandomAccessReadFile& file, SimpleList<ChunkMeta*>* chunks,
-                 Statistic* top, std::vector<ArrowPageLocation>& pages) {
+                 Statistic* top, std::vector<ArrowPageLocation>& pages,
+                 const ArrowInputBudget& usage,
+                 const std::shared_ptr<ArrowInputRange>& device_input) {
     if (!chunks) return E_OK;
     for (auto it = chunks->begin(); it != chunks->end(); it++) {
         int ret = plan_arrow_pages(file, *it.get(),
-                                   chunks->size() == 1 ? top : nullptr, pages);
+                                   chunks->size() == 1 ? top : nullptr, pages,
+                                   usage, device_input);
         if (ret != E_OK) return ret;
     }
     return E_OK;
@@ -111,6 +124,73 @@ struct QueryScanExecutor::Impl {
     int64_t limit;
     int error = E_OK;
     bool closed = false;
+    bool devices_enumerated = false;
+    std::vector<DeviceQueryTask*> selected_devices;
+    size_t next_device_index = 0;
+    std::vector<std::shared_ptr<ScanDevice>> ready_devices;
+    size_t ready_device_index = 0;
+    std::set<std::string> predicate_columns;
+    std::set<std::string> projected_columns;
+
+    ArrowInputBudget input_usage;
+    std::vector<size_t> output_sources, distinct_outputs;
+    size_t concurrency() const {
+#ifdef ENABLE_THREADS
+        if (g_config_value_.parallel_read_enabled_ && g_thread_pool_ &&
+            ThreadPool::current_worker_id() == SIZE_MAX)
+            return g_thread_pool_->num_threads();
+#endif
+        return 1;
+    }
+    // Submit at most the query's worker budget. Workers drain ready work; they
+    // never submit child tasks or wait for other jobs on the shared pool.
+    int run_tasks(size_t count, const std::function<int(size_t)>& work) {
+        size_t workers = std::min(count, concurrency());
+        if (workers <= 1) {
+            for (size_t i = 0; i < count; ++i) {
+                int ret = work(i);
+                if (ret != E_OK) return ret;
+            }
+            return E_OK;
+        }
+#ifdef ENABLE_THREADS
+        std::atomic<size_t> next{0};
+        std::atomic<int> failure{E_OK};
+        auto worker = [&]() {
+            try {
+                while (failure.load() == E_OK) {
+                    size_t i = next.fetch_add(1);
+                    if (i >= count) break;
+                    int ret = work(i);
+                    if (ret != E_OK) {
+                        int expected = E_OK;
+                        failure.compare_exchange_strong(expected, ret);
+                    }
+                }
+            } catch (const std::bad_alloc&) {
+                failure.store(E_OOM);
+            } catch (...) {
+                failure.store(E_FILE_READ_ERR);
+            }
+        };
+        std::vector<std::future<void>> futures;
+        futures.reserve(workers);
+        try {
+            for (size_t i = 0; i < workers; ++i)
+                futures.push_back(g_thread_pool_->submit(worker));
+        } catch (const std::bad_alloc&) {
+            failure.store(E_OOM);
+        } catch (...) {
+            failure.store(E_FILE_READ_ERR);
+        }
+        // Drain only this query's tasks, including on submission/decode errors,
+        // before any captured plan, output buffer, or file can be released.
+        for (auto& future : futures) future.get();
+        return failure.load();
+#else
+        return E_OK;
+#endif
+    }
     std::shared_ptr<ScanDevice> device;
     std::shared_ptr<SelectedPage> pending;
 
@@ -131,10 +211,22 @@ struct QueryScanExecutor::Impl {
         if (time_filter && time_filter->is_unbounded_time_filter()) {
             time_filter.reset();
         }
+        if (!time_filter && !field_filter && off == 0 && lim < 0)
+            input_usage = std::make_shared<std::atomic<size_t>>(0);
         names.insert(names.begin(), "time");
         types.insert(types.begin(), INT64);
+        projected_columns.insert(names.begin() + 1, names.end());
+        std::map<std::pair<std::string, TSDataType>, size_t> first;
+        for (size_t c = 0; c < names.size(); ++c) {
+            auto found = first.emplace(std::make_pair(names[c], types[c]), c);
+            output_sources.push_back(found.first->second);
+            if (found.second) distinct_outputs.push_back(c);
+        }
+        if (predicate)
+            for (const auto& name : predicate->referenced_columns())
+                predicate_columns.insert(name);
     }
-    int prepare_device(const std::shared_ptr<ScanDevice>& d) {
+    int bind_device(const std::shared_ptr<ScanDevice>& d) {
         std::vector<std::string> requested;
         int ret = E_OK;
         if (d->prepared.empty()) {
@@ -142,13 +234,26 @@ struct QueryScanExecutor::Impl {
                 d->task->get_column_mapping()->get_measurement_columns();
             requested.assign(fields.begin(), fields.end());
             d->indexes.resize(requested.size(), nullptr);
-            ret = io->get_timeseries_indexes(d->task->get_device_id(), fields,
-                                             d->indexes, d->arena);
-            if (ret != E_OK) return ret;
-            ret = io->get_device_time_index(d->task->get_device_id(),
-                                            d->time_index, d->arena);
-            if (ret != E_OK && ret != E_NOT_SUPPORT) return ret;
-            d->aligned = ret == E_OK;
+            if (!fields.empty()) {
+                ret = io->get_timeseries_indexes(d->task->get_device_id(),
+                                                 fields, d->indexes, d->arena);
+                if (ret != E_OK) return ret;
+            }
+            for (auto* index : d->indexes) {
+                if (auto* aligned =
+                        dynamic_cast<AlignedTimeseriesIndex*>(index)) {
+                    d->time_index = aligned->time_ts_idx_;
+                    break;
+                }
+            }
+            if (d->time_index) {
+                d->aligned = true;
+            } else {
+                ret = io->get_device_time_index(d->task->get_device_id(),
+                                                d->time_index, d->arena);
+                if (ret != E_OK && ret != E_NOT_SUPPORT) return ret;
+                d->aligned = ret == E_OK;
+            }
         } else {
             requested.assign(names.begin() + 1, names.end());
             for (auto& source : d->prepared)
@@ -158,27 +263,73 @@ struct QueryScanExecutor::Impl {
             d->aligned = aligned != nullptr;
             if (aligned) d->time_index = aligned->time_ts_idx_;
         }
-        size_t idx = 0;
+        std::map<std::string, size_t> positions;
         for (const auto& name : requested) {
             ScanColumn column;
             column.name = name;
+            column.projected = projected_columns.count(name) != 0;
             column.type =
                 d->task->get_table_schema()->get_column_schema(name).data_type_;
-            auto* index = d->indexes[idx++];
-            if (index) {
-                ret = append_pages(*file,
-                                   index->is_aligned()
-                                       ? index->get_value_chunk_meta_list()
-                                       : index->get_chunk_meta_list(),
-                                   index->get_statistic(), column.pages);
-                if (ret != E_OK) return ret;
-            }
+            positions.emplace(name, d->columns.size());
             d->columns.push_back(std::move(column));
         }
+        d->output_fields.assign(names.size(), -1);
+        for (size_t c = 1; c < names.size(); ++c) {
+            auto position = positions.find(names[c]);
+            if (position != positions.end())
+                d->output_fields[c] = position->second;
+        }
+        return E_OK;
+    }
+    int prefetch_dense_device(ScanDevice& d) {
+        if (!input_usage || !d.aligned || d.columns.size() < 512 ||
+            d.columns.size() * 2 <
+                d.task->get_table_schema()->get_columns_num())
+            return E_OK;
+        std::vector<int64_t> offsets;
+        auto collect = [&](SimpleList<ChunkMeta*>* chunks) {
+            if (!chunks) return;
+            for (auto it = chunks->begin(); it != chunks->end(); it++) {
+                int64_t pos = it.get()->offset_of_chunk_header_;
+                offsets.push_back(pos);
+            }
+        };
+        if (d.time_index) collect(d.time_index->get_chunk_meta_list());
+        for (auto* idx : d.indexes) {
+            if (idx && idx->is_aligned())
+                collect(idx->get_value_chunk_meta_list());
+        }
+        if (offsets.size() < 2) return E_OK;
+        std::sort(offsets.begin(), offsets.end());
+        const int64_t first = offsets.front(), last = offsets.back();
+        if (first < 0 || last <= first || last > file->file_size() ||
+            uint64_t(last - first) > ArrowInputRange::MAX_QUERY_BYTES)
+            return E_OK;
+        for (size_t i = 1; i < offsets.size(); ++i)
+            if (offsets[i] - offsets[i - 1] > 1024 * 1024) return E_OK;
+        // The final header has no following offset. Plan that chunk separately.
+        return ArrowInputRange::read(*file, input_usage, first, last - first,
+                                     d.device_input);
+    }
+    int plan_column(ScanDevice& d, size_t c) {
+        if (c == d.columns.size()) {
+            return d.aligned ? append_pages(
+                                   *file, d.time_index->get_chunk_meta_list(),
+                                   d.time_index->get_statistic(), d.times,
+                                   input_usage, d.device_input)
+                             : E_OK;
+        }
+        auto* index = d.indexes[c];
+        if (!index) return E_OK;
+        return append_pages(*file,
+                            index->is_aligned()
+                                ? index->get_value_chunk_meta_list()
+                                : index->get_chunk_meta_list(),
+                            index->get_statistic(), d.columns[c].pages,
+                            input_usage, d.device_input);
+    }
+    int align_pages(const std::shared_ptr<ScanDevice>& d) {
         if (!d->aligned) return E_OK;
-        ret = append_pages(*file, d->time_index->get_chunk_meta_list(),
-                           d->time_index->get_statistic(), d->times);
-        if (ret != E_OK) return ret;
         d->value_pages.resize(d->times.size(),
                               std::vector<int32_t>(d->columns.size(), -1));
         // Match by physical chunk-group order, not list index: schema evolution
@@ -217,19 +368,60 @@ struct QueryScanExecutor::Impl {
         }
         return E_OK;
     }
+    int prepare_window(std::vector<std::shared_ptr<ScanDevice>>& devices) {
+        int ret = run_tasks(devices.size(),
+                            [&](size_t i) { return bind_device(devices[i]); });
+        if (ret != E_OK) return ret;
+        for (const auto& d : devices) {
+            ret = prefetch_dense_device(*d);
+            if (ret != E_OK) return ret;
+        }
+        std::vector<std::pair<ScanDevice*, size_t>> columns;
+        for (const auto& d : devices)
+            for (size_t c = 0; c <= d->columns.size(); ++c)
+                columns.emplace_back(d.get(), c);
+        ret = run_tasks(columns.size(), [&](size_t i) {
+            return plan_column(*columns[i].first, columns[i].second);
+        });
+        if (ret != E_OK) return ret;
+        return run_tasks(devices.size(),
+                         [&](size_t i) { return align_pages(devices[i]); });
+    }
     int next_device() {
         device.reset();
         if (!tasks) return E_NO_MORE_DATA;
-        bool available = false;
-        int ret = tasks->has_next(available);
-        if (ret != E_OK) return ret;
-        if (!available) return E_NO_MORE_DATA;
-        DeviceQueryTask* task = nullptr;
-        ret = tasks->next(task);
-        if (ret != E_OK) return ret;
-        if (!task) return E_OOM;
-        device = std::make_shared<ScanDevice>(task);
-        return prepare_device(device);
+        if (!devices_enumerated) {
+            for (;;) {
+                bool available = false;
+                int ret = tasks->has_next(available);
+                if (ret != E_OK) return ret;
+                if (!available) break;
+                DeviceQueryTask* task = nullptr;
+                ret = tasks->next(task);
+                if (ret != E_OK) return ret;
+                if (!task) return E_OOM;
+                selected_devices.push_back(task);
+            }
+            devices_enumerated = true;
+        }
+        if (ready_device_index == ready_devices.size()) {
+            ready_devices.clear();
+            ready_device_index = 0;
+            if (next_device_index == selected_devices.size())
+                return E_NO_MORE_DATA;
+            // Bound metadata lookahead separately from the public batch size.
+            size_t count = (input_usage && names.size() >= 1024)
+                               ? 1
+                               : std::min<size_t>(8, concurrency());
+            while (ready_devices.size() < count &&
+                   next_device_index < selected_devices.size())
+                ready_devices.emplace_back(
+                    new ScanDevice(selected_devices[next_device_index++]));
+            int ret = prepare_window(ready_devices);
+            if (ret != E_OK) return ret;
+        }
+        device = std::move(ready_devices[ready_device_index++]);
+        return E_OK;
     }
     int decode_cached(SelectedPage& page, size_t c) {
         if (page.cached[c]) return E_OK;
@@ -246,10 +438,10 @@ struct QueryScanExecutor::Impl {
         page.cached[c]->finish(page.times.size());
         return ret;
     }
-    int filter_page(SelectedPage& page) {
+    int filter_page(SelectedPage& page, bool all_match = false) {
         SelectionMask mask(page.times.size());
         mask.set_all();
-        if (predicate) {
+        if (predicate && !all_match) {
             std::vector<AlignedFieldFilter::ColumnView> views;
             for (size_t c = 0; c < page.device->columns.size(); ++c) {
                 AlignedFieldFilter::ColumnView view;
@@ -286,6 +478,32 @@ struct QueryScanExecutor::Impl {
             }
             page.selected.push_back(r);
         }
+        page.logical_rows = page.times.size();
+        page.cache_rows.resize(page.selected.size());
+        std::iota(page.cache_rows.begin(), page.cache_rows.end(), 0);
+        for (size_t c = 0; c < page.cached.size(); ++c) {
+            if (!page.cached[c]) continue;
+            if (!page.device->columns[c].projected || page.selected.empty()) {
+                page.cached[c].reset();
+                continue;
+            }
+            if (page.selected.size() != page.times.size()) {
+                auto compact = std::make_shared<ArrowColumn>(
+                    page.cached[c]->type(), page.selected.size());
+                int ret = compact->copy_selected(*page.cached[c], page.selected,
+                                                 0, page.selected.size(), 0);
+                if (ret != E_OK) return ret;
+                compact->finish(page.selected.size());
+                page.cached[c] = std::move(compact);
+            }
+        }
+        if (page.selected.size() != page.times.size()) {
+            std::vector<int64_t> accepted;
+            accepted.reserve(page.selected.size());
+            for (uint32_t row : page.selected)
+                accepted.push_back(page.times[row]);
+            page.times = std::move(accepted);
+        }
         return E_OK;
     }
     int aligned_page(std::shared_ptr<SelectedPage>& page) {
@@ -297,16 +515,36 @@ struct QueryScanExecutor::Impl {
         if (time_filter && time.statistic &&
             !time_filter->satisfy(time.statistic.get()))
             return E_OK;
+        bool all_match = false;
+        if (predicate) {
+            std::map<std::string, Statistic*> stats;
+            for (size_t c = 0; c < device->columns.size(); ++c) {
+                if (!predicate_columns.count(device->columns[c].name)) continue;
+                int p = device->value_pages[page->time_page][c];
+                stats[device->columns[c].name] =
+                    p < 0 ? nullptr
+                          : device->columns[c].pages[p].statistic.get();
+            }
+            int64_t rows = time.statistic ? time.statistic->count_ : 0;
+            if (!predicate->may_match(stats, rows)) return E_OK;
+            all_match = predicate->all_match(stats, rows);
+        }
         int ret = decode_arrow_times(*file, time, true, page->times);
         if (ret != E_OK) return ret;
         page->cached.resize(device->columns.size());
-        if (field_filter)
-            for (size_t c = 0; c < device->columns.size(); ++c) {
-                ret = decode_cached(*page, c);
-                if (ret != E_OK) return ret;
-            }
-        return filter_page(*page);
+        page->cursors.resize(device->columns.size());
+        if (field_filter && !all_match) {
+            ret = run_tasks(device->columns.size(), [&](size_t c) {
+                if (predicate &&
+                    !predicate_columns.count(device->columns[c].name))
+                    return E_OK;
+                return decode_cached(*page, c);
+            });
+            if (ret != E_OK) return ret;
+        }
+        return filter_page(*page, all_match);
     }
+
     int refill(ScanColumn& column) {
         while (column.row == column.times.size()) {
             column.times.clear();
@@ -395,19 +633,41 @@ struct QueryScanExecutor::Impl {
     }
     int write_column(size_t output, const std::vector<OutputSlice>& slices,
                      ArrowColumn& column) {
-        for (const auto& slice : slices) {
+        ArrowReadWindow window;
+        std::vector<int64_t> read_ends(slices.size(), 0);
+        const ArrowPageLocation* next_page = nullptr;
+        // Coalesce only adjacent payloads needed by this output batch. Stop at
+        // skipped pages, cached predicate values and device/chunk boundaries.
+        for (size_t i = slices.size(); i-- > 0;) {
+            auto& page = *slices[i].page;
+            auto& d = *page.device;
+            int32_t c = d.output_fields[output];
+            const ArrowPageLocation* current = nullptr;
+            if (c >= 0 && d.aligned && !page.cached[c]) {
+                int physical = d.value_pages[page.time_page][c];
+                if (physical >= 0) current = &d.columns[c].pages[physical];
+            }
+            if (current) {
+                read_ends[i] = current->offset + current->compressed_size;
+                if (next_page &&
+                    current->chunk_offset == next_page->chunk_offset &&
+                    read_ends[i] == next_page->header_offset)
+                    read_ends[i] = read_ends[i + 1];
+            }
+            next_page = current;
+        }
+        for (size_t i = 0; i < slices.size(); ++i) {
+            const auto& slice = slices[i];
             auto& page = *slice.page;
             auto& d = *page.device;
             auto schema = d.task->get_table_schema();
             const auto& name = names[output];
             if (output == 0 || d.task->get_column_mapping()->is_time(name)) {
-                for (uint32_t i = 0; i < slice.count; ++i) {
-                    int64_t time = page.times[page.selected[slice.begin + i]];
-                    int ret = column.set_native(slice.destination + i, INT64,
-                                                reinterpret_cast<char*>(&time),
-                                                sizeof(time));
-                    if (ret != E_OK) return ret;
-                }
+                std::memcpy(column.mutable_values() +
+                                uint64_t(slice.destination) * sizeof(int64_t),
+                            page.times.data() + slice.begin,
+                            uint64_t(slice.count) * sizeof(int64_t));
+                column.set_valid_range(slice.destination, slice.count);
             } else if (d.task->get_column_mapping()->is_tag(name)) {
                 int pos = schema->find_id_column_order(name) +
                           !schema->is_virtual_table();
@@ -423,21 +683,31 @@ struct QueryScanExecutor::Impl {
                     if (ret != E_OK) return ret;
                 }
             } else {
-                size_t c = 0;
-                while (c < d.columns.size() && d.columns[c].name != name) ++c;
-                if (c == d.columns.size()) continue;
+                int32_t c = d.output_fields[output];
+                if (c < 0) continue;
                 int ret = E_OK;
                 if (page.cached[c]) {
-                    ret = column.copy_selected(*page.cached[c], page.selected,
+                    ret = column.copy_selected(*page.cached[c], page.cache_rows,
                                                slice.begin, slice.count,
                                                slice.destination);
                 } else {
                     int physical = d.value_pages[page.time_page][c];
-                    if (physical >= 0)
-                        ret = decode_arrow_values(
-                            *file, d.columns[c].pages[physical], true,
-                            page.times.size(), page.selected, slice.begin,
-                            slice.count, column, slice.destination);
+                    if (physical >= 0) {
+                        if (!page.cursors[c])
+                            page.cursors[c].reset(new ArrowValueCursor(
+                                *file, d.columns[c].pages[physical], true,
+                                page.logical_rows));
+                        ret = page.cursors[c]->write(
+                            page.selected, slice.begin, slice.count, column,
+                            slice.destination, &window, read_ends[i]);
+                        // Slices retain their pages until every column finishes
+                        // the output batch. Release completed payloads now so a
+                        // sparse selection cannot pin all contributing pages.
+                        // Keep codec state only if a later batch can resume it.
+                        if (slice.begin + slice.count == page.selected.size() ||
+                            limit == 0)
+                            page.cursors[c].reset();
+                    }
                 }
                 if (ret != E_OK) return ret;
             }
@@ -468,10 +738,16 @@ struct QueryScanExecutor::Impl {
         if (rows == 0) return E_NO_MORE_DATA;
         auto batch = std::make_shared<ArrowBatch>(names, types, rows);
         batch->row_count = rows;
-        for (size_t c = 0; c < names.size(); ++c) {
-            int ret = write_column(c, slices, *batch->columns[c]);
-            if (ret != E_OK) return ret;
-        }
+        // Duplicate projections share an immutable result column and are
+        // decoded once. Each distinct column has exactly one writer.
+        for (size_t c = 0; c < output_sources.size(); ++c)
+            if (c != output_sources[c])
+                batch->columns[c] = batch->columns[output_sources[c]];
+        int ret = run_tasks(distinct_outputs.size(), [&](size_t i) {
+            size_t c = distinct_outputs[i];
+            return write_column(c, slices, *batch->columns[c]);
+        });
+        if (ret != E_OK) return ret;
         batch->finish();
         result = std::move(batch);
         return E_OK;
@@ -528,7 +804,8 @@ int QueryScanExecutor::bind_prepared(
     impl_->device = std::make_shared<ScanDevice>(task.get());
     impl_->device->owned_task = std::move(task);
     impl_->device->prepared = prepared;
-    return impl_->prepare_device(impl_->device);
+    std::vector<std::shared_ptr<ScanDevice>> devices{impl_->device};
+    return impl_->prepare_window(devices);
 }
 int QueryScanExecutor::next(std::shared_ptr<ArrowBatch>& batch) {
     if (impl_->error != E_OK) {
@@ -553,6 +830,8 @@ void QueryScanExecutor::close() {
     impl_->closed = true;
     impl_->pending.reset();
     impl_->device.reset();
+    impl_->ready_devices.clear();
+    impl_->selected_devices.clear();
     impl_->tasks.reset();
 }
 }  // namespace storage
