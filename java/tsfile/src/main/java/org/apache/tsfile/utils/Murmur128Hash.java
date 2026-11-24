@@ -198,37 +198,46 @@ public class Murmur128Hash {
 
   /** Reuses complete prefix blocks for all measurements in one Bloom filter lookup. */
   static final class PrefixHasher {
-    private final long[] h1;
-    private final long[] h2;
-    private final int prefixLength;
+    private final long[] prefixH1;
+    private final long[] prefixH2;
+    private final byte[] prefix;
+    private final int[] seeds;
+    private final boolean[] initialized;
     private byte[] buffer;
     private int length;
 
     PrefixHasher(byte[] prefix, int[] seeds, int seedCount) {
+      this.prefix = prefix;
+      this.seeds = seeds;
       buffer = prefix;
-      prefixLength = prefix.length;
-      h1 = new long[seedCount];
-      h2 = new long[seedCount];
-      for (int i = 0; i < seedCount; i++) {
-        h1[i] = seeds[i];
-        h2[i] = seeds[i];
-        for (int block = 0; block < prefixLength / 16; block++) {
-          h1[i] = mixH1(h1[i], h2[i], getBlock(prefix, 0, block * 2));
-          h2[i] = mixH2(h1[i], h2[i], getBlock(prefix, 0, block * 2 + 1));
-        }
-      }
+      prefixH1 = new long[seedCount];
+      prefixH2 = new long[seedCount];
+      initialized = new boolean[seedCount];
     }
 
     void setSuffix(byte[] suffix) {
-      length = prefixLength + suffix.length;
+      length = Math.addExact(prefix.length, suffix.length);
       if (buffer.length < length) {
-        buffer = Arrays.copyOf(buffer, length);
+        int capacity = Math.max(length, buffer.length + (buffer.length >>> 1));
+        buffer = Arrays.copyOf(prefix, capacity);
       }
-      System.arraycopy(suffix, 0, buffer, prefixLength, suffix.length);
+      System.arraycopy(suffix, 0, buffer, prefix.length, suffix.length);
     }
 
     int hash(int seedIndex) {
-      return (int) innerHash(buffer, prefixLength / 16 * 16, length, h1[seedIndex], h2[seedIndex]);
+      int blocks = prefix.length / 16;
+      if (!initialized[seedIndex]) {
+        long h1 = seeds[seedIndex];
+        long h2 = h1;
+        for (int block = 0; block < blocks; block++) {
+          h1 = mixH1(h1, h2, getBlock(prefix, 0, block * 2));
+          h2 = mixH2(h1, h2, getBlock(prefix, 0, block * 2 + 1));
+        }
+        prefixH1[seedIndex] = h1;
+        prefixH2[seedIndex] = h2;
+        initialized[seedIndex] = true;
+      }
+      return (int) innerHash(buffer, blocks * 16, length, prefixH1[seedIndex], prefixH2[seedIndex]);
     }
   }
 }

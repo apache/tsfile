@@ -67,7 +67,8 @@ Pass an `IDeviceID` and the pending measurement names to
 `BitSet` follow the collection's iteration order. A clear bit rules out the
 corresponding measurement. A set bit requires checking the file's metadata.
 Use an ordered collection when matching positions back to measurement names.
-An empty measurement name probes the time column.
+An empty measurement name probes the time column. For an empty device ID, the
+lookup checks both supported path forms, for example `s1` and `.s1`.
 
 ## Guidance
 

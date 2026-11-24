@@ -20,6 +20,7 @@ package org.apache.tsfile.utils;
 
 import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.read.common.FullPath;
+import org.apache.tsfile.read.common.Path;
 
 import org.junit.Test;
 
@@ -105,6 +106,25 @@ public class BloomFilterTest {
     }
   }
 
+  @Test
+  public void testBatchChecksBothEmptyDevicePathForms() {
+    IDeviceID device = IDeviceID.Factory.DEFAULT_FACTORY.create("");
+    List<String> measurements = Arrays.asList("s1", "", null, "missing", "s1");
+    BitSet expected = new BitSet();
+    expected.set(0);
+    expected.set(1);
+    expected.set(4);
+    for (boolean useSeparator : new boolean[] {false, true}) {
+      BloomFilter filter = BloomFilter.getEmptyBloomFilter(0.01, 100);
+      for (String measurement : Arrays.asList("s1", "")) {
+        Path path =
+            useSeparator ? new FullPath(device, measurement) : new Path("", measurement, true);
+        filter.add(path);
+      }
+      assertEquals(expected, filter.mightContainBatch(device, measurements));
+    }
+  }
+
   private static void assertBatchMatchesSingles(
       BloomFilter filter, IDeviceID device, Collection<String> measurements) {
     BitSet expected = new BitSet();
@@ -134,6 +154,24 @@ public class BloomFilterTest {
         }
       }
     }
+  }
+
+  @Test
+  public void testGrowingSuffixesWithLateSeedLookup() {
+    assumeTrue(StandardCharsets.UTF_8.equals(Charset.defaultCharset()));
+    String prefix = "p".repeat(159) + ".";
+    int[] seeds = {5, 7};
+    Murmur128Hash.PrefixHasher hasher =
+        new Murmur128Hash.PrefixHasher(
+            prefix.getBytes(StandardCharsets.UTF_8), seeds, seeds.length);
+    for (int length = 1; length <= 64; length++) {
+      String suffix = "s".repeat(length);
+      hasher.setSuffix(suffix.getBytes(StandardCharsets.UTF_8));
+      assertEquals(Murmur128Hash.hash(prefix + suffix, seeds[0]), hasher.hash(0));
+    }
+    hasher.setSuffix(new byte[0]);
+    assertEquals(Murmur128Hash.hash(prefix, seeds[1]), hasher.hash(1));
+    assertEquals(Murmur128Hash.hash(prefix, seeds[0]), hasher.hash(0));
   }
 
   @Test

@@ -139,14 +139,16 @@ public class BloomFilter {
   /**
    * Tests measurements of one device against this filter. Bit i in the result corresponds to the
    * ith measurement in iteration order. A null measurement has a clear bit. An empty measurement
-   * tests the device's time-column path (including the trailing separator).
+   * tests the device's time-column path. For an empty device, both path forms (with and without the
+   * leading separator) are checked.
    */
   public BitSet mightContainBatch(IDeviceID device, Collection<String> measurements) {
     BitSet matches = new BitSet(measurements.size());
     if (measurements.isEmpty()) {
       return matches;
     }
-    String prefix = device.toString() + TsFileConstant.PATH_SEPARATOR;
+    String deviceName = device.toString();
+    String prefix = deviceName + TsFileConstant.PATH_SEPARATOR;
     // The file's existing hashes use the default charset. Stateful encodings and byte-order marks
     // can make encoding the prefix and suffix separately differ from encoding the full path.
     Murmur128Hash.PrefixHasher hasher =
@@ -156,11 +158,12 @@ public class BloomFilter {
             : null;
     int index = 0;
     for (String measurement : measurements) {
-      if (measurement != null
-          && (hasher == null
-              ? contains(prefix + measurement)
-              : mightContain(hasher, measurement))) {
-        matches.set(index);
+      if (measurement != null) {
+        boolean matchesFullPath =
+            hasher == null ? contains(prefix + measurement) : mightContain(hasher, measurement);
+        if (matchesFullPath || (deviceName.isEmpty() && contains(measurement))) {
+          matches.set(index);
+        }
       }
       index++;
     }
