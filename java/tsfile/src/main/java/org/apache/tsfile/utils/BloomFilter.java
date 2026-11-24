@@ -19,12 +19,17 @@
 package org.apache.tsfile.utils;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.common.constant.TsFileConstant;
+import org.apache.tsfile.file.metadata.IDeviceID;
 import org.apache.tsfile.read.common.Path;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.BitSet;
+import java.util.Collection;
 import java.util.Objects;
 
 import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfLongArray;
@@ -131,6 +136,47 @@ public class BloomFilter {
     return ret;
   }
 
+  /**
+   * Tests measurements of one device against this filter. Bit i in the result corresponds to the
+   * ith measurement in iteration order. A null measurement has a clear bit. An empty measurement
+   * tests the device's time-column path (including the trailing separator).
+   */
+  public BitSet mightContainBatch(IDeviceID device, Collection<String> measurements) {
+    BitSet matches = new BitSet(measurements.size());
+    if (measurements.isEmpty()) {
+      return matches;
+    }
+    String prefix = device.toString() + TsFileConstant.PATH_SEPARATOR;
+    // The file's existing hashes use the default charset. Stateful encodings and byte-order marks
+    // can make encoding the prefix and suffix separately differ from encoding the full path.
+    Murmur128Hash.PrefixHasher hasher =
+        StandardCharsets.UTF_8.equals(Charset.defaultCharset())
+            ? new Murmur128Hash.PrefixHasher(
+                prefix.getBytes(StandardCharsets.UTF_8), SEEDS, hashFunctionSize)
+            : null;
+    int index = 0;
+    for (String measurement : measurements) {
+      if (measurement != null
+          && (hasher == null
+              ? contains(prefix + measurement)
+              : mightContain(hasher, measurement))) {
+        matches.set(index);
+      }
+      index++;
+    }
+    return matches;
+  }
+
+  private boolean mightContain(Murmur128Hash.PrefixHasher hasher, String measurement) {
+    hasher.setSuffix(measurement.getBytes(StandardCharsets.UTF_8));
+    for (int i = 0; i < hashFunctionSize; i++) {
+      if (!bits.get(bitIndex(hasher.hash(i), size))) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   public byte[] serialize() {
     return bits.toByteArray();
   }
@@ -161,12 +207,11 @@ public class BloomFilter {
   }
 
   private static int hash(String value, int cap, int seed) {
-    int res = Murmur128Hash.hash(value, seed);
-    if (res == Integer.MIN_VALUE) {
-      res = 0;
-    }
+    return bitIndex(Murmur128Hash.hash(value, seed), cap);
+  }
 
-    return Math.abs(res) % cap;
+  private static int bitIndex(int hash, int cap) {
+    return (hash == Integer.MIN_VALUE ? 0 : Math.abs(hash)) % cap;
   }
 
   public int serialize(OutputStream outputStream) throws IOException {

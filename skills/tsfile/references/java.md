@@ -60,6 +60,15 @@ try (ITsFileTreeReader reader =
 }
 ```
 
+## Checking multiple measurements of one device
+
+Pass an `IDeviceID` and the pending measurement names to
+`filter.mightContainBatch(device, measurements)`. Bit positions in the returned
+`BitSet` follow the collection's iteration order. A clear bit rules out the
+corresponding measurement. A set bit requires checking the file's metadata.
+Use an ordered collection when matching positions back to measurement names.
+An empty measurement name probes the time column.
+
 ## Guidance
 
 - Prefer `Tablet` for batch writes and `TSRecord` for genuinely record-oriented
