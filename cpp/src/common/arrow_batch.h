@@ -25,6 +25,10 @@
 #include "common/arrow_c_data.h"
 #include "common/tsblock/tsblock.h"
 
+namespace storage {
+class TableSchema;
+}
+
 namespace common {
 
 // Mutable only while a batch is being built. Nulls have physical value slots;
@@ -76,7 +80,8 @@ class ArrowBatch : public std::enable_shared_from_this<ArrowBatch> {
     uint32_t row_count = 0;
     void finish();
     int export_to(ArrowArray* array, ArrowSchema* schema);
-    int to_tsblock(TupleDesc& desc, TsBlock*& block) const;
+    int to_tsblock(TupleDesc& desc, TsBlock*& block,
+                   storage::TableSchema* table_schema = nullptr) const;
 };
 
 }  // namespace common

@@ -39,6 +39,8 @@ struct ScanColumn {
     TSDataType type = INVALID_DATATYPE;
     bool projected = false;
     std::vector<ArrowPageLocation> pages;
+    // End of each value chunk's page range, paired with its shared time chunk.
+    std::vector<std::pair<size_t, size_t>> chunk_page_ends;
     // Non-aligned merge cursor. Only the current physical page is decoded.
     size_t next_page = 0;
     size_t row = 0;
@@ -53,6 +55,9 @@ struct ScanDevice {
     std::vector<ITimeseriesIndex*> indexes;
     TimeseriesIndex* time_index = nullptr;
     std::vector<ArrowPageLocation> times;
+    std::vector<int64_t> time_chunk_offsets;
+    std::vector<size_t> time_page_starts;
+    std::set<int64_t> excluded_chunks;
     std::vector<ScanColumn> columns;
     std::shared_ptr<ArrowInputRange> device_input;
     std::vector<int32_t> output_fields;
@@ -96,19 +101,6 @@ struct OutputSlice {
     uint32_t count;
     uint32_t destination;
 };
-int append_pages(RandomAccessReadFile& file, SimpleList<ChunkMeta*>* chunks,
-                 Statistic* top, std::vector<ArrowPageLocation>& pages,
-                 const ArrowInputBudget& usage,
-                 const std::shared_ptr<ArrowInputRange>& device_input) {
-    if (!chunks) return E_OK;
-    for (auto it = chunks->begin(); it != chunks->end(); it++) {
-        int ret = plan_arrow_pages(file, *it.get(),
-                                   chunks->size() == 1 ? top : nullptr, pages,
-                                   usage, device_input);
-        if (ret != E_OK) return ret;
-    }
-    return E_OK;
-}
 }  // namespace
 struct QueryScanExecutor::Impl {
     std::unique_ptr<DeviceTaskIterator> tasks;
@@ -124,9 +116,6 @@ struct QueryScanExecutor::Impl {
     int64_t limit;
     int error = E_OK;
     bool closed = false;
-    bool devices_enumerated = false;
-    std::vector<DeviceQueryTask*> selected_devices;
-    size_t next_device_index = 0;
     std::vector<std::shared_ptr<ScanDevice>> ready_devices;
     size_t ready_device_index = 0;
     std::set<std::string> predicate_columns;
@@ -217,7 +206,10 @@ struct QueryScanExecutor::Impl {
         types.insert(types.begin(), INT64);
         projected_columns.insert(names.begin() + 1, names.end());
         std::map<std::pair<std::string, TSDataType>, size_t> first;
-        for (size_t c = 0; c < names.size(); ++c) {
+        // The implicit timestamp has no corresponding projected FIELD.
+        output_sources.push_back(0);
+        distinct_outputs.push_back(0);
+        for (size_t c = 1; c < names.size(); ++c) {
             auto found = first.emplace(std::make_pair(names[c], types[c]), c);
             output_sources.push_back(found.first->second);
             if (found.second) distinct_outputs.push_back(c);
@@ -311,59 +303,87 @@ struct QueryScanExecutor::Impl {
         return ArrowInputRange::read(*file, input_usage, first, last - first,
                                      d.device_input);
     }
-    int plan_column(ScanDevice& d, size_t c) {
-        if (c == d.columns.size()) {
-            return d.aligned ? append_pages(
-                                   *file, d.time_index->get_chunk_meta_list(),
-                                   d.time_index->get_statistic(), d.times,
-                                   input_usage, d.device_input)
-                             : E_OK;
+    bool time_range_matches(const Statistic* stat) const {
+        return !time_filter || !stat ||
+               time_filter->satisfy_start_end_time(stat->start_time_,
+                                                   stat->end_time_);
+    }
+    // Use the shared clock for aligned chunks: a value statistic omits NULLs.
+    // Evaluate the caller's filter before starting parallel page planning.
+    void select_chunks(ScanDevice& d) {
+        auto select = [&](ITimeseriesIndex* index, bool clock) {
+            auto* chunks = index->get_chunk_meta_list();
+            if (!chunks) return;
+            for (auto it = chunks->begin(); it != chunks->end(); it++) {
+                auto* chunk = it.get();
+                auto offset = chunk->offset_of_chunk_header_;
+                if (clock) d.time_chunk_offsets.push_back(offset);
+                auto* stat = chunk->statistic_;
+                if (!stat && chunks->size() == 1) stat = index->get_statistic();
+                if (!time_range_matches(stat)) d.excluded_chunks.insert(offset);
+            }
+        };
+        if (d.aligned) {
+            select(d.time_index, true);
+        } else if (time_filter) {
+            for (auto* index : d.indexes)
+                if (index) select(index, false);
         }
-        auto* index = d.indexes[c];
+    }
+    int plan_column(ScanDevice& d, size_t c) {
+        const bool clock = c == d.columns.size();
+        auto* index = clock ? d.time_index : d.indexes[c];
         if (!index) return E_OK;
-        return append_pages(*file,
-                            index->is_aligned()
-                                ? index->get_value_chunk_meta_list()
-                                : index->get_chunk_meta_list(),
-                            index->get_statistic(), d.columns[c].pages,
-                            input_usage, d.device_input);
+        auto* chunks = index->is_aligned() ? index->get_value_chunk_meta_list()
+                                           : index->get_chunk_meta_list();
+        if (!chunks) return E_OK;
+        auto& pages = clock ? d.times : d.columns[c].pages;
+        auto* single_stat =
+            chunks->size() == 1 ? index->get_statistic() : nullptr;
+        size_t ordinal = 0;
+        for (auto it = chunks->begin(); it != chunks->end(); it++, ++ordinal) {
+            auto* chunk = it.get();
+            size_t group = ordinal;
+            int64_t offset = chunk->offset_of_chunk_header_;
+            if (clock) {
+                d.time_page_starts.push_back(pages.size());
+            } else if (d.aligned) {
+                // Complete value lists pair by ordinal, including empty chunks.
+                // Older sparse layouts omit a value chunk in some chunk groups.
+                if (chunks->size() != d.time_chunk_offsets.size()) {
+                    auto next =
+                        std::upper_bound(d.time_chunk_offsets.begin(),
+                                         d.time_chunk_offsets.end(), offset);
+                    if (next == d.time_chunk_offsets.begin())
+                        return E_TSFILE_CORRUPTED;
+                    group = next - d.time_chunk_offsets.begin() - 1;
+                }
+                offset = d.time_chunk_offsets[group];
+            }
+            if (d.excluded_chunks.count(offset)) continue;
+            int ret = plan_arrow_pages(*file, *chunk, single_stat, pages,
+                                       input_usage, d.device_input);
+            if (ret != E_OK) return ret;
+            if (!clock && d.aligned)
+                d.columns[c].chunk_page_ends.emplace_back(group, pages.size());
+        }
+        if (clock) d.time_page_starts.push_back(pages.size());
+        return E_OK;
     }
     int align_pages(const std::shared_ptr<ScanDevice>& d) {
         if (!d->aligned) return E_OK;
         d->value_pages.resize(d->times.size(),
                               std::vector<int32_t>(d->columns.size(), -1));
-        // Match by physical chunk-group order, not list index: schema evolution
-        // can omit a value chunk while the shared time chunk is still present.
-        std::vector<int64_t> time_chunks;
-        std::vector<size_t> time_starts;
-        for (size_t p = 0; p < d->times.size(); ++p) {
-            if (time_chunks.empty() ||
-                time_chunks.back() != d->times[p].chunk_offset) {
-                time_chunks.push_back(d->times[p].chunk_offset);
-                time_starts.push_back(p);
-            }
-        }
         for (size_t c = 0; c < d->columns.size(); ++c) {
-            int64_t previous = -1;
-            size_t within = 0;
-            for (size_t p = 0; p < d->columns[c].pages.size(); ++p) {
-                const auto& value = d->columns[c].pages[p];
-                if (value.chunk_offset != previous) {
-                    previous = value.chunk_offset;
-                    within = 0;
+            size_t first = 0;
+            for (const auto& chunk : d->columns[c].chunk_page_ends) {
+                size_t time_page = d->time_page_starts[chunk.first];
+                size_t end = d->time_page_starts[chunk.first + 1];
+                for (; first < chunk.second; ++first, ++time_page) {
+                    if (time_page >= end || d->value_pages[time_page][c] != -1)
+                        return E_TSFILE_CORRUPTED;
+                    d->value_pages[time_page][c] = first;
                 }
-                auto pos = std::upper_bound(
-                    time_chunks.begin(), time_chunks.end(), value.chunk_offset);
-                if (pos == time_chunks.begin()) return E_TSFILE_CORRUPTED;
-                size_t group = pos - time_chunks.begin() - 1;
-                size_t time_page = time_starts[group] + within++;
-                size_t group_end = group + 1 < time_starts.size()
-                                       ? time_starts[group + 1]
-                                       : d->times.size();
-                if (time_page >= group_end ||
-                    d->value_pages[time_page][c] != -1)
-                    return E_TSFILE_CORRUPTED;
-                d->value_pages[time_page][c] = p;
             }
         }
         return E_OK;
@@ -373,6 +393,7 @@ struct QueryScanExecutor::Impl {
                             [&](size_t i) { return bind_device(devices[i]); });
         if (ret != E_OK) return ret;
         for (const auto& d : devices) {
+            select_chunks(*d);
             ret = prefetch_dense_device(*d);
             if (ret != E_OK) return ret;
         }
@@ -390,8 +411,14 @@ struct QueryScanExecutor::Impl {
     int next_device() {
         device.reset();
         if (!tasks) return E_NO_MORE_DATA;
-        if (!devices_enumerated) {
-            for (;;) {
+        if (ready_device_index == ready_devices.size()) {
+            ready_devices.clear();
+            ready_device_index = 0;
+            size_t count = (input_usage && names.size() >= 1024)
+                               ? 1
+                               : std::min<size_t>(8, concurrency());
+            if (limit > 0) count = std::min<size_t>(count, limit);
+            while (ready_devices.size() < count) {
                 bool available = false;
                 int ret = tasks->has_next(available);
                 if (ret != E_OK) return ret;
@@ -400,23 +427,9 @@ struct QueryScanExecutor::Impl {
                 ret = tasks->next(task);
                 if (ret != E_OK) return ret;
                 if (!task) return E_OOM;
-                selected_devices.push_back(task);
+                ready_devices.emplace_back(new ScanDevice(task));
             }
-            devices_enumerated = true;
-        }
-        if (ready_device_index == ready_devices.size()) {
-            ready_devices.clear();
-            ready_device_index = 0;
-            if (next_device_index == selected_devices.size())
-                return E_NO_MORE_DATA;
-            // Bound metadata lookahead separately from the public batch size.
-            size_t count = (input_usage && names.size() >= 1024)
-                               ? 1
-                               : std::min<size_t>(8, concurrency());
-            while (ready_devices.size() < count &&
-                   next_device_index < selected_devices.size())
-                ready_devices.emplace_back(
-                    new ScanDevice(selected_devices[next_device_index++]));
+            if (ready_devices.empty()) return E_NO_MORE_DATA;
             int ret = prepare_window(ready_devices);
             if (ret != E_OK) return ret;
         }
@@ -512,9 +525,7 @@ struct QueryScanExecutor::Impl {
         page->device = device;
         page->time_page = device->page_cursor++;
         const auto& time = device->times[page->time_page];
-        if (time_filter && time.statistic &&
-            !time_filter->satisfy(time.statistic.get()))
-            return E_OK;
+        if (!time_range_matches(time.statistic.get())) return E_OK;
         bool all_match = false;
         if (predicate) {
             std::map<std::string, Statistic*> stats;
@@ -552,9 +563,7 @@ struct QueryScanExecutor::Impl {
             column.row = 0;
             if (column.next_page == column.pages.size()) return E_NO_MORE_DATA;
             const auto& page = column.pages[column.next_page++];
-            if (time_filter && page.statistic &&
-                !time_filter->satisfy(page.statistic.get()))
-                continue;
+            if (!time_range_matches(page.statistic.get())) continue;
             int ret = decode_arrow_times(*file, page, false, column.times);
             if (ret != E_OK) return ret;
             column.values =
@@ -831,7 +840,6 @@ void QueryScanExecutor::close() {
     impl_->pending.reset();
     impl_->device.reset();
     impl_->ready_devices.clear();
-    impl_->selected_devices.clear();
     impl_->tasks.reset();
 }
 }  // namespace storage

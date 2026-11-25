@@ -98,7 +98,7 @@ int TableQueryExecutor::query(const std::string& table_name,
         lower_case_column_names, data_types, block_size_, time_filter,
         field_filter));
     ret_qds = new TableResultSet(std::move(scan), lower_case_column_names,
-                                 data_types, return_mode_);
+                                 data_types, return_mode_, table_schema);
     return ret;
 }
 
@@ -175,7 +175,7 @@ int TableQueryExecutor::query(const std::string& table_name,
         lower_case_column_names, data_types, block_size_, time_filter,
         field_filter, offset, limit));
     ret_qds = new TableResultSet(std::move(scan), lower_case_column_names,
-                                 data_types, return_mode_);
+                                 data_types, return_mode_, table_schema);
     return ret;
 }
 
@@ -285,7 +285,7 @@ int TableQueryExecutor::query_on_tree(
         nullptr));
     ret_qds =
         new TableResultSet(std::move(scan), schema->get_measurement_names(),
-                           datatypes, return_mode_);
+                           datatypes, return_mode_, schema);
     return ret;
 }
 

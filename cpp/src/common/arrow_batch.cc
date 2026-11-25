@@ -24,6 +24,7 @@
 #include <new>
 
 #include "common/container/bit_map.h"
+#include "common/schema.h"
 #include "utils/date_utils.h"
 
 namespace common {
@@ -316,14 +317,21 @@ int ArrowBatch::export_to(ArrowArray* array, ArrowSchema* schema) {
         return E_OOM;
     }
 }
-int ArrowBatch::to_tsblock(TupleDesc& desc, TsBlock*& block) const {
+int ArrowBatch::to_tsblock(TupleDesc& desc, TsBlock*& block,
+                           storage::TableSchema* table_schema) const {
     delete block;
     block = nullptr;
     desc.reset();
-    for (size_t c = 0; c < columns.size(); ++c)
-        desc.push_back(ColumnSchema(
-            names[c], columns[c]->type(),
-            c == 0 ? ColumnCategory::TIME : ColumnCategory::FIELD));
+    for (size_t c = 0; c < columns.size(); ++c) {
+        if (table_schema) {
+            desc.push_back(c == 0 ? g_time_column_schema
+                                  : table_schema->get_column_schema(names[c]));
+        } else {
+            desc.push_back(ColumnSchema(
+                names[c], columns[c]->type(),
+                c == 0 ? ColumnCategory::TIME : ColumnCategory::FIELD));
+        }
+    }
     int ret = TsBlock::create_tsblock(&desc, block, row_count);
     if (ret != E_OK) return ret;
     RowAppender appender(block);

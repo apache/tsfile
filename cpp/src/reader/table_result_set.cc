@@ -253,7 +253,7 @@ int TableResultSet::get_next_tsblock(common::TsBlock*& block) {
         int ret = get_next_arrow_batch(batch);
         if (ret != common::E_OK) return ret;
         common::TsBlock* converted = adapted_block_.release();
-        ret = batch->to_tsblock(adapted_desc_, converted);
+        ret = batch->to_tsblock(adapted_desc_, converted, table_schema_.get());
         adapted_block_.reset(converted);
         if (ret != common::E_OK) {
             read_error_ = ret;

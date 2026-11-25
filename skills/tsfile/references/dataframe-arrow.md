@@ -119,11 +119,16 @@ C++ table scans build Arrow-layout buffers directly. Python imports these
 buffers without a TsBlock conversion; batches retain ownership after the
 result set or reader closes. Each result set reuses its first imported PyArrow schema
 for subsequent batches. Retaining batches retains their memory. Native
-`get_next_tsblock()` explicitly adapts Arrow output for TsBlock callers.
+`get_next_tsblock()` preserves the projected table column schemas, including TAG
+and explicitly projected TIME columns. A projected INT64 FIELD named `time`
+retains its stored values in its own output position after the implicit timestamp.
 
 When parallel reads are enabled, the query schedules device metadata and column
 page planning, then whole column read/decompress/decode/write tasks on the
-shared pool. Output order is stable. Aligned FIELD predicates first prune by
+shared pool. Device tasks are fetched in windows as the result is consumed.
+A time range can exclude a whole chunk before its pages are read. Aligned scans
+use the shared time chunk's range, including timestamps with NULL field values.
+Output order is stable. Aligned FIELD predicates first prune by
 page statistics, then decode only predicate columns to compute a shared row
 selection; output-only columns are decoded only for pages with accepted rows.
 Selection is separate from Arrow null validity: exported batches contain only

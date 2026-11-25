@@ -43,8 +43,10 @@ class TableResultSet : public ResultSet {
     explicit TableResultSet(std::unique_ptr<QueryScanExecutor> scan,
                             std::vector<std::string> column_names,
                             std::vector<common::TSDataType> data_types,
-                            int return_mode = RETURN_ROW)
+                            int return_mode = RETURN_ROW,
+                            std::shared_ptr<TableSchema> table_schema = nullptr)
         : scan_(std::move(scan)),
+          table_schema_(std::move(table_schema)),
           column_names_(std::move(column_names)),
           data_types_(std::move(data_types)),
           return_mode_(return_mode) {
@@ -82,6 +84,7 @@ class TableResultSet : public ResultSet {
     std::unique_ptr<QueryScanExecutor> scan_;
     std::shared_ptr<common::ArrowBatch> arrow_batch_;
     uint32_t arrow_row_ = 0;
+    std::shared_ptr<TableSchema> table_schema_;
     common::TupleDesc adapted_desc_;
     std::unique_ptr<common::TsBlock> adapted_block_;
     std::unique_ptr<TsBlockReader> tsblock_reader_;

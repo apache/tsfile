@@ -86,6 +86,7 @@ class DeviceMetaIterator {
     common::PageArena pa_;
     bool should_split_device_name;
 
+    size_t next_leaf_child_ = 0;
     int read_error_ = common::E_OK;
     bool direct_lookup_done_;
     std::shared_ptr<IDeviceID> direct_device_id_;

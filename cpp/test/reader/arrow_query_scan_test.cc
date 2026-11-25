@@ -35,9 +35,11 @@
 #include "common/thread_pool.h"
 #include "compress/uncompressed_compressor.h"
 #include "file/local_random_access_read_file.h"
+#include "file/tsfile_io_writer.h"
 #include "file/write_file.h"
 #include "reader/arrow/scan_page.h"
 #include "reader/filter/aligned_field_filter.h"
+#include "reader/filter/time_operator.h"
 #include "reader/table_query_executor.h"
 #include "writer/tsfile_table_writer.h"
 
@@ -273,6 +275,189 @@ class ObservedReadFile : public RandomAccessReadFile {
         return ret;
     }
 };
+TEST_F(ArrowQueryScanTest, ProjectedTimeFieldAndTsBlockSchema) {
+    const std::vector<ColumnSchema> columns{
+        {"id", STRING, UNCOMPRESSED, PLAIN, ColumnCategory::TAG},
+        {"time", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD},
+        {"clock", TIMESTAMP, UNCOMPRESSED, PLAIN, ColumnCategory::TIME}};
+    TableSchema schema("t", columns);
+    {
+        WriteFile file;
+        ASSERT_EQ(file.create(filename_, O_WRONLY | O_CREAT | O_TRUNC, 0666),
+                  E_OK);
+        TsFileTableWriter writer(&file, &schema);
+        Tablet tablet("t", {"id", "time"}, {STRING, INT64},
+                      {ColumnCategory::TAG, ColumnCategory::FIELD}, 1);
+        ASSERT_EQ(tablet.add_timestamp(0, 17), E_OK);
+        ASSERT_EQ(tablet.add_value(0, "id", "a"), E_OK);
+        ASSERT_EQ(tablet.add_value(0, "time", int64_t(10000)), E_OK);
+        ASSERT_EQ(writer.write_table(tablet), E_OK);
+        ASSERT_EQ(writer.close(), E_OK);
+    }
+    LocalRandomAccessReadFile file;
+    ASSERT_EQ(file.open(filename_), E_OK);
+    TableQueryExecutor executor(&file, 1);
+    ResultSet* raw = nullptr;
+    ASSERT_EQ(executor.query("t", {"id", "time", "time", "clock", "clock"},
+                             nullptr, nullptr, nullptr, raw),
+              E_OK);
+    std::unique_ptr<ResultSet> result(raw);
+    TsBlock* block = nullptr;
+    ASSERT_EQ(result->get_next_tsblock(block), E_OK);
+    auto* desc = block->get_tuple_desc();
+    EXPECT_EQ(desc->get_column_category(1), ColumnCategory::TAG);
+    EXPECT_EQ(desc->get_column_category(2), ColumnCategory::FIELD);
+    EXPECT_EQ(desc->get_column_schema(2).compression_, UNCOMPRESSED);
+    EXPECT_EQ(desc->get_column_schema(2).encoding_, PLAIN);
+    EXPECT_EQ(desc->get_column_category(4), ColumnCategory::TIME);
+    EXPECT_EQ(desc->get_column_category(5), ColumnCategory::TIME);
+    EXPECT_EQ(desc->get_time_column_index(), 4);
+    RowIterator row(block);
+    const int64_t expected[] = {17, 0, 10000, 10000, 17, 17};
+    for (uint32_t c : {0U, 2U, 3U, 4U, 5U}) {
+        uint32_t size;
+        bool is_null;
+        const char* data = row.read(c, &size, &is_null);
+        ASSERT_FALSE(is_null);
+        ASSERT_EQ(size, sizeof(int64_t));
+        int64_t actual;
+        std::memcpy(&actual, data, size);
+        EXPECT_EQ(actual, expected[c]);
+    }
+}
+
+TEST_F(ArrowQueryScanTest, LimitStopsBeforeNextDeviceMetadata) {
+    ObservedReadFile file;
+    ASSERT_EQ(file.source.open(filename_), E_OK);
+    TsFileIOReader metadata;
+    ASSERT_EQ(metadata.init(&file), E_OK);
+    TsFileMeta* meta = nullptr;
+    ASSERT_EQ(metadata.get_tsfile_meta(meta), E_OK);
+    auto root = meta->table_metadata_index_node_map_.at("t");
+    ASSERT_EQ(root->children_.size(), 2U);
+    file.forbidden.insert(root->children_[1]->get_offset());
+
+    g_config_value_.parallel_read_enabled_ = true;
+    TableQueryExecutor executor(&file, 32);
+    ResultSet* raw = nullptr;
+    ASSERT_EQ(executor.query("t", {"v"}, nullptr, nullptr, nullptr, 0, 1, raw),
+              E_OK);
+    std::unique_ptr<ResultSet> result(raw);
+    TsBlock* block = nullptr;
+    ASSERT_EQ(result->get_next_tsblock(block), E_OK);
+    EXPECT_EQ(block->get_row_count(), 1U);
+    EXPECT_EQ(result->get_next_tsblock(block), E_NO_MORE_DATA);
+    EXPECT_EQ(file.rejected.load(), 0);
+}
+
+template <typename Writer>
+void flush_aligned_chunk(TsFileIOWriter& file, Writer& chunk, std::string name,
+                         TSDataType type) {
+    ASSERT_EQ(chunk.end_encode_chunk(), E_OK);
+    ASSERT_EQ(file.start_flush_chunk(chunk.get_chunk_data(), name, type, PLAIN,
+                                     UNCOMPRESSED, chunk.num_of_pages()),
+              E_OK);
+    ASSERT_EQ(file.flush_chunk(chunk.get_chunk_data()), E_OK);
+    ASSERT_EQ(file.end_flush_chunk(chunk.get_chunk_statistic()), E_OK);
+}
+
+TEST_F(ArrowQueryScanTest, ColumnOrderedChunksPairAndPruneBySharedTime) {
+    {
+        WriteFile output;
+        ASSERT_EQ(output.create(filename_, O_WRONLY | O_CREAT | O_TRUNC, 0666),
+                  E_OK);
+        TsFileIOWriter writer;
+        ASSERT_EQ(writer.init(&output), E_OK);
+        ASSERT_EQ(writer.start_file(), E_OK);
+        std::vector<ColumnSchema> columns{
+            {"v", INT64, UNCOMPRESSED, PLAIN, ColumnCategory::FIELD}};
+        writer.get_schema()->register_table_schema(
+            std::make_shared<TableSchema>("t", columns));
+        auto device = std::make_shared<StringArrayDeviceID>(
+            std::vector<std::string>{"t"});
+        ASSERT_EQ(writer.start_flush_chunk_group(device, true), E_OK);
+        for (int64_t t : {0, 1}) {
+            TimeChunkWriter chunk;
+            ASSERT_EQ(chunk.init("", PLAIN, UNCOMPRESSED), E_OK);
+            ASSERT_EQ(chunk.write(t), E_OK);
+            ASSERT_NO_FATAL_FAILURE(
+                flush_aligned_chunk(writer, chunk, "", VECTOR));
+        }
+        for (int64_t t : {0, 1}) {
+            ValueChunkWriter chunk;
+            ASSERT_EQ(chunk.init("v", INT64, PLAIN, UNCOMPRESSED), E_OK);
+            ASSERT_EQ(chunk.write(t, 100 + t, false), E_OK);
+            ASSERT_NO_FATAL_FAILURE(
+                flush_aligned_chunk(writer, chunk, "v", INT64));
+        }
+        ASSERT_EQ(writer.end_flush_chunk_group(true), E_OK);
+        ASSERT_EQ(writer.end_file(), E_OK);
+    }
+
+    ObservedReadFile file;
+    ASSERT_EQ(file.source.open(filename_), E_OK);
+    std::vector<int64_t> time_offsets, value_offsets;
+    {
+        TsFileIOReader metadata;
+        ASSERT_EQ(metadata.init(&file), E_OK);
+        TsFileMeta* meta = nullptr;
+        ASSERT_EQ(metadata.get_tsfile_meta(meta), E_OK);
+        auto root = meta->table_metadata_index_node_map_.at("t");
+        auto id = root->children_.front()->get_device_id();
+        PageArena arena;
+        arena.init(1024, MOD_TSFILE_READER);
+        std::vector<ITimeseriesIndex*> indexes(1);
+        ASSERT_EQ(metadata.get_timeseries_indexes(id, {"v"}, indexes, arena),
+                  E_OK);
+        auto* index = dynamic_cast<AlignedTimeseriesIndex*>(indexes[0]);
+        ASSERT_NE(index, nullptr);
+        auto* times = index->get_time_chunk_meta_list();
+        auto* values = index->get_value_chunk_meta_list();
+        for (auto it = times->begin(); it != times->end(); it++)
+            time_offsets.push_back(it.get()->offset_of_chunk_header_);
+        for (auto it = values->begin(); it != values->end(); it++)
+            value_offsets.push_back(it.get()->offset_of_chunk_header_);
+        index->time_ts_idx_->~TimeseriesIndex();
+        index->value_ts_idx_->~TimeseriesIndex();
+        index->~AlignedTimeseriesIndex();
+    }
+    ASSERT_EQ(time_offsets.size(), 2U);
+    ASSERT_EQ(value_offsets.size(), 2U);
+    TableQueryExecutor executor(&file, 8);
+    for (int64_t start : {0, 1, 2}) {
+        if (start > 0) {
+            file.forbidden.insert(time_offsets[start - 1]);
+            file.forbidden.insert(value_offsets[start - 1]);
+        }
+        ResultSet* raw = nullptr;
+        ASSERT_EQ(executor.query("t", {"v"}, new TimeBetween(start, 10, false),
+                                 nullptr, nullptr, raw),
+                  E_OK);
+        std::unique_ptr<ResultSet> result(raw);
+        TsBlock* block = nullptr;
+        if (start < 2) {
+            ASSERT_EQ(result->get_next_tsblock(block), E_OK);
+            ASSERT_EQ(block->get_row_count(), 2U - start);
+            RowIterator rows(block);
+            for (int64_t t = start; t < 2; ++t) {
+                for (int c : {0, 1}) {
+                    bool is_null;
+                    uint32_t size;
+                    const char* data = rows.read(c, &size, &is_null);
+                    ASSERT_FALSE(is_null);
+                    ASSERT_EQ(size, sizeof(int64_t));
+                    int64_t actual;
+                    std::memcpy(&actual, data, size);
+                    EXPECT_EQ(actual, c == 0 ? t : 100 + t);
+                }
+                rows.next();
+            }
+        }
+        EXPECT_EQ(result->get_next_tsblock(block), E_NO_MORE_DATA);
+        EXPECT_EQ(file.rejected.load(), 0);
+    }
+}
+
 TEST_F(ArrowQueryScanTest, MetadataLookupsUseTaskOwnedMemory) {
     LocalRandomAccessReadFile file;
     ASSERT_EQ(file.open(filename_), E_OK);
