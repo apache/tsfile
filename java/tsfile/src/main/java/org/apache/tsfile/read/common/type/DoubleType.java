@@ -23,6 +23,7 @@ import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.block.column.ColumnBuilderStatus;
 import org.apache.tsfile.common.conf.TSFileConfig;
+import org.apache.tsfile.encoding.decoder.AlpDecoder;
 import org.apache.tsfile.encoding.decoder.CamelDecoder;
 import org.apache.tsfile.encoding.decoder.Decoder;
 import org.apache.tsfile.encoding.decoder.DoublePrecisionChimpDecoder;
@@ -156,6 +157,7 @@ public class DoubleType extends AbstractType {
       case SPRINTZ -> new DoubleSprintzDecoder();
       case RLBE -> new DoubleRLBEDecoder();
       case CAMEL -> new CamelDecoder();
+      case ALP -> new AlpDecoder(TSDataType.DOUBLE);
       default -> throw decoderNotFound(encoding);
     };
   }
