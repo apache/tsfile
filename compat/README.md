@@ -60,6 +60,10 @@ cartesian product of every data type and encoding the local writer supports and
 fails when the spec does not cover it. That is what keeps the matrix complete
 as new encodings are added.
 
+ALP is currently readable by Java for FLOAT and DOUBLE files written by C++.
+Java does not encode ALP, so its matrix rows declare `javaWrite=no` while
+retaining `javaRead=yes`.
+
 ## Data scale and page-size tiers
 
 Every (type, encoding, compression) combination is generated at four data

@@ -52,10 +52,9 @@
 #     when one block spans INT_MIN and INT_MAX, so SPRINTZ rows use the
 #     'sprintz' profile (values within +/-1e9). Streaming numeric extremes are
 #     covered under PLAIN, RLE, TS_2DIFF, GORILLA, CHIMP and RLBE.
-#   - ALP (encoding id 15): C++/Python-only for now. The Java implementation
-#     has no ALP decoder, so this matrix declares no ALP rows and the C++
-#     completeness sweep stops at CAMEL. Add ALP rows and extend that bound
-#     only together with the Java decoder.
+#   - ALP (encoding id 15): Java can decode C++-written ALP files for FLOAT
+#     and DOUBLE, but Java does not provide an ALP encoder. ALP rows therefore
+#     declare javaWrite=no while keeping Java reads enabled.
 
 id,model,dataType,encoding,compressions,rowCount,pageRows,chunks,devices,valueProfile,nullPatterns,javaWrite,cppWrite,javaRead,cppRead,gapReason,timestampProfile
 table_int32_plain_r10,table,INT32,PLAIN,ALL,10,4,1,1,default,NONE,yes,yes,yes,yes,
@@ -210,6 +209,10 @@ table_float_rlbe_r10,table,FLOAT,RLBE,ALL,10,4,1,1,default,NONE,yes,yes,yes,yes,
 table_float_rlbe_r1000,table,FLOAT,RLBE,ALL,1000,100,1,1,default,NONE,yes,yes,yes,yes,
 table_float_rlbe_r100000,table,FLOAT,RLBE,ALL,100000,10000,1,1,default,NONE,yes,yes,yes,yes,
 table_float_rlbe_r1000000,table,FLOAT,RLBE,SNAPPY+GZIP+LZ4+ZSTD+LZMA2,1000000,10000,1,1,default,NONE,yes,yes,yes,yes,
+table_float_alp_r10,table,FLOAT,ALP,ALL,10,4,1,1,default,NONE,no,yes,yes,yes,Java supports ALP decoding only; it has no ALP encoder.
+table_float_alp_r1000,table,FLOAT,ALP,ALL,1000,100,1,1,default,NONE,no,yes,yes,yes,Java supports ALP decoding only; it has no ALP encoder.
+table_float_alp_r100000,table,FLOAT,ALP,ALL,100000,10000,1,1,default,NONE,no,yes,yes,yes,Java supports ALP decoding only; it has no ALP encoder.
+table_float_alp_r1000000,table,FLOAT,ALP,SNAPPY+GZIP+LZ4+ZSTD+LZMA2,1000000,10000,1,1,default,NONE,no,yes,yes,yes,Java supports ALP decoding only; it has no ALP encoder.
 table_float_rle_r10,table,FLOAT,RLE,ALL,10,4,1,1,runs,NONE,yes,yes,yes,yes,
 table_float_rle_r1000,table,FLOAT,RLE,ALL,1000,100,1,1,runs,NONE,yes,yes,yes,yes,
 table_float_rle_r100000,table,FLOAT,RLE,ALL,100000,10000,1,1,runs,NONE,yes,yes,yes,yes,
@@ -251,6 +254,10 @@ table_double_camel_r10,table,DOUBLE,CAMEL,ALL,10,4,1,1,default,NONE,yes,yes,yes,
 table_double_camel_r1000,table,DOUBLE,CAMEL,ALL,1000,100,1,1,default,NONE,yes,yes,yes,yes,
 table_double_camel_r100000,table,DOUBLE,CAMEL,ALL,100000,10000,1,1,default,NONE,yes,yes,yes,yes,
 table_double_camel_r1000000,table,DOUBLE,CAMEL,SNAPPY+GZIP+LZ4+ZSTD+LZMA2,1000000,10000,1,1,default,NONE,yes,yes,yes,yes,
+table_double_alp_r10,table,DOUBLE,ALP,ALL,10,4,1,1,default,NONE,no,yes,yes,yes,Java supports ALP decoding only; it has no ALP encoder.
+table_double_alp_r1000,table,DOUBLE,ALP,ALL,1000,100,1,1,default,NONE,no,yes,yes,yes,Java supports ALP decoding only; it has no ALP encoder.
+table_double_alp_r100000,table,DOUBLE,ALP,ALL,100000,10000,1,1,default,NONE,no,yes,yes,yes,Java supports ALP decoding only; it has no ALP encoder.
+table_double_alp_r1000000,table,DOUBLE,ALP,SNAPPY+GZIP+LZ4+ZSTD+LZMA2,1000000,10000,1,1,default,NONE,no,yes,yes,yes,Java supports ALP decoding only; it has no ALP encoder.
 table_double_rle_r10,table,DOUBLE,RLE,ALL,10,4,1,1,runs,NONE,yes,yes,yes,yes,
 table_double_rle_r1000,table,DOUBLE,RLE,ALL,1000,100,1,1,runs,NONE,yes,yes,yes,yes,
 table_double_rle_r100000,table,DOUBLE,RLE,ALL,100000,10000,1,1,runs,NONE,yes,yes,yes,yes,
@@ -348,3 +355,5 @@ table_multi_chunk_group,table,INT32,RLE,ALL,50,0,1,3,runs,NONE,yes,yes,yes,yes,
 table_long_runs,table,INT64,RLE,ALL,1024,0,1,1,runs,NONE,yes,yes,yes,yes,
 table_int32_plain_dups,table,INT32,PLAIN,UNCOMPRESSED,10,4,1,1,default,NONE,yes,yes,yes,yes,,duplicates
 tree_int32_plain_dups,tree,INT32,PLAIN,UNCOMPRESSED,10,4,1,1,default,NONE,yes,yes,yes,yes,,duplicates
+tree_float_alp_dups,tree,FLOAT,ALP,UNCOMPRESSED,10,4,1,1,default,NONE,no,yes,yes,yes,Java supports ALP decoding only; it has no ALP encoder.,duplicates
+tree_double_alp_dups,tree,DOUBLE,ALP,UNCOMPRESSED,10,4,1,1,default,NONE,no,yes,yes,yes,Java supports ALP decoding only; it has no ALP encoder.,duplicates

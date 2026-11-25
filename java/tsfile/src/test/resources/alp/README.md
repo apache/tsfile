@@ -31,20 +31,20 @@ The companion alp-empty-float.bin is the C++ ALP v1 encoding of an empty FLOAT
 page (16-byte header, zero values, zero blocks).
 
 The checked-in binary is the Java test input; the C++ source documents how the
-file was constructed. To regenerate on macOS from the repository root:
+file was constructed. To regenerate from the repository root:
 
 ```bash
-cmake -S cpp -B /private/tmp/tsfile-alp-fixture \
+build_dir="$PWD/build/alp-fixture"
+fixture_dir=java/tsfile/src/test/resources/alp
+cmake -S cpp -B "$build_dir" \
   -DCMAKE_BUILD_TYPE=Release -DBUILD_TEST=OFF -DBUILD_TOOLS=OFF \
   -DENABLE_ANTLR4=OFF -DENABLE_SNAPPY=OFF -DENABLE_LZ4=OFF \
   -DENABLE_LZOKAY=OFF -DENABLE_ZLIB=OFF -DENABLE_ZSTD=OFF \
   -DENABLE_LZMA2=OFF -DENABLE_SIMD=OFF
-cmake --build /private/tmp/tsfile-alp-fixture --target tsfile --parallel 5
-c++ -std=c++11 -Icpp/src java/tsfile/src/test/resources/alp/generate.cc \
-  -L/private/tmp/tsfile-alp-fixture/lib -ltsfile \
-  -Wl,-rpath,/private/tmp/tsfile-alp-fixture/lib \
-  -o /private/tmp/tsfile-alp-generate
-/private/tmp/tsfile-alp-generate \
-  java/tsfile/src/test/resources/alp/alp-vector-pages.tsfile \
-  java/tsfile/src/test/resources/alp/alp-empty-float.bin
+cmake --build "$build_dir" --target tsfile --parallel 5
+c++ -std=c++11 -Icpp/src "$fixture_dir/generate.cc" \
+  -L"$build_dir/lib" -ltsfile -Wl,-rpath,"$build_dir/lib" \
+  -o "$build_dir/alp-fixture-generate"
+"$build_dir/alp-fixture-generate" \
+  "$fixture_dir/alp-vector-pages.tsfile" "$fixture_dir/alp-empty-float.bin"
 ```

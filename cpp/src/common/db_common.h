@@ -77,9 +77,8 @@ enum TSEncoding : uint8_t {
     SPRINTZ = 12,
     RLBE = 13,
     CAMEL = 14,
-    // C++/Python-only for now: the Java implementation has no ALP decoder.
-    // Java can open a file containing an ALP chunk, but any query that reads
-    // that series fails.  Do not enable ALP for files shared with Java.
+    // C++/Python writers and C++/Java readers support ALP. Java currently
+    // provides decoding only; Java writers do not encode ALP.
     ALP = 15,
     INVALID_ENCODING = 255
 };

@@ -60,9 +60,7 @@ typedef enum {
     TS_ENCODING_SPRINTZ = 12,
     TS_ENCODING_RLBE = 13,
     TS_ENCODING_CAMEL = 14,
-    /* C++/Python-only for now: the Java implementation has no ALP decoder.
-     * A file containing an ALP chunk opens in Java, but reading that series
-     * fails. Do not write ALP into files consumed by Java. */
+    /* Java supports read-only ALP decoding for FLOAT and DOUBLE. */
     TS_ENCODING_ALP = 15,
     TS_ENCODING_INVALID = 255
 } TSEncoding;
@@ -473,8 +471,8 @@ int set_global_time_compression(uint8_t compression);
  *        - FLOAT: PLAIN, TS_2DIFF, GORILLA, SPRINTZ, CHIMP, RLBE, ALP
  *        - DOUBLE: PLAIN, TS_2DIFF, GORILLA, SPRINTZ, CHIMP, RLBE, CAMEL, ALP
  *        - STRING: PLAIN, DICTIONARY
- * @warning ALP is C++/Python-only for now. A file written with ALP cannot be
- *          read by the Java implementation.
+ * @note Java can read ALP-encoded FLOAT and DOUBLE data but does not encode
+ * ALP.
  */
 int set_datatype_encoding(uint8_t data_type, uint8_t encoding);
 
