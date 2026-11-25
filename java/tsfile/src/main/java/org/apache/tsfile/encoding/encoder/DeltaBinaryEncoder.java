@@ -22,7 +22,6 @@ package org.apache.tsfile.encoding.encoder;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.BytesUtils;
-import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,6 +51,7 @@ public abstract class DeltaBinaryEncoder extends Encoder {
   protected int blockSize;
   // input value is stored in deltaBlackBuffer temporarily
   protected byte[] encodingBlockBuffer;
+  protected final byte[] encodingHeaderBuffer = new byte[24];
 
   protected int writeIndex = -1;
   protected int writeWidth = 0;
@@ -76,6 +76,13 @@ public abstract class DeltaBinaryEncoder extends Encoder {
 
   protected abstract int calculateBitWidthsForDeltaBlockBuffer();
 
+  protected int transformDeltaBlockBufferAndCalculateBitWidths() {
+    for (int i = 0; i < writeIndex; i++) {
+      calcTwoDiff(i);
+    }
+    return calculateBitWidthsForDeltaBlockBuffer();
+  }
+
   /** write all data into {@code encodingBlockBuffer}. */
   private void writeDataWithMinWidth() {
     for (int i = 0; i < writeIndex; i++) {
@@ -86,8 +93,9 @@ public abstract class DeltaBinaryEncoder extends Encoder {
   }
 
   private void writeHeaderToBytes() throws IOException {
-    ReadWriteIOUtils.write(writeIndex, out);
-    ReadWriteIOUtils.write(writeWidth, out);
+    BytesUtils.intToBytes(writeIndex, encodingHeaderBuffer, 0);
+    BytesUtils.intToBytes(writeWidth, encodingHeaderBuffer, 4);
+    out.write(encodingHeaderBuffer, 0, 8);
     writeHeader();
   }
 
@@ -95,13 +103,8 @@ public abstract class DeltaBinaryEncoder extends Encoder {
     if (writeIndex == -1) {
       return;
     }
-    // since we store the min delta, the deltas will be converted to be the
-    // difference to min delta and all positive
     this.out = out;
-    for (int i = 0; i < writeIndex; i++) {
-      calcTwoDiff(i);
-    }
-    writeWidth = calculateBitWidthsForDeltaBlockBuffer();
+    writeWidth = transformDeltaBlockBufferAndCalculateBitWidths();
     writeHeaderToBytes();
     writeDataWithMinWidth();
 
@@ -140,6 +143,24 @@ public abstract class DeltaBinaryEncoder extends Encoder {
       deltaBlockBuffer = new int[this.blockSize];
       encodingBlockBuffer = new byte[blockSize * 4];
       reset();
+    }
+
+    @Override
+    protected int transformDeltaBlockBufferAndCalculateBitWidths() {
+      if (getClass() != IntDeltaEncoder.class) {
+        return super.transformDeltaBlockBufferAndCalculateBitWidths();
+      }
+      int width = 0;
+      for (int i = 0; i < writeIndex; i++) {
+        deltaBlockBuffer[i] -= minDeltaBase;
+        width = Math.max(width, getValueWidth(deltaBlockBuffer[i]));
+      }
+      return width;
+    }
+
+    @Override
+    protected void calcTwoDiff(int i) {
+      deltaBlockBuffer[i] -= minDeltaBase;
     }
 
     @Override
@@ -196,14 +217,10 @@ public abstract class DeltaBinaryEncoder extends Encoder {
     }
 
     @Override
-    protected void calcTwoDiff(int i) {
-      deltaBlockBuffer[i] = deltaBlockBuffer[i] - minDeltaBase;
-    }
-
-    @Override
     protected void writeHeader() throws IOException {
-      ReadWriteIOUtils.write(minDeltaBase, out);
-      ReadWriteIOUtils.write(firstValue, out);
+      BytesUtils.intToBytes(minDeltaBase, encodingHeaderBuffer, 8);
+      BytesUtils.intToBytes(firstValue, encodingHeaderBuffer, 12);
+      out.write(encodingHeaderBuffer, 8, 8);
     }
 
     @Override
@@ -271,14 +288,10 @@ public abstract class DeltaBinaryEncoder extends Encoder {
     }
 
     @Override
-    protected void calcTwoDiff(int i) {
-      deltaBlockBuffer[i] = deltaBlockBuffer[i] - minDeltaBase;
-    }
-
-    @Override
     protected void writeHeader() throws IOException {
-      out.write(BytesUtils.longToBytes(minDeltaBase));
-      out.write(BytesUtils.longToBytes(firstValue));
+      BytesUtils.longToBytes(minDeltaBase, encodingHeaderBuffer, 8);
+      BytesUtils.longToBytes(firstValue, encodingHeaderBuffer, 16);
+      out.write(encodingHeaderBuffer, 8, 16);
     }
 
     @Override
@@ -315,6 +328,24 @@ public abstract class DeltaBinaryEncoder extends Encoder {
       if (writeIndex == blockSize) {
         flush(out);
       }
+    }
+
+    @Override
+    protected int transformDeltaBlockBufferAndCalculateBitWidths() {
+      if (getClass() != LongDeltaEncoder.class) {
+        return super.transformDeltaBlockBufferAndCalculateBitWidths();
+      }
+      int width = 0;
+      for (int i = 0; i < writeIndex; i++) {
+        deltaBlockBuffer[i] -= minDeltaBase;
+        width = Math.max(width, getValueWidth(deltaBlockBuffer[i]));
+      }
+      return width;
+    }
+
+    @Override
+    protected void calcTwoDiff(int i) {
+      deltaBlockBuffer[i] -= minDeltaBase;
     }
 
     @Override

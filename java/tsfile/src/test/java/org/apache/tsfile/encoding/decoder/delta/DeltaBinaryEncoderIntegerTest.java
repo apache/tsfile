@@ -26,10 +26,13 @@ import org.junit.Test;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.util.Random;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class DeltaBinaryEncoderIntegerTest {
 
@@ -88,6 +91,49 @@ public class DeltaBinaryEncoderIntegerTest {
     shouldReadAndWrite(data, ROW_NUM);
   }
 
+  @Test
+  public void testHeaderBytesMatchFormat() {
+    writer = new DeltaBinaryEncoder.IntDeltaEncoder();
+    out = new ByteArrayOutputStream();
+    writer.encode(10, out);
+    writer.encode(13, out);
+    writer.flush(out);
+
+    assertArrayEquals(
+        new byte[] {0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 10}, out.toByteArray());
+  }
+
+  @Test
+  public void testLegacySubclassHooksRemainSupported() {
+    LegacyHookIntDeltaEncoder legacyWriter = new LegacyHookIntDeltaEncoder();
+    out = new ByteArrayOutputStream();
+    legacyWriter.encode(10, out);
+    legacyWriter.encode(13, out);
+    legacyWriter.flush(out);
+
+    assertEquals(1, legacyWriter.getDeltaTransformCalls());
+    assertEquals(1, legacyWriter.getWidthCalculationCalls());
+    assertArrayEquals(
+        new byte[] {0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 10}, out.toByteArray());
+  }
+
+  @Test
+  public void testResizesOversizedBufferAfterSmallPack()
+      throws IOException, ReflectiveOperationException {
+    writer = new DeltaBinaryEncoder.IntDeltaEncoder(4096);
+    InspectableIntDeltaDecoder inspectableReader = new InspectableIntDeltaDecoder();
+    reader = inspectableReader;
+    int[] data = new int[4100];
+    for (int i = 0; i < data.length; i++) {
+      data[i] = (i & 1) == 0 ? 0 : 100;
+    }
+
+    shouldReadAndWrite(data, data.length);
+
+    assertTrue(inspectableReader.getDeltaBufferCapacity() <= 1024);
+    assertTrue(getDataBufferCapacity(inspectableReader) <= 128);
+  }
+
   private void writeData(int[] data, int length) {
     for (int i = 0; i < length; i++) {
       writer.encode(data[i], out);
@@ -106,5 +152,48 @@ public class DeltaBinaryEncoderIntegerTest {
     while (reader.hasNext(buffer)) {
       assertEquals(data[i++], reader.readInt(buffer));
     }
+    assertEquals(length, i);
+  }
+
+  private static class InspectableIntDeltaDecoder extends DeltaBinaryDecoder.IntDeltaDecoder {
+    int getDeltaBufferCapacity() {
+      return deltaBuf.length;
+    }
+  }
+
+  private static class LegacyHookIntDeltaEncoder extends DeltaBinaryEncoder.IntDeltaEncoder {
+    private int deltaTransformCalls;
+    private int widthCalculationCalls;
+
+    @Override
+    protected void calcTwoDiff(int i) {
+      deltaTransformCalls++;
+      super.calcTwoDiff(i);
+    }
+
+    @Override
+    protected int calculateBitWidthsForDeltaBlockBuffer() {
+      widthCalculationCalls++;
+      return super.calculateBitWidthsForDeltaBlockBuffer();
+    }
+
+    int getDeltaTransformCalls() {
+      return deltaTransformCalls;
+    }
+
+    int getWidthCalculationCalls() {
+      return widthCalculationCalls;
+    }
+  }
+
+  private int getDataBufferCapacity(DeltaBinaryDecoder decoder)
+      throws ReflectiveOperationException {
+    for (Field dataField : DeltaBinaryDecoder.IntDeltaDecoder.class.getDeclaredFields()) {
+      if (dataField.getType() == int[].class) {
+        dataField.setAccessible(true);
+        return ((int[]) dataField.get(decoder)).length;
+      }
+    }
+    throw new AssertionError();
   }
 }
