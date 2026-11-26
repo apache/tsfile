@@ -115,12 +115,38 @@ public class RowRecord {
     return timestamp;
   }
 
+  /**
+   * Returns the list of fields of this row. A field may be {@code null} when the corresponding
+   * column has no value in the query range; use {@link #isNull(int)} to check a field before
+   * dereferencing it instead of relying on the returned {@link Field} being non-null.
+   */
   public List<Field> getFields() {
     return fields;
   }
 
+  /**
+   * Returns the field at {@code index}. The returned field may be {@code null} when the
+   * corresponding column has no value in the query range; use {@link #isNull(int)} to check it
+   * before dereferencing.
+   *
+   * @param index the column index
+   * @return the field at {@code index}, possibly {@code null}
+   */
   public Field getField(int index) {
     return fields.get(index);
+  }
+
+  /**
+   * Returns whether the field at {@code index} is null, i.e. the corresponding column has no value
+   * in the query range. A null field is represented either by a {@code null} entry in {@link
+   * #getFields()} or by a {@link Field} whose {@link Field#getDataType()} returns {@code null}.
+   *
+   * @param index the column index
+   * @return {@code true} if the field at {@code index} is null
+   */
+  public boolean isNull(int index) {
+    Field field = fields.get(index);
+    return field == null || field.getDataType() == null;
   }
 
   public boolean hasNullField() {
