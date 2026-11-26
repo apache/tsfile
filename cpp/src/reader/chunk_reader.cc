@@ -895,10 +895,22 @@ int ChunkReader::decode_tv_buf_into_tsblock_by_datatype(
             ret = E_NOT_SUPPORT;
             ASSERT(false);
     }
-    // The offset-aware iterator must keep scanning after a page whose
-    // matching rows were all consumed by the offset (or time filter).
-    if (remaining_offset == nullptr && ret_tsblock->get_row_count() == 0 &&
-        ret == E_OK) {
+    // A decode that produced zero rows has two very different causes:
+    //
+    //  1. Every row was consumed by the offset (or time filter) and the page
+    //     is exhausted. The offset-aware iterator must keep scanning for the
+    //     next page, so this stays E_OK; the plain tree path has nothing left
+    //     to produce and reports E_NO_MORE_DATA.
+    //
+    //  2. The destination block cannot hold even a single row (its capacity is
+    //     smaller than one row), so the per-type loops report E_OVERFLOW before
+    //     appending anything. decode_cur_page_data() rewrites E_OVERFLOW to
+    //     E_OK, which hands the scan iterator an empty block it retries
+    //     forever. Surface that as E_INVALID_ARG instead.
+    if (ret_tsblock->get_row_count() == 0 && ret == E_OVERFLOW) {
+        ret = E_INVALID_ARG;
+    } else if (remaining_offset == nullptr &&
+               ret_tsblock->get_row_count() == 0 && ret == E_OK) {
         ret = E_NO_MORE_DATA;
     }
     return ret;
