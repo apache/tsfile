@@ -167,14 +167,32 @@ class Int64SprintzEncoder : public SprintzEncoder {
             ASSERT(false);
         }
 
-        return (pred <= 0) ? -2 * pred : 2 * pred - 1;
+        // ZigZag-encode the residual without signed overflow. The classic
+        // SPRINTZ mapping ((pred <= 0) ? -2 * pred : 2 * pred - 1) overflows
+        // at INT64_MIN (it would yield 2^64, which needs 65 bits and would
+        // collide with 0). Map INT64_MIN to 0xFFFFFFFFFFFFFFFF instead so the
+        // mapping stays a bijection over 64 bits.
+        if (pred == INT64_MIN) {
+            return -1;  // 0xFFFFFFFFFFFFFFFF
+        }
+        if (pred <= 0) {
+            // -2 * pred, in [0, 2^64-2]; -pred fits in uint64 here.
+            uint64_t magnitude = static_cast<uint64_t>(-pred);
+            return static_cast<int64_t>(magnitude << 1);
+        }
+        return static_cast<int64_t>((static_cast<uint64_t>(pred) << 1) - 1);
     }
 
-    int64_t delta(int64_t value, int64_t prev) { return value - prev; }
+    int64_t delta(int64_t value, int64_t prev) {
+        // value - prev modulo 2^64, well-defined on unsigned arithmetic.
+        return static_cast<int64_t>(static_cast<uint64_t>(value) -
+                                    static_cast<uint64_t>(prev));
+    }
 
     int64_t fire(int64_t value, int64_t prev) {
         int64_t pred = fire_pred_.predict(prev);
-        int64_t err = value - pred;
+        int64_t err = static_cast<int64_t>(static_cast<uint64_t>(value) -
+                                           static_cast<uint64_t>(pred));
         fire_pred_.train(prev, value, err);
         return err;
     }

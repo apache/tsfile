@@ -183,23 +183,28 @@ class Int64SprintzDecoder : public SprintzDecoder {
     int recalculate() override {
         int ret = common::E_OK;
         for (int i = 1; i <= block_size_; ++i) {
-            if ((current_buffer_[i] & 1) == 0) {
-                current_buffer_[i] = -current_buffer_[i] / 2;
-            } else {
-                current_buffer_[i] = (current_buffer_[i] + 1) / 2;
-            }
+            // Inverse of the encoder's ZigZag. Unsigned arithmetic decodes a
+            // residual whose encoded form has bit 63 set (which arrives as a
+            // negative int64), and maps the encoder's 0xFFFFFFFFFFFFFFFF
+            // sentinel for INT64_MIN back to INT64_MIN.
+            uint64_t z = static_cast<uint64_t>(current_buffer_[i]);
+            current_buffer_[i] = static_cast<int64_t>(
+                (z & 1ull) == 0 ? -(z >> 1) : (z >> 1) + 1);
         }
 
         if (predict_scheme_ == "delta") {
             for (int i = 1; i <= block_size_; ++i) {
-                current_buffer_[i] += current_buffer_[i - 1];
+                current_buffer_[i] = static_cast<int64_t>(
+                    static_cast<uint64_t>(current_buffer_[i]) +
+                    static_cast<uint64_t>(current_buffer_[i - 1]));
             }
         } else if (predict_scheme_ == "fire") {
             fire_pred_.reset();
             for (int i = 1; i <= block_size_; ++i) {
                 int64_t pred = fire_pred_.predict(current_buffer_[i - 1]);
                 int64_t err = current_buffer_[i];
-                current_buffer_[i] = pred + err;
+                current_buffer_[i] = static_cast<int64_t>(
+                    static_cast<uint64_t>(pred) + static_cast<uint64_t>(err));
                 fire_pred_.train(current_buffer_[i - 1], current_buffer_[i],
                                  err);
             }

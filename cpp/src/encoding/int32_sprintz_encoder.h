@@ -168,14 +168,30 @@ class Int32SprintzEncoder : public SprintzEncoder {
             ASSERT(false);
         }
 
-        return (pred <= 0) ? -2 * pred : 2 * pred - 1;
+        // ZigZag-encode the residual without signed overflow. The classic
+        // SPRINTZ mapping ((pred <= 0) ? -2 * pred : 2 * pred - 1) overflows
+        // at INT32_MIN (it would yield 2^32, which needs 33 bits and would
+        // collide with 0). Map INT32_MIN to 0xFFFFFFFF instead — a value the
+        // classic mapping never emits — so the mapping stays a bijection over
+        // 32 bits and the bit-packer never truncates a residual.
+        if (pred == INT32_MIN) {
+            return -1;  // 0xFFFFFFFF
+        }
+        return static_cast<int32_t>((pred <= 0)
+                                        ? -2 * static_cast<int64_t>(pred)
+                                        : 2 * static_cast<int64_t>(pred) - 1);
     }
 
-    int32_t delta(int32_t value, int32_t prev) { return value - prev; }
+    int32_t delta(int32_t value, int32_t prev) {
+        // value - prev modulo 2^32, well-defined on unsigned arithmetic.
+        return static_cast<int32_t>(static_cast<uint32_t>(value) -
+                                    static_cast<uint32_t>(prev));
+    }
 
     int32_t fire(int32_t value, int32_t prev) {
         int32_t pred = fire_pred_.predict(prev);
-        int32_t err = value - pred;
+        int32_t err = static_cast<int32_t>(static_cast<uint32_t>(value) -
+                                           static_cast<uint32_t>(pred));
         fire_pred_.train(prev, value, err);
         return err;
     }

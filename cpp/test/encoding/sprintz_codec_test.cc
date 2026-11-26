@@ -1421,4 +1421,108 @@ TEST_F(SprintzCodecTest, Int32SpecialBlockAtCapacityStillDecodes) {
     ASSERT_FALSE(decoder.has_remaining(stream));
 }
 
+// Wide-range values make consecutive residuals jump across the whole integer
+// range, exercising the residual subtraction and ZigZag overflow paths that
+// small or fixed-extreme data never reach. These must round-trip losslessly.
+TEST_F(SprintzCodecTest, Int32WideRangeRoundTrip) {
+    std::vector<int32_t> values;
+    for (int r = 0; r < 1000; ++r) {
+        values.push_back(
+            static_cast<int32_t>(static_cast<uint32_t>(r) * 2654435761u));
+    }
+
+    Int32SprintzEncoder encoder;
+    ByteStream stream(8192, MOD_ENCODER_OBJ);
+    for (int32_t v : values) {
+        ASSERT_EQ(encoder.encode(v, stream), E_OK);
+    }
+    ASSERT_EQ(encoder.flush(stream), E_OK);
+
+    Int32SprintzDecoder decoder;
+    for (size_t i = 0; i < values.size(); ++i) {
+        int32_t actual = 0;
+        ASSERT_TRUE(decoder.has_remaining(stream)) << "i=" << i;
+        ASSERT_EQ(decoder.read_int32(actual, stream), E_OK);
+        ASSERT_EQ(actual, values[i]) << "i=" << i;
+    }
+    ASSERT_FALSE(decoder.has_remaining(stream));
+}
+
+TEST_F(SprintzCodecTest, Int64WideRangeRoundTrip) {
+    std::vector<int64_t> values;
+    for (int r = 0; r < 1000; ++r) {
+        values.push_back(static_cast<int64_t>(static_cast<uint64_t>(r) *
+                                              0x9E3779B97F4A7C15ull));
+    }
+
+    Int64SprintzEncoder encoder;
+    ByteStream stream(16384, MOD_ENCODER_OBJ);
+    for (int64_t v : values) {
+        ASSERT_EQ(encoder.encode(v, stream), E_OK);
+    }
+    ASSERT_EQ(encoder.flush(stream), E_OK);
+
+    Int64SprintzDecoder decoder;
+    for (size_t i = 0; i < values.size(); ++i) {
+        int64_t actual = 0;
+        ASSERT_TRUE(decoder.has_remaining(stream)) << "i=" << i;
+        ASSERT_EQ(decoder.read_int64(actual, stream), E_OK);
+        ASSERT_EQ(actual, values[i]) << "i=" << i;
+    }
+    ASSERT_FALSE(decoder.has_remaining(stream));
+}
+
+// With the "delta" predictor, 0 -> INT32_MIN produces a residual of exactly
+// INT32_MIN, whose classic ZigZag overflows to 2^32 (33 bits). The encoder
+// maps it to the 0xFFFFFFFF sentinel; the decoder must recover INT32_MIN.
+TEST_F(SprintzCodecTest, Int32DeltaIntMinResidual) {
+    std::vector<int32_t> values = {0, INT32_MIN, 1, 2, 3, 4, 5, 6, 7};
+
+    Int32SprintzEncoder encoder;
+    encoder.set_predict_method("delta");
+    ByteStream stream(512, MOD_ENCODER_OBJ);
+    for (int32_t v : values) {
+        ASSERT_EQ(encoder.encode(v, stream), E_OK);
+    }
+    ASSERT_EQ(encoder.flush(stream), E_OK);
+
+    Int32SprintzDecoder decoder;
+    decoder.set_predict_method("delta");
+    // read_exact consumes the whole lone full block; the per-value
+    // has_remaining() loop stops one short of a stream that ends on a full
+    // block (documented in CheckBatchParity).
+    std::vector<int32_t> out(values.size());
+    ASSERT_EQ(
+        ReadExact(decoder, out.data(), static_cast<int>(values.size()), stream),
+        E_OK);
+    for (size_t i = 0; i < values.size(); ++i) {
+        ASSERT_EQ(values[i], out[i]) << "i=" << i;
+    }
+}
+
+// INT64 analog of Int32DeltaIntMinResidual.
+TEST_F(SprintzCodecTest, Int64DeltaIntMinResidual) {
+    std::vector<int64_t> values = {0, INT64_MIN, 1, 2, 3, 4, 5, 6, 7};
+
+    Int64SprintzEncoder encoder;
+    encoder.set_predict_method("delta");
+    ByteStream stream(512, MOD_ENCODER_OBJ);
+    for (int64_t v : values) {
+        ASSERT_EQ(encoder.encode(v, stream), E_OK);
+    }
+    ASSERT_EQ(encoder.flush(stream), E_OK);
+
+    Int64SprintzDecoder decoder;
+    decoder.set_predict_method("delta");
+    // read_exact consumes the whole lone full block (see
+    // Int32DeltaIntMinResidual).
+    std::vector<int64_t> out(values.size());
+    ASSERT_EQ(
+        ReadExact(decoder, out.data(), static_cast<int>(values.size()), stream),
+        E_OK);
+    for (size_t i = 0; i < values.size(); ++i) {
+        ASSERT_EQ(values[i], out[i]) << "i=" << i;
+    }
+}
+
 }  // namespace
