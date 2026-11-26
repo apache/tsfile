@@ -570,6 +570,10 @@ int TsFileReader::query_table_on_tree(
 
 void TsFileReader::destroy_query_data_set(storage::ResultSet* qds) {
     if (tsfile_executor_ == nullptr) {
+        // The executor is gone after close(), but the result set still owns
+        // its memory. Delete it directly so cleanup after close() does not
+        // leak the result set.
+        delete qds;
         return;
     }
     tsfile_executor_->destroy_query_data_set(qds);
