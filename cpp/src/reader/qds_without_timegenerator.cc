@@ -120,20 +120,39 @@ int QDSWithoutTimeGenerator::init_internal(TsFileIOReader* io_reader,
     index_lookup_.insert({"time", 0});
     for (size_t i = 0; i < origin_path_count; i++) {
         TsFileSeriesScanIterator* ssi = nullptr;
+        common::TSDataType empty_series_type = common::INVALID_DATATYPE;
         ret = io_reader_->alloc_ssi(paths[i].device_id_, paths[i].measurement_,
-                                    ssi, pa_, global_time_filter);
+                                    ssi, pa_, global_time_filter,
+                                    &empty_series_type);
         if (ret == E_MEASUREMENT_NOT_EXIST || ret == E_DEVICE_NOT_EXIST ||
-            ret == E_NOT_EXIST || ret == E_NO_MORE_DATA) {
+            ret == E_NOT_EXIST) {
             // Java-aligned: silently skip paths whose device or measurement
-            // doesn't exist in this file. The bloom-filter optimization in
-            // alloc_ssi reports a missing series as E_NO_MORE_DATA, so treat
-            // that the same as the not-found codes.
+            // doesn't exist in this file.
+            ret = E_OK;
+            continue;
+        }
+        if (ret == E_NO_MORE_DATA) {
+            // The series exists but has no data in the query time range. Keep
+            // its column (aligned with Java) so callers see a NULL value for it
+            // instead of a later column's value. No SSI is allocated, so a
+            // nullptr placeholder keeps the column indices aligned.
+            size_t col_idx = ssi_vec_.size();
+            index_lookup_.insert({paths[i].measurement_, col_idx + 1});
+            if (paths[i].full_path_ != paths[i].measurement_) {
+                index_lookup_.insert({paths[i].full_path_, col_idx + 1});
+            }
+            ssi_vec_.push_back(nullptr);
+            valid_paths.push_back(paths[i]);
+            column_names.push_back(paths[i].full_path_);
+            ssi_data_types.push_back(empty_series_type);
             ret = E_OK;
             continue;
         }
         if (ret != E_OK) {
             for (size_t j = 0; j < ssi_vec_.size(); j++) {
-                io_reader_->revert_ssi(ssi_vec_[j]);
+                if (ssi_vec_[j] != nullptr) {
+                    io_reader_->revert_ssi(ssi_vec_[j]);
+                }
             }
             ssi_vec_.clear();
             return ret;
@@ -154,8 +173,10 @@ int QDSWithoutTimeGenerator::init_internal(TsFileIOReader* io_reader,
     // Only push offset/limit to SSI for single-path; multi-path applies at
     // merge.
     for (size_t i = 0; i < path_count; i++) {
-        ssi_vec_[i]->set_row_range(is_single_path_ ? remaining_offset_ : 0,
-                                   is_single_path_ ? remaining_limit_ : -1);
+        if (ssi_vec_[i] != nullptr) {
+            ssi_vec_[i]->set_row_range(is_single_path_ ? remaining_offset_ : 0,
+                                       is_single_path_ ? remaining_limit_ : -1);
+        }
     }
     row_record_ = new RowRecord(path_count + 1);
     tsblocks_.resize(path_count);
@@ -163,6 +184,11 @@ int QDSWithoutTimeGenerator::init_internal(TsFileIOReader* io_reader,
     value_iters_.resize(path_count);
 
     for (size_t i = 0; i < path_count; i++) {
+        if (ssi_vec_[i] == nullptr) {
+            // Empty-in-range column: keep it NULL with its real data type.
+            data_types.push_back(ssi_data_types[i]);
+            continue;
+        }
         if (RET_FAIL(load_next_tsblock(i, true))) {
             return ret;
         }
@@ -178,7 +204,7 @@ int QDSWithoutTimeGenerator::init_internal(TsFileIOReader* io_reader,
     }
     // Single-path: SSI may have consumed offset/limit by skipping chunks/pages
     // during first load_next_tsblock(); sync so QDS does not double-apply.
-    if (is_single_path_) {
+    if (is_single_path_ && ssi_vec_[0] != nullptr) {
         remaining_offset_ = ssi_vec_[0]->get_row_offset();
         remaining_limit_ = ssi_vec_[0]->get_row_limit();
     }
@@ -206,11 +232,15 @@ void QDSWithoutTimeGenerator::close() {
 
     ASSERT(ssi_vec_.size() == tsblocks_.size());
     for (size_t i = 0; i < ssi_vec_.size(); i++) {
-        ssi_vec_[i]->revert_tsblock();
+        if (ssi_vec_[i] != nullptr) {
+            ssi_vec_[i]->revert_tsblock();
+        }
     }
     for (size_t i = 0; i < ssi_vec_.size(); i++) {
         TsFileSeriesScanIterator* ssi = ssi_vec_[i];
-        io_reader_->revert_ssi(ssi);
+        if (ssi != nullptr) {
+            io_reader_->revert_ssi(ssi);
+        }
     }
     ssi_vec_.clear();
     tsblocks_.clear();

@@ -431,10 +431,12 @@ int QDSWithTimeGenerator::construct_node_tree(Expression* expr, Node*& node) {
                                     leaf->sss_.ssi_, pa_, expr->filter_);
         if (E_OK == ret) {
             leaf->sss_.init();
-        } else if (ret == E_NO_MORE_DATA) {
-            // The filter pruned every chunk of this series. Keep the leaf so
-            // parent AND/OR nodes still have a child; its stream reports
-            // INVALID_NEXT_TIMESTAMP for every lookup.
+        } else if (ret == E_NO_MORE_DATA || ret == E_MEASUREMENT_NOT_EXIST ||
+                   ret == E_DEVICE_NOT_EXIST || ret == E_NOT_EXIST) {
+            // The filter pruned every chunk of this series, or the series does
+            // not exist in this file. Keep the leaf so parent AND/OR nodes
+            // still have a child; its stream reports INVALID_NEXT_TIMESTAMP
+            // for every lookup.
             ret = E_OK;
         }
         if (ret == E_OK) {

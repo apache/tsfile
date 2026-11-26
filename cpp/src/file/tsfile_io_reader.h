@@ -85,7 +85,8 @@ class TsFileIOReader {
     int alloc_ssi(std::shared_ptr<IDeviceID> device_id,
                   const std::string& measurement_name,
                   TsFileSeriesScanIterator*& ssi, common::PageArena& pa,
-                  Filter* time_filter = nullptr);
+                  Filter* time_filter = nullptr,
+                  common::TSDataType* out_series_type = nullptr);
 
     int alloc_multi_ssi(std::shared_ptr<IDeviceID> device_id,
                         const std::vector<std::string>& measurement_names,
