@@ -1340,6 +1340,7 @@ int TsFileWriter::write_table(Tablet& tablet) {
             std::vector<ValueTask> value_tasks;
             std::vector<SegmentRange> segments;
             uint32_t initial_page_points;
+            int32_t initial_num_of_pages;
         };
 
         const uint32_t page_max_points =
@@ -1408,6 +1409,7 @@ int TsFileWriter::write_table(Tablet& tablet) {
                 DeviceWriteCtx ctx;
                 ctx.tcw = time_chunk_writer;
                 ctx.initial_page_points = time_cur_points;
+                ctx.initial_num_of_pages = time_chunk_writer->num_of_pages();
                 uint32_t field_col_count = 0;
                 for (uint32_t i = 0; i < tablet.get_column_count(); ++i) {
                     if (tablet.column_categories_[i] ==
@@ -1560,10 +1562,19 @@ int TsFileWriter::write_table(Tablet& tablet) {
             for (auto& ctx : device_ctxs) {
                 if (RET_FAIL(write_time_segments(ctx.tcw, ctx.segments,
                                                  ctx.initial_page_points))) {
-                    // Time wrote partial rows before failing; value columns
-                    // still hold the prior count.  Same column-alignment
-                    // hazard as the parallel path.
-                    unrecoverable_ = true;
+                    // A pure out-of-order batch is rejected before any time
+                    // point is written, leaving every column's row count
+                    // unchanged -- the writer stays coherent and the data
+                    // written so far must survive a later flush/close.  Only
+                    // poison the writer when the time chunk actually made
+                    // progress (points into the current page, or a sealed
+                    // page) before failing: then the value columns lag the
+                    // time column and the aligned chunk group can no longer
+                    // be sealed coherently.
+                    if (ctx.tcw->get_point_numer() > ctx.initial_page_points ||
+                        ctx.tcw->num_of_pages() > ctx.initial_num_of_pages) {
+                        unrecoverable_ = true;
+                    }
                     return ret;
                 }
                 for (auto& vt : ctx.value_tasks) {
