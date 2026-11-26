@@ -84,7 +84,7 @@ std::string host_from_endpoint(const std::string& endpoint) {
     }
     const size_t slash = host.find('/');
     if (slash != std::string::npos) {
-        host = host.substr(0, slash);
+        host.erase(slash);
     }
     return lower_copy(host);
 }
@@ -200,13 +200,13 @@ std::string s3_derive_region_from_endpoint(const std::string& endpoint) {
         std::string region = host.substr(oss + 4);
         const size_t dot = region.find('.');
         if (dot != std::string::npos) {
-            region = region.substr(0, dot);
+            region.erase(dot);
         }
         const std::string internal = "-internal";
         if (region.size() > internal.size() &&
             region.compare(region.size() - internal.size(), internal.size(),
                            internal) == 0) {
-            region = region.substr(0, region.size() - internal.size());
+            region.erase(region.size() - internal.size());
         }
         return region;
     }
@@ -222,7 +222,7 @@ std::string s3_derive_region_from_endpoint(const std::string& endpoint) {
         remainder = host.substr(3);
         const size_t dot = remainder.find('.');
         if (dot != std::string::npos) {
-            remainder = remainder.substr(0, dot);
+            remainder.erase(dot);
         }
         return remainder;
     } else {
@@ -236,7 +236,7 @@ std::string s3_derive_region_from_endpoint(const std::string& endpoint) {
     }
     const size_t dot = remainder.find('.');
     if (dot != std::string::npos) {
-        remainder = remainder.substr(0, dot);
+        remainder.erase(dot);
     }
     return remainder;
 }

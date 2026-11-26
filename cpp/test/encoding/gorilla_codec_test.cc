@@ -29,6 +29,23 @@ namespace storage {
 
 class GorillaCodecTest : public ::testing::Test {};
 
+TEST_F(GorillaCodecTest, ControlWordsCrossReservoirBoundary) {
+    // After 62 padding bits, the control words are 0 | 11 | 0 | 11 | 0 | 10
+    // | 0. The first 11 straddles the end of the 64-bit reservoir.
+    const uint8_t encoded[] = {0, 0, 0, 0, 0, 0, 0, 0x01, 0xB4};
+    GorillaBitReader reader{};
+    reader.data = encoded;
+    reader.data_len = sizeof(encoded);
+    ASSERT_EQ(reader.read_long(62), 0u);
+
+    const uint8_t expected[] = {0, 3, 0, 3, 0, 2, 0};
+    for (uint8_t control : expected) {
+        ASSERT_EQ(reader.read_control_bits(2), control);
+    }
+    EXPECT_EQ(reader.bits, 0);
+    EXPECT_FALSE(reader.exhausted);
+}
+
 TEST_F(GorillaCodecTest, BasicEncoding) {
     storage::IntGorillaEncoder int_encoder;
     common::ByteStream stream(1024, common::MOD_DEFAULT);
