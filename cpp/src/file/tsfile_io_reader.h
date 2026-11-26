@@ -364,6 +364,10 @@ class TsFileIOReader {
     common::PageArena tsfile_meta_page_arena_;
     TsFileMeta tsfile_meta_;
     bool tsfile_meta_ready_;
+    // Guards the lazy tsfile_meta_ load. load_tsfile_meta() writes once into
+    // tsfile_meta_ / tsfile_meta_page_arena_; concurrent first queries must not
+    // both deserialize into the same arena.
+    std::mutex meta_mutex_;
     bool read_file_created_;
     // Bounded LRU: device key -> deserialized measurement MetaIndexNode. Each
     // entry owns its arena so eviction releases the retained metadata pages.

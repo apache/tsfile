@@ -21,6 +21,7 @@
 #define READER_TSFILE_READER_H
 
 #include <memory>
+#include <mutex>
 
 #include "common/row_record.h"
 #include "common/tsfile_common.h"
@@ -358,6 +359,12 @@ class TsFileReader {
     int table_query_executor_batch_size_ = -1;
     unsigned char file_version_ = 0;
     common::PageArena tsfile_reader_meta_pa_;
+    // Guards the lazy table_query_executor_ create/replace in
+    // ensure_table_query_executor().
+    std::mutex table_executor_mutex_;
+    // Guards tsfile_reader_meta_pa_, which get_timeseries_metadata() resets and
+    // rewrites on every call.
+    std::mutex meta_arena_mutex_;
     // Test-only hook for the unbounded-arena-growth regression check.
     friend class TsFileReaderMetaArenaTest;
 };

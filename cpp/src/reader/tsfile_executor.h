@@ -67,7 +67,6 @@ class TsFileExecutor  // : public QueryExecutor
 
    private:
     TsFileIOReader io_reader_;
-    QueryExpression* query_exprs_;
     std::vector<TsFileSeriesScanIterator*> data_scan_iter_;
     std::vector<common::TsBlock*> tsblocks_;
     std::vector<common::ColIterator*> time_iters_;
