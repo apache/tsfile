@@ -85,6 +85,7 @@ TsFileWriter::TsFileWriter()
 TsFileWriter::~TsFileWriter() { destroy(); }
 
 void TsFileWriter::destroy() {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     if (write_file_created_ && write_file_ != nullptr) {
         delete write_file_;
         write_file_ = nullptr;
@@ -118,6 +119,7 @@ void TsFileWriter::destroy() {
 }
 
 int TsFileWriter::init(RandomAccessWriteFile* write_file) {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     if (write_file == nullptr) {
         return E_INVALID_ARG;
     } else if (!write_file->is_opened()) {
@@ -152,6 +154,7 @@ int TsFileWriter::init(RandomAccessWriteFile* write_file) {
 // All new MeasurementSchemaGroup/MeasurementSchema are freed in destroy().
 // -----------------------------------------------------------------------------
 int TsFileWriter::init(std::unique_ptr<RandomAccessWriteFile> write_file) {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     if (!write_file || !write_file->is_opened()) {
         return E_INVALID_ARG;
     }
@@ -177,6 +180,7 @@ int TsFileWriter::init(std::unique_ptr<RandomAccessWriteFile> write_file) {
 }
 
 int TsFileWriter::init(RestorableTsFileIOWriter* rw) {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     if (rw == nullptr || !rw->can_write()) {
         return E_INVALID_ARG;
     }
@@ -258,11 +262,13 @@ int TsFileWriter::init(RestorableTsFileIOWriter* rw) {
 }
 
 void TsFileWriter::set_generate_table_schema(bool generate_table_schema) {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     io_writer_->set_generate_table_schema(generate_table_schema);
 }
 
 int TsFileWriter::register_table(
     const std::shared_ptr<TableSchema>& table_schema) {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     if (!table_schema) return E_INVALID_ARG;
 
     // Empty table name or column name is not allowed.
@@ -295,6 +301,7 @@ int TsFileWriter::register_table(
 }
 
 int TsFileWriter::open(const std::string& file_path, int flags, mode_t mode) {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     if (write_file_ != nullptr || io_writer_ != nullptr) {
         return E_ALREADY_EXIST;
     }
@@ -322,11 +329,13 @@ int TsFileWriter::open(const std::string& file_path, int flags, mode_t mode) {
 }
 
 int TsFileWriter::open(const std::string& file_path) {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     return open(file_path, O_RDWR | O_CREAT | O_TRUNC, 0666);
 }
 
 int TsFileWriter::register_aligned_timeseries(
     const std::string& device_id, const MeasurementSchema& measurement_schema) {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     MeasurementSchema* ms = new MeasurementSchema(
         measurement_schema.measurement_name_, measurement_schema.data_type_,
         measurement_schema.encoding_, measurement_schema.compression_type_);
@@ -341,6 +350,7 @@ int TsFileWriter::register_aligned_timeseries(
 int TsFileWriter::register_aligned_timeseries(
     const std::string& device_id,
     const std::vector<MeasurementSchema*>& measurement_schemas) {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     std::shared_ptr<IDeviceID> id =
         std::make_shared<StringArrayDeviceID>(device_id);
     // Fix the complete aligned schema at the first registration, like Java.
@@ -376,6 +386,7 @@ int TsFileWriter::register_aligned_timeseries(
 
 int TsFileWriter::register_timeseries(
     const std::string& device_id, const MeasurementSchema& measurement_schema) {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     MeasurementSchema* ms = new MeasurementSchema(
         measurement_schema.measurement_name_, measurement_schema.data_type_,
         measurement_schema.encoding_, measurement_schema.compression_type_);
@@ -388,6 +399,7 @@ int TsFileWriter::register_timeseries(
 
 int TsFileWriter::register_timeseries(const std::string& device_path,
                                       MeasurementSchema* measurement_schema) {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     if (measurement_schema == nullptr) {
         return E_INVALID_ARG;
     }
@@ -421,6 +433,7 @@ int TsFileWriter::register_timeseries(const std::string& device_path,
 int TsFileWriter::register_timeseries(
     const std::string& device_id,
     const std::vector<MeasurementSchema*>& measurement_schema_vec) {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     int ret = E_OK;
     auto it = measurement_schema_vec.begin();
     for (; it != measurement_schema_vec.end();
@@ -525,6 +538,7 @@ int TsFileWriter::do_check_and_prepare_tablet(Tablet& tablet) {
 
 std::shared_ptr<TableSchema> TsFileWriter::get_table_schema(
     const std::string& table_name) const {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     auto& schema_map = io_writer_->get_schema()->table_schema_map_;
     auto it = schema_map.find(table_name);
     if (it == schema_map.end()) return nullptr;
@@ -745,6 +759,7 @@ int TsFileWriter::do_check_schema_table(
 }
 
 int64_t TsFileWriter::calculate_mem_size_for_all_group() {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     int64_t mem_total_size = 0;
     DeviceSchemasMapIter device_iter;
     for (device_iter = schemas_.begin(); device_iter != schemas_.end();
@@ -781,6 +796,7 @@ int64_t TsFileWriter::calculate_mem_size_for_all_group() {
 }
 
 int64_t TsFileWriter::calculate_meta_mem_size() const {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     return io_writer_->get_meta_size();
 }
 
@@ -789,6 +805,7 @@ int64_t TsFileWriter::calculate_meta_mem_size() const {
  * them to given OutputStream.
  */
 int TsFileWriter::check_memory_size_and_may_flush_chunks() {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     int ret = E_OK;
     if (record_count_since_last_flush_ >= record_count_for_next_mem_check_) {
         // chunk-writer memory drops to ~0 after flush, but chunk metadata
@@ -825,6 +842,7 @@ bool TsFileWriter::recovered_last_time_order_violated(
 }
 
 int TsFileWriter::write_record(const TsRecord& record) {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     if (UNLIKELY(unrecoverable_)) return E_DATA_INCONSISTENCY;
     int ret = E_OK;
     auto device_id = std::make_shared<StringArrayDeviceID>(record.device_id_);
@@ -866,6 +884,7 @@ int TsFileWriter::write_record(const TsRecord& record) {
 }
 
 int TsFileWriter::write_record_aligned(const TsRecord& record) {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     if (UNLIKELY(unrecoverable_)) return E_DATA_INCONSISTENCY;
     int ret = E_OK;
     auto device_id = std::make_shared<StringArrayDeviceID>(record.device_id_);
@@ -1082,6 +1101,7 @@ int TsFileWriter::write_point_aligned(ValueChunkWriter* value_chunk_writer,
 }
 
 int TsFileWriter::write_tablet_aligned(const Tablet& tablet) {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     if (UNLIKELY(unrecoverable_)) return E_DATA_INCONSISTENCY;
     int ret = E_OK;
     auto device_id =
@@ -1225,6 +1245,7 @@ int TsFileWriter::write_tablet_aligned(const Tablet& tablet) {
 }
 
 int TsFileWriter::write_tablet(const Tablet& tablet) {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     if (UNLIKELY(unrecoverable_)) return E_DATA_INCONSISTENCY;
     int ret = E_OK;
     auto device_id =
@@ -1287,6 +1308,7 @@ int TsFileWriter::write_tablet(const Tablet& tablet) {
 }
 
 int TsFileWriter::write_tree(const Tablet& tablet) {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     auto device_id =
         std::make_shared<StringArrayDeviceID>(tablet.insert_target_name_);
     if (schemas_.find(device_id) != schemas_.end()) {
@@ -1300,6 +1322,7 @@ int TsFileWriter::write_tree(const Tablet& tablet) {
 }
 
 int TsFileWriter::write_tree(const TsRecord& record) {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     auto device_id = std::make_shared<StringArrayDeviceID>(record.device_id_);
     if (schemas_.find(device_id) != schemas_.end()) {
         auto schema = schemas_[device_id];
@@ -1312,6 +1335,7 @@ int TsFileWriter::write_tree(const TsRecord& record) {
 }
 
 int TsFileWriter::write_table(Tablet& tablet) {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     if (UNLIKELY(unrecoverable_)) return E_DATA_INCONSISTENCY;
     int ret = E_OK;
     if (io_writer_->get_schema()->table_schema_map_.find(
@@ -1964,6 +1988,7 @@ int TsFileWriter::value_write_column_batch(ValueChunkWriter* value_chunk_writer,
 
 // TODO make sure ret is meaningful to SDK user
 int TsFileWriter::flush() {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     if (UNLIKELY(unrecoverable_)) return E_DATA_INCONSISTENCY;
     int ret = E_OK;
     if (!start_file_done_) {
@@ -2135,6 +2160,7 @@ int TsFileWriter::flush_chunk_group(MeasurementSchemaGroup* chunk_group,
 }
 
 int TsFileWriter::close() {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     if (UNLIKELY(unrecoverable_)) return E_DATA_INCONSISTENCY;
     int ret = flush();
     if (ret != E_OK) {
@@ -2146,6 +2172,7 @@ int TsFileWriter::close() {
 int TsFileWriter::add_tsfile_property(const std::string& key,
                                       const uint8_t* value,
                                       uint32_t value_len) {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     if (io_writer_ == nullptr) {
         return E_FILE_WRITE_ERR;
     }
@@ -2154,6 +2181,7 @@ int TsFileWriter::add_tsfile_property(const std::string& key,
 
 int TsFileWriter::add_tsfile_property(const std::string& key,
                                       const std::vector<uint8_t>& value) {
+    std::lock_guard<std::recursive_mutex> write_lock(write_mutex_);
     if (io_writer_ == nullptr) {
         return E_FILE_WRITE_ERR;
     }
