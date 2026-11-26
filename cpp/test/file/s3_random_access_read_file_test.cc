@@ -41,7 +41,7 @@ TEST(S3RandomAccessReadFileTest, RejectsMissingSettingsWithoutNetwork) {
     EXPECT_FALSE(error.empty()) << "bucket/key are required";
 }
 
-TEST(S3RandomAccessReadFileTest, SignedRequestRequiresRegion) {
+TEST(S3RandomAccessReadFileTest, SignedRequestWithoutRegionReportsCause) {
     storage::S3Options options;
     options.endpoint = "http://127.0.0.1:1";
     options.bucket = "bucket";
@@ -52,7 +52,9 @@ TEST(S3RandomAccessReadFileTest, SignedRequestRequiresRegion) {
     std::unique_ptr<storage::RandomAccessReadFile> file =
         storage::open_s3_read_file(options, &error);
     EXPECT_TRUE(file == nullptr);
-    EXPECT_NE(std::string::npos, error.find("region"));
+    const char* expected_error =
+        storage::s3_support_available() ? "region" : "not built";
+    EXPECT_NE(std::string::npos, error.find(expected_error)) << error;
 }
 
 TEST(S3RandomAccessReadFileTest, ReportsBuildSupport) {
