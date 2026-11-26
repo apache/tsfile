@@ -2538,6 +2538,12 @@ int AlignedChunkReader::get_next_page_multi_impl(TsBlock* ret_tsblock,
             page_info.pass_type == PagePassType::BOUNDARY && filter != nullptr;
         while (page_time_cursor_ < page_time_count_) {
             if (row_appender.remaining() == 0) {
+                // A TsBlock whose capacity cannot hold a single row can
+                // never make progress; surface an error instead of
+                // returning an empty success the caller retries forever.
+                if (ret_tsblock->get_row_count() == 0) {
+                    return E_INVALID_ARG;
+                }
                 return E_OK;
             }
             int64_t ts = times[page_time_cursor_];
@@ -2566,6 +2572,9 @@ int AlignedChunkReader::get_next_page_multi_impl(TsBlock* ret_tsblock,
                 continue;
             }
             if (UNLIKELY(!row_appender.add_row())) {
+                if (ret_tsblock->get_row_count() == 0) {
+                    return E_INVALID_ARG;
+                }
                 return E_OK;
             }
             row_appender.append(0, reinterpret_cast<char*>(&ts), sizeof(ts));
