@@ -837,7 +837,7 @@ public class BytesUtils {
    * @throws IOException cannot read double from InputStream
    */
   public static double readDouble(InputStream in) throws IOException {
-    if (in instanceof DataInputStream && in.getClass() == DataInputStream.class) {
+    if (in.getClass() == DataInputStream.class) {
       return Double.longBitsToDouble(
           FixedWidthDataInputStreamReader.read((DataInputStream) in, Long.BYTES, false));
     }
@@ -853,7 +853,7 @@ public class BytesUtils {
    * @throws IOException cannot read float from InputStream
    */
   public static float readFloat(InputStream in) throws IOException {
-    if (in instanceof DataInputStream && in.getClass() == DataInputStream.class) {
+    if (in.getClass() == DataInputStream.class) {
       return Float.intBitsToFloat(
           (int) FixedWidthDataInputStreamReader.read((DataInputStream) in, Float.BYTES, false));
     }
@@ -869,7 +869,7 @@ public class BytesUtils {
    * @throws IOException cannot read boolean from InputStream
    */
   public static boolean readBool(InputStream in) throws IOException {
-    if (in instanceof DataInputStream && in.getClass() == DataInputStream.class) {
+    if (in.getClass() == DataInputStream.class) {
       return readByteFromDataInputStream((DataInputStream) in) != 0;
     }
     byte[] b = safeReadInputStreamToBytes(1, in);
@@ -884,7 +884,7 @@ public class BytesUtils {
    * @throws IOException cannot read int from InputStream
    */
   public static int readInt(InputStream in) throws IOException {
-    if (in instanceof DataInputStream && in.getClass() == DataInputStream.class) {
+    if (in.getClass() == DataInputStream.class) {
       return (int) FixedWidthDataInputStreamReader.read((DataInputStream) in, Integer.BYTES, false);
     }
     byte[] b = safeReadInputStreamToBytes(4, in);
@@ -899,7 +899,7 @@ public class BytesUtils {
    * @throws IOException cannot read long from InputStream
    */
   public static long readLong(InputStream in) throws IOException {
-    if (in instanceof DataInputStream && in.getClass() == DataInputStream.class) {
+    if (in.getClass() == DataInputStream.class) {
       return FixedWidthDataInputStreamReader.read((DataInputStream) in, Long.BYTES, false);
     }
     byte[] b = safeReadInputStreamToBytes(8, in);

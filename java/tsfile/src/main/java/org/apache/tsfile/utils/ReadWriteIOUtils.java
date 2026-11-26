@@ -589,7 +589,7 @@ public class ReadWriteIOUtils {
 
   /** read a short var from inputStream. */
   public static short readShort(InputStream inputStream) throws IOException {
-    if (inputStream instanceof DataInputStream && inputStream.getClass() == DataInputStream.class) {
+    if (inputStream.getClass() == DataInputStream.class) {
       return (short)
           FixedWidthDataInputStreamReader.read((DataInputStream) inputStream, SHORT_LEN, false);
     }
@@ -608,7 +608,7 @@ public class ReadWriteIOUtils {
 
   /** Read a float var from inputStream. */
   public static float readFloat(InputStream inputStream) throws IOException {
-    if (inputStream instanceof DataInputStream && inputStream.getClass() == DataInputStream.class) {
+    if (inputStream.getClass() == DataInputStream.class) {
       return Float.intBitsToFloat(
           (int)
               FixedWidthDataInputStreamReader.read(
@@ -633,7 +633,7 @@ public class ReadWriteIOUtils {
 
   /** Read a double var from inputStream. */
   public static double readDouble(InputStream inputStream) throws IOException {
-    if (inputStream instanceof DataInputStream && inputStream.getClass() == DataInputStream.class) {
+    if (inputStream.getClass() == DataInputStream.class) {
       return Double.longBitsToDouble(
           FixedWidthDataInputStreamReader.read((DataInputStream) inputStream, DOUBLE_LEN, false));
     }
@@ -656,7 +656,7 @@ public class ReadWriteIOUtils {
 
   /** Read an int var from inputStream. */
   public static int readInt(InputStream inputStream) throws IOException {
-    if (inputStream instanceof DataInputStream && inputStream.getClass() == DataInputStream.class) {
+    if (inputStream.getClass() == DataInputStream.class) {
       return (int)
           FixedWidthDataInputStreamReader.read((DataInputStream) inputStream, INT_LEN, false);
     }
@@ -687,7 +687,7 @@ public class ReadWriteIOUtils {
 
   /** Read a long var from inputStream. */
   public static long readLong(InputStream inputStream) throws IOException {
-    if (inputStream instanceof DataInputStream && inputStream.getClass() == DataInputStream.class) {
+    if (inputStream.getClass() == DataInputStream.class) {
       return FixedWidthDataInputStreamReader.read((DataInputStream) inputStream, LONG_LEN, true);
     }
     byte[] bytes = new byte[LONG_LEN];
