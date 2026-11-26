@@ -62,12 +62,12 @@ class AlignedWideTableSmallBlockTest : public ::testing::Test {
         const auto process_id = static_cast<uint64_t>(getpid());
 #endif
         static std::atomic<uint64_t> filename_counter{0};
-        filename_ = "aligned_wide_table_small_block_" +
-                    std::to_string(
-                        std::chrono::steady_clock::now().time_since_epoch()
-                            .count()) +
-                    "_" + std::to_string(process_id) + "_" +
-                    std::to_string(filename_counter.fetch_add(1)) + ".tsfile";
+        filename_ =
+            "aligned_wide_table_small_block_" +
+            std::to_string(
+                std::chrono::steady_clock::now().time_since_epoch().count()) +
+            "_" + std::to_string(process_id) + "_" +
+            std::to_string(filename_counter.fetch_add(1)) + ".tsfile";
     }
     void TearDown() override {
         std::remove(filename_.c_str());
