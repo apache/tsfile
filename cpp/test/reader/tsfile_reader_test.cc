@@ -2343,8 +2343,9 @@ TEST_F(TsFileReaderTest, QueryAfterCloseReturnsError) {
 
     // Querying after close must return a clear error, not crash.
     storage::ResultSet* closed_result_set = nullptr;
-    ASSERT_EQ(reader.query(select_list, start_time, end_time, closed_result_set),
-              common::E_INVALID_ARG);
+    ASSERT_EQ(
+        reader.query(select_list, start_time, end_time, closed_result_set),
+        common::E_INVALID_ARG);
     ASSERT_EQ(closed_result_set, nullptr);
 
     // The same guard must hold for the other query entry points.
