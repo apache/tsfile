@@ -2302,3 +2302,53 @@ TEST_F(TsFileReaderTest, RepeatedGetTimeseriesMetadataDoesNotLeakArena) {
         << " across 11 calls — reset on entry is missing";
     reader.close();
 }
+
+// Regression: querying a closed TsFileReader used to dereference the
+// already-deleted internal executor and crash with SIGSEGV.  After close()
+// every query/execute entry point must return a clear error instead.
+TEST_F(TsFileReaderTest, QueryAfterCloseReturnsError) {
+    std::string device_path = "device1";
+    std::string measurement_name = "temperature";
+    common::TSDataType data_type = common::TSDataType::INT32;
+    common::TSEncoding encoding = common::TSEncoding::PLAIN;
+    common::CompressionType compression_type =
+        common::CompressionType::UNCOMPRESSED;
+    tsfile_writer_->register_timeseries(
+        device_path, storage::MeasurementSchema(measurement_name, data_type,
+                                                encoding, compression_type));
+
+    for (int i = 0; i < 2; ++i) {
+        TsRecord record(1622505600000 + i * 1000, device_path);
+        record.add_point(measurement_name, (int32_t)i);
+        ASSERT_EQ(tsfile_writer_->write_record(record), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    std::vector<std::string> select_list = {"device1.temperature"};
+
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+
+    // A successful query first, so the reader is known-good before closing.
+    const int64_t start_time = 1622505599000;
+    const int64_t end_time = 1622505602000;
+    storage::ResultSet* result_set = nullptr;
+    ASSERT_EQ(reader.query(select_list, start_time, end_time, result_set),
+              E_OK);
+    ASSERT_NE(result_set, nullptr);
+    reader.destroy_query_data_set(result_set);
+
+    ASSERT_EQ(reader.close(), E_OK);
+
+    // Querying after close must return a clear error, not crash.
+    storage::ResultSet* closed_result_set = nullptr;
+    ASSERT_EQ(reader.query(select_list, start_time, end_time, closed_result_set),
+              common::E_INVALID_ARG);
+    ASSERT_EQ(closed_result_set, nullptr);
+
+    // The same guard must hold for the other query entry points.
+    ASSERT_EQ(reader.queryByRow(select_list, 0, -1, closed_result_set),
+              common::E_INVALID_ARG);
+    ASSERT_EQ(closed_result_set, nullptr);
+}
