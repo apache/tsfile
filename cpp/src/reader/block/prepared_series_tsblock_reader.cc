@@ -202,6 +202,10 @@ int PreparedSeriesTsBlockReader::has_next(bool& has_next) {
             has_next = true;
             return common::E_OK;
         }
+        // get_next() reported success but produced no rows.  This is a
+        // no-progress state (e.g. a TsBlock smaller than a single row)
+        // that would otherwise spin forever; surface it as an error.
+        return common::E_INVALID_ARG;
     }
 }
 
