@@ -82,11 +82,20 @@ class TsFileIOReader {
 
     void reset();
 
+    // Backward-compatible overload for callers compiled against the
+    // previous signature; forwards a null series-type out-param.
     int alloc_ssi(std::shared_ptr<IDeviceID> device_id,
                   const std::string& measurement_name,
                   TsFileSeriesScanIterator*& ssi, common::PageArena& pa,
-                  Filter* time_filter = nullptr,
-                  common::TSDataType* out_series_type = nullptr);
+                  Filter* time_filter = nullptr);
+    // Extended overload: also reports the series data type via
+    // out_series_type when the series exists but has no data in the query
+    // range. The final argument is required to keep overload resolution
+    // unambiguous with the overload above.
+    int alloc_ssi(std::shared_ptr<IDeviceID> device_id,
+                  const std::string& measurement_name,
+                  TsFileSeriesScanIterator*& ssi, common::PageArena& pa,
+                  Filter* time_filter, common::TSDataType* out_series_type);
 
     int alloc_multi_ssi(std::shared_ptr<IDeviceID> device_id,
                         const std::vector<std::string>& measurement_names,

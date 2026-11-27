@@ -89,6 +89,14 @@ void TsFileIOReader::reset() {
 int TsFileIOReader::alloc_ssi(std::shared_ptr<IDeviceID> device_id,
                               const std::string& measurement_name,
                               TsFileSeriesScanIterator*& ssi,
+                              common::PageArena& pa, Filter* time_filter) {
+    return alloc_ssi(device_id, measurement_name, ssi, pa, time_filter,
+                     nullptr);
+}
+
+int TsFileIOReader::alloc_ssi(std::shared_ptr<IDeviceID> device_id,
+                              const std::string& measurement_name,
+                              TsFileSeriesScanIterator*& ssi,
                               common::PageArena& pa, Filter* time_filter,
                               common::TSDataType* out_series_type) {
     int ret = E_OK;
@@ -1360,7 +1368,11 @@ int TsFileIOReader::do_load_timeseries_index(
                 break;
             }
         }  // end while
-        if (!found) {
+        if (!found && deserialize_buf_not_enough(ret)) {
+            // A complete scan of the index range found no matching
+            // measurement (the read ran off the end of the buffer). Keep hard
+            // errors such as E_OOM or E_TSFILE_CORRUPTED so callers can
+            // distinguish them from a genuinely missing series.
             ret = E_NOT_EXIST;
         }
     }
