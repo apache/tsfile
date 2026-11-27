@@ -129,13 +129,14 @@ class MockSource : public storage::RandomAccessReadFile {
 
 std::unique_ptr<storage::RandomAccessReadFile> wrap(
     MockSource** out_raw, int64_t size, int32_t block_size, int64_t capacity,
-    int32_t readahead, int delay_ms = 0) {
+    int32_t readahead, int delay_ms = 0, int threads = 0) {
     MockSource* raw = new MockSource(size, delay_ms);
     *out_raw = raw;
     storage::ReadCacheOptions options;
     options.block_size = block_size;
     options.capacity_bytes = capacity;
     options.max_readahead_blocks = readahead;
+    options.prefetch_threads = threads;
     return storage::make_cached_read_file(
         std::unique_ptr<storage::RandomAccessReadFile>(raw), options);
 }
@@ -291,40 +292,47 @@ TEST(CachedRandomAccessReadFileTest, ParallelPrefetchOverlapsRequests) {
 }
 
 TEST(CachedRandomAccessReadFileTest, FailedLoadPropagatesAndIsNotCached) {
-    MockSource* raw = nullptr;
-    std::unique_ptr<storage::RandomAccessReadFile> file =
-        wrap(&raw, 64 * 1024, 4096, 1 << 20, 0);
-    raw->fail_next_requests(1);
-    char buffer[64];
-    int32_t got = 0;
-    EXPECT_EQ(common::E_FILE_READ_ERR, file->read(0, buffer, 64, got));
-    // The failed range is dropped, so the retry goes to the source again and
-    // then serves the cached block.
-    EXPECT_EQ(read_range(*file, 0, 64), expected_range(0, 64));
-    const int after_retry = raw->requests();
-    EXPECT_EQ(2, after_retry);
-    EXPECT_EQ(read_range(*file, 0, 64), expected_range(0, 64));
-    EXPECT_EQ(after_retry, raw->requests());
+    for (int threads : {0, 4}) {
+        SCOPED_TRACE(threads);
+        MockSource* raw = nullptr;
+        std::unique_ptr<storage::RandomAccessReadFile> file =
+            wrap(&raw, 64 * 1024, 4096, 1 << 20, 0, 0, threads);
+        raw->fail_next_requests(1);
+        char buffer[64];
+        int32_t got = 0;
+        EXPECT_EQ(common::E_FILE_READ_ERR, file->read(0, buffer, 64, got));
+        // The failed range is dropped, so the retry goes to the source again
+        // and then serves the cached block.
+        EXPECT_EQ(read_range(*file, 0, 64), expected_range(0, 64));
+        const int after_retry = raw->requests();
+        EXPECT_EQ(2, after_retry);
+        EXPECT_EQ(read_range(*file, 0, 64), expected_range(0, 64));
+        EXPECT_EQ(after_retry, raw->requests());
+    }
 }
 
 TEST(CachedRandomAccessReadFileTest, CapacityEvictsLeastRecentlyUsed) {
-    const int32_t block = 4096;
-    MockSource* raw = nullptr;
-    // Room for exactly two blocks.
-    std::unique_ptr<storage::RandomAccessReadFile> file =
-        wrap(&raw, 20 * 4096, block, 2 * block, 0);
-    for (int64_t i = 0; i < 5; i++) {
-        EXPECT_EQ(read_range(*file, i * block, 100),
-                  expected_range(i * block, 100));
+    for (int threads : {0, 4}) {
+        SCOPED_TRACE(threads);
+        const int32_t block = 4096;
+        MockSource* raw = nullptr;
+        // Room for exactly two blocks.
+        std::unique_ptr<storage::RandomAccessReadFile> file =
+            wrap(&raw, 20 * 4096, block, 2 * block, 0, 0, threads);
+        for (int64_t i = 0; i < 5; i++) {
+            EXPECT_EQ(read_range(*file, i * block, 100),
+                      expected_range(i * block, 100));
+        }
+        const int after_scan = raw->requests();
+        EXPECT_EQ(5, after_scan);
+        // Touching the last block again is a hit; the first block has been
+        // evicted.
+        EXPECT_EQ(read_range(*file, 4 * block, 100),
+                  expected_range(4 * block, 100));
+        EXPECT_EQ(after_scan, raw->requests());
+        EXPECT_EQ(read_range(*file, 0, 100), expected_range(0, 100));
+        EXPECT_EQ(after_scan + 1, raw->requests());
     }
-    const int after_scan = raw->requests();
-    EXPECT_EQ(5, after_scan);
-    // Touching the last block again is a hit; the first block has been evicted.
-    EXPECT_EQ(read_range(*file, 4 * block, 100),
-              expected_range(4 * block, 100));
-    EXPECT_EQ(after_scan, raw->requests());
-    EXPECT_EQ(read_range(*file, 0, 100), expected_range(0, 100));
-    EXPECT_EQ(after_scan + 1, raw->requests());
 }
 
 TEST(CachedRandomAccessReadFileTest, DisabledOptionsKeepInnerSource) {

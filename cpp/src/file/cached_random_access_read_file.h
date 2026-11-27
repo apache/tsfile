@@ -95,11 +95,11 @@ class CachedRandomAccessReadFile : public RandomAccessReadFile {
 
    private:
     struct Block {
-        Block() : valid_bytes(0), loading(true), in_lru(false) {}
+        Block() : valid_bytes(0), loading(true), load_status(0) {}
         std::vector<char> data;
         int32_t valid_bytes;
         bool loading;
-        bool in_lru;
+        int load_status;
         std::list<int64_t>::iterator lru_it;
     };
 

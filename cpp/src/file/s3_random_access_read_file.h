@@ -57,8 +57,8 @@ bool s3_support_available();
 
 /**
  * Open @p options as a random-access source. Performs a HEAD request to learn
- * the object size and ETag. Returns nullptr on failure and, when non-null,
- * fills @p error_message.
+ * the object size and a strong ETag required for conditional reads. Returns
+ * nullptr on failure and, when non-null, fills @p error_message.
  */
 std::unique_ptr<RandomAccessReadFile> open_s3_read_file(
     const S3Options& options, std::string* error_message);

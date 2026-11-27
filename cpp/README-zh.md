@@ -209,10 +209,11 @@ reader 打开期间不得修改或截断文件。
 
 ### 对象存储读取后端
 
-当以 `ENABLE_S3=ON`（默认）构建且 configure 阶段找到 libcurl 时，SDK 可以直接
+当以 `ENABLE_S3=ON`（默认）构建且 configure 阶段找到 libcurl 7.42 或更新版本时，SDK 可以直接
 从 S3 兼容对象存储（AWS S3、阿里云 OSS、MinIO 等）读取 TsFile，内部通过带
 SigV4 签名的 HTTP Range 请求完成。可用 `s3_support_available()` 判断当前构建
-是否包含该能力。
+是否包含该能力。打开对象时需要强 ETag，每次 Range GET 都会携带对应的
+`If-Match`。对象被覆盖后，请重新打开 reader 以读取新版本。同步读取和后台预取使用相同的缓存容量上限。
 
 ```cpp
 #include "file/cached_random_access_read_file.h"

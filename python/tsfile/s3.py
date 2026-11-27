@@ -107,16 +107,19 @@ def resolve_s3_options(uri, config=None):
             "TSFILE_S3_ENDPOINT / AWS_ENDPOINT_URL_S3, or pass a region"
         )
 
-    access_key_id = _first(
-        config.get("access_key_id"), os.environ.get("AWS_ACCESS_KEY_ID")
-    )
-    secret_access_key = _first(
-        config.get("secret_access_key"), os.environ.get("AWS_SECRET_ACCESS_KEY")
-    )
-    session_token = _first(
-        config.get("session_token"), os.environ.get("AWS_SESSION_TOKEN")
-    )
-    if bool(access_key_id) != bool(secret_access_key):
+    if any(
+        key in config for key in ("access_key_id", "secret_access_key", "session_token")
+    ):
+        access_key_id = config.get("access_key_id")
+        secret_access_key = config.get("secret_access_key")
+        session_token = config.get("session_token")
+    else:
+        access_key_id = os.environ.get("AWS_ACCESS_KEY_ID")
+        secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
+        session_token = os.environ.get("AWS_SESSION_TOKEN")
+    if bool(access_key_id) != bool(secret_access_key) or (
+        session_token and not access_key_id
+    ):
         raise ValueError(
             "access_key_id and secret_access_key must be provided together"
         )

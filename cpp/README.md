@@ -395,7 +395,7 @@ itself remains valid until the reader closes.
 
 ### Object Storage Read Backend
 
-With `ENABLE_S3=ON` (the default) and libcurl available at configure time, the
+With `ENABLE_S3=ON` (the default) and libcurl 7.42 or newer available at configure time, the
 SDK can read a TsFile directly from S3-compatible object storage (AWS S3,
 Alibaba Cloud OSS, MinIO, ...) with signed HTTP range requests. Check
 `s3_support_available()` when the build environment is unknown.
@@ -423,6 +423,10 @@ source = storage::make_cached_read_file(std::move(source), cache);
 storage::TsFileReader reader;
 reader.open(std::move(source));
 ```
+
+Opening requires a strong ETag. Every range GET uses it with `If-Match`.
+Reopen the reader to read a replacement object. The cache capacity applies
+to both synchronous and background reads.
 
 Signing failures and HTTP problems surface through `error`, and `read()`
 retries transient failures `max_retries` times. The block cache wrapper is

@@ -275,7 +275,7 @@ the object and closes it.
 
 ## Object storage (`s3://` and `oss://`)
 
-When the library is built with libcurl available (`s3_available()` reports
+When the library is built with libcurl 7.42 or newer available (`s3_available()` reports
 whether it is), `TsFileReader` reads an object directly over HTTP range
 requests with SigV4 signing — no fsspec, no whole-file download:
 
@@ -302,8 +302,11 @@ The `s3` mapping accepts `endpoint`, `region`, `access_key_id`,
 missing from the mapping fall back to `TSFILE_S3_ENDPOINT`, `AWS_ENDPOINT_URL_S3`,
 `AWS_ENDPOINT_URL`, `TSFILE_S3_REGION`, `AWS_REGION`, `AWS_DEFAULT_REGION`,
 `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN`. With an
-OSS or S3 region but no endpoint the conventional endpoint is derived. Empty
-credentials select anonymous access (public buckets). `oss://` URIs are read
+OSS or S3 region but no endpoint the conventional endpoint is derived. The AWS credential variables apply as a group when all credential fields are
+omitted. To select anonymous access explicitly, set both keys to empty strings.
+For explicit signed access, pass the key pair and its optional session token
+together. Opening requires a strong ETag, and each range request uses it with
+`If-Match`. If the object changes, reopen the reader to query the new version. `oss://` URIs are read
 through the same S3-compatible API.
 
 Object reads reuse the block cache described above and add background

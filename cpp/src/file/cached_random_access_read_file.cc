@@ -162,26 +162,16 @@ void CachedRandomAccessReadFile::note_access_locked(int64_t index) {
     }
     std::unordered_map<int64_t, std::shared_ptr<Block>>::iterator it =
         blocks_.find(index);
-    if (it == blocks_.end() || !it->second->in_lru) {
+    if (it == blocks_.end() || it->second->loading) {
         return;
     }
-    lru_.erase(it->second->lru_it);
-    lru_.push_front(index);
-    it->second->lru_it = lru_.begin();
+    lru_.splice(lru_.begin(), lru_, it->second->lru_it);
 }
 
 void CachedRandomAccessReadFile::evict_locked() {
-    while (static_cast<int64_t>(blocks_.size()) > max_blocks_ &&
-           !lru_.empty()) {
-        const int64_t victim = lru_.back();
+    while (static_cast<int64_t>(lru_.size()) > max_blocks_) {
+        blocks_.erase(lru_.back());
         lru_.pop_back();
-        std::unordered_map<int64_t, std::shared_ptr<Block>>::iterator it =
-            blocks_.find(victim);
-        if (it == blocks_.end()) {
-            continue;
-        }
-        it->second->in_lru = false;
-        blocks_.erase(it);
     }
 }
 
@@ -226,24 +216,13 @@ int CachedRandomAccessReadFile::load_blocks(
 int CachedRandomAccessReadFile::acquire_block_locked(
     std::unique_lock<std::mutex>& lock, int64_t index,
     std::shared_ptr<Block>& block) {
-    while (true) {
-        if (closed_ || inner_ == nullptr) {
-            return common::E_FILE_READ_ERR;
-        }
-        std::unordered_map<int64_t, std::shared_ptr<Block>>::iterator it =
-            blocks_.find(index);
-        if (it != blocks_.end()) {
-            if (!it->second->loading) {
-                note_access_locked(index);
-                block = it->second;
-                return common::E_OK;
-            }
-            // Another thread is loading this block; wait for it to publish
-            // instead of issuing a duplicate request.
-            condition_.wait(lock);
-            continue;
-        }
-
+    if (closed_ || inner_ == nullptr) {
+        return common::E_FILE_READ_ERR;
+    }
+    auto it = blocks_.find(index);
+    if (it != blocks_.end()) {
+        block = it->second;
+    } else {
         // Miss.  Size the read-ahead run from how long the access stream has
         // been sequential.  The first miss of a random stream reads exactly
         // one block; once a sequential run is observed the extra blocks grow
@@ -318,75 +297,53 @@ int CachedRandomAccessReadFile::acquire_block_locked(
                     placeholders.begin() + first, placeholders.begin() + last);
                 submit_prefetch(task_indices, task_blocks);
             }
-            while (true) {
-                if (closed_ || inner_ == nullptr) {
-                    return common::E_FILE_READ_ERR;
-                }
-                std::unordered_map<int64_t, std::shared_ptr<Block>>::iterator
-                    current = blocks_.find(index);
-                if (current == blocks_.end()) {
-                    // A prefetch load for this block failed; report it so the
-                    // caller does not treat the data as successfully read.
-                    return common::E_FILE_READ_ERR;
-                }
-                if (!current->second->loading) {
-                    note_access_locked(index);
-                    block = current->second;
-                    return common::E_OK;
-                }
-                condition_.wait(lock);
-            }
+        } else {
+            lock.unlock();
+            const int ret = load_blocks(indices, placeholders);
+            lock.lock();
+            finish_load_locked(indices, placeholders, ret);
         }
-
-        lock.unlock();
-        const int ret = load_blocks(indices, placeholders);
-        lock.lock();
-
-        finish_load_locked(indices, placeholders, ret);
-        if (ret != common::E_OK || closed_) {
-            condition_.notify_all();
-            return ret != common::E_OK ? ret : common::E_FILE_READ_ERR;
-        }
-        // Record the access before eviction so the requested block is at the
-        // front of the LRU list and cannot be evicted before it is served.
-        note_access_locked(index);
-        evict_locked();
-        condition_.notify_all();
+        block = placeholders.front();
     }
+    // Hold the requested block independently of the LRU. Other workers can
+    // finish and evict its map entry before this waiter reacquires the lock.
+    condition_.wait(lock, [&] { return !block->loading || closed_; });
+    if (closed_) {
+        return common::E_FILE_READ_ERR;
+    }
+    if (block->load_status == common::E_OK) {
+        note_access_locked(index);
+    }
+    return block->load_status;
 }
 
 void CachedRandomAccessReadFile::finish_load_locked(
     const std::vector<int64_t>& indices,
     const std::vector<std::shared_ptr<Block>>& blocks, int ret) {
-    if (ret != common::E_OK || closed_) {
-        for (size_t k = 0; k < indices.size(); k++) {
-            std::unordered_map<int64_t, std::shared_ptr<Block>>::iterator
-                inserted = blocks_.find(indices[k]);
-            if (inserted != blocks_.end() && inserted->second == blocks[k]) {
-                blocks_.erase(inserted);
-            }
-        }
-        condition_.notify_all();
-        return;
-    }
     for (size_t k = 0; k < indices.size(); k++) {
-        std::unordered_map<int64_t, std::shared_ptr<Block>>::iterator inserted =
-            blocks_.find(indices[k]);
-        if (inserted == blocks_.end() || inserted->second != blocks[k]) {
-            continue;
-        }
         blocks[k]->loading = false;
-        blocks[k]->in_lru = true;
-        lru_.push_front(indices[k]);
-        blocks[k]->lru_it = lru_.begin();
+        blocks[k]->load_status = ret;
+        if (ret != common::E_OK) {
+            blocks_.erase(indices[k]);
+        } else {
+            lru_.push_front(indices[k]);
+            blocks[k]->lru_it = lru_.begin();
+        }
     }
+    evict_locked();
     condition_.notify_all();
 }
 
 void CachedRandomAccessReadFile::start_prefetch_workers() {
-    for (int32_t i = 0; i < prefetch_threads_; i++) {
-        workers_.push_back(std::thread(
-            &CachedRandomAccessReadFile::prefetch_worker_loop, this));
+    workers_.reserve(prefetch_threads_);
+    try {
+        for (int32_t i = 0; i < prefetch_threads_; i++) {
+            workers_.emplace_back(
+                &CachedRandomAccessReadFile::prefetch_worker_loop, this);
+        }
+    } catch (...) {
+        stop_prefetch_workers();
+        throw;
     }
 }
 
@@ -457,14 +414,13 @@ int CachedRandomAccessReadFile::read(int64_t offset, char* buffer, int32_t size,
     }
     // Pages are far smaller than a block, so consecutive reads by one thread
     // usually hit the block it just fetched.  Keep the last block per thread
-    // and serve such reads without taking the cache lock at all; published
-    // blocks are immutable and eviction only drops the map entry, so an
-    // evicted block stays valid for this reference.
+    // and serve such reads without taking the cache lock. A weak reference
+    // lets eviction and close release memory on long-lived caller threads.
     struct ThreadLocalBlock {
         ThreadLocalBlock() : owner_id(0), index(-1) {}
         uint64_t owner_id;
         int64_t index;
-        std::shared_ptr<Block> block;
+        std::weak_ptr<Block> block;
     };
     static thread_local ThreadLocalBlock tls_block;
     if (offset < file_size_) {
@@ -476,20 +432,22 @@ int CachedRandomAccessReadFile::read(int64_t offset, char* buffer, int32_t size,
         if (fast_first == (fast_end - 1) / block_size_ &&
             LIKELY(!closed_.load(std::memory_order_relaxed) &&
                    tls_block.owner_id == instance_id_ &&
-                   tls_block.index == fast_first && tls_block.block)) {
-            const int64_t block_start = fast_first * block_size_;
-            int64_t copy_start = offset > block_start ? offset : block_start;
-            const int64_t block_end =
-                block_start + tls_block.block->valid_bytes;
-            int64_t copy_end = fast_end < block_end ? fast_end : block_end;
-            if (copy_end > copy_start) {
-                std::memcpy(
-                    buffer + (copy_start - offset),
-                    tls_block.block->data.data() + (copy_start - block_start),
-                    static_cast<size_t>(copy_end - copy_start));
-                read_size = static_cast<int32_t>(copy_end - copy_start);
+                   tls_block.index == fast_first)) {
+            if (auto cached = tls_block.block.lock()) {
+                const int64_t block_start = fast_first * block_size_;
+                int64_t copy_start =
+                    offset > block_start ? offset : block_start;
+                const int64_t block_end = block_start + cached->valid_bytes;
+                int64_t copy_end = fast_end < block_end ? fast_end : block_end;
+                if (copy_end > copy_start) {
+                    std::memcpy(
+                        buffer + (copy_start - offset),
+                        cached->data.data() + (copy_start - block_start),
+                        static_cast<size_t>(copy_end - copy_start));
+                    read_size = static_cast<int32_t>(copy_end - copy_start);
+                }
+                return common::E_OK;
             }
-            return common::E_OK;
         }
     }
 

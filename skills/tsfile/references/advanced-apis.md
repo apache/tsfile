@@ -85,11 +85,13 @@ custom sources must handle short/concurrent reads. Writers borrow an open
 opens: PREAD is default, MMAP requires mapping, AUTO allows PREAD fallback.
 Do not mutate mapped files; Python file objects (`python.md`) bypass this setting.
 
-When the library is built with `ENABLE_S3=ON` and libcurl is found,
+When the library is built with `ENABLE_S3=ON` and libcurl 7.42 or newer is found,
 `open_s3_read_file(S3Options, &error)` returns an object-storage source that
 issues HTTP range GETs with SigV4 signing (also used by the Python `s3://`
 support). Empty credentials select anonymous access; the region is derived from
-the endpoint host when omitted. Wrap it in `make_cached_read_file` for block
+the endpoint host when omitted. Object keys retain literal path segments.
+Opening requires a strong ETag, and each GET uses that ETag with `If-Match`.
+If the object changes, reopen the reader to query the replacement. Wrap it in `make_cached_read_file` for block
 caching: `ReadCacheOptions.prefetch_threads > 0` moves read-ahead onto
 background workers (one contiguous block group per request) so several range
 GETs are in flight at once. `s3_support_available()` reports whether the build

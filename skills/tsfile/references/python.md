@@ -95,9 +95,12 @@ with TsFileReader("data.tsfile") as reader:
   `s3` keys: `endpoint`, `region`, `access_key_id`, `secret_access_key`,
   `session_token`, `path_style` (default True), `connect_timeout_ms`,
   `request_timeout_ms`, `max_retries`, `prefetch_threads` (default 4, 0 =
-  synchronous only). Environment fallbacks: TSFILE_S3_* / AWS_*; empty
-  credentials mean anonymous access. Prefetch workers fetch contiguous block
-  groups in parallel during scans.
+  synchronous only). Use environment credentials when the mapping omits all credential
+  fields. To select anonymous access explicitly, pass both keys as empty
+  strings. Provide an explicit credential pair and its optional session token
+  together. Each range GET requires the strong ETag returned by HEAD. Reopen
+  the reader if the object changes. The same cache capacity applies with
+  synchronous and background reads.
 - For local paths, `set_file_read_backend(FileReadBackend.MMAP)`
   affects subsequently opened files; PREAD is default. See `advanced-apis.md`
   for backend semantics. File objects do not use this setting.

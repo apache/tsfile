@@ -23,8 +23,8 @@ from pathlib import Path
 
 import pytest
 
-from tsfile import TsFileReader, s3_available
-from tsfile.exceptions import FileOpenError
+from tsfile import TsFileReader, get_tsfile_config, s3_available, set_tsfile_config
+from tsfile.exceptions import FileOpenError, FileReadError
 from tsfile.s3 import resolve_s3_options
 
 RESOURCES = Path(__file__).parent / "resources"
@@ -34,6 +34,9 @@ class RangeHandler(http.server.BaseHTTPRequestHandler):
     data = b""
     requests = []
     fail_next_gets = 0
+    etag = '"local-test-etag"'
+    replace_after_head = False
+    ignore_range = False
 
     def do_HEAD(self):
         self._serve(head=True)
@@ -48,6 +51,7 @@ class RangeHandler(http.server.BaseHTTPRequestHandler):
                 self.path,
                 self.headers.get("Range"),
                 self.headers.get("Authorization"),
+                self.headers.get("If-Match"),
             )
         )
         if "missing" in self.path:
@@ -61,9 +65,14 @@ class RangeHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
+        if not head and self.headers.get("If-Match") not in (None, self.etag):
+            self.send_response(412)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         data = type(self).data
         range_header = self.headers.get("Range")
-        if range_header and range_header.startswith("bytes="):
+        if not self.ignore_range and range_header and range_header.startswith("bytes="):
             start_text, _, end_text = range_header[6:].partition("-")
             start = int(start_text)
             end = int(end_text) if end_text else len(data) - 1
@@ -75,7 +84,10 @@ class RangeHandler(http.server.BaseHTTPRequestHandler):
             body = data
             self.send_response(200)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("ETag", '"local-test-etag"')
+        if self.etag is not None:
+            self.send_header("ETag", self.etag)
+        if head and self.replace_after_head:
+            type(self).etag = '"replacement"'
         self.send_header("Accept-Ranges", "bytes")
         self.end_headers()
         if not head:
@@ -186,6 +198,66 @@ def test_s3_reader_reports_missing_object(http_origin):
             "s3://bucket/missing.tsfile",
             s3={"endpoint": f"http://127.0.0.1:{port}", "region": "us-east-1"},
         )
+
+
+@requires_native_s3
+@pytest.mark.parametrize("ignore_range", [True, False])
+def test_reads_literal_key_with_etag(http_origin, ignore_range):
+    port, handler = http_origin
+    handler.ignore_range = ignore_range
+    key = "dir/./sub/../simple_table_t1.tsfile"
+    # Force nonzero offsets even for the small fixture, including the 200 fallback.
+    previous = get_tsfile_config()["read_cache_enabled_"]
+    set_tsfile_config({"read_cache_enabled_": False})
+    try:
+        with TsFileReader(
+            f"s3://bucket/{key}", s3={"endpoint": f"http://127.0.0.1:{port}"}
+        ):
+            pass  # Opening validates the magic at both ends of the file.
+    finally:
+        set_tsfile_config({"read_cache_enabled_": previous})
+    assert any(r[2] and not r[2].startswith("bytes=0-") for r in handler.requests)
+    assert all(request[1] == "/bucket/" + key for request in handler.requests)
+    assert all(
+        request[4] == handler.etag
+        for request in handler.requests
+        if request[0] == "GET"
+    )
+
+
+@requires_native_s3
+def test_changed_object_is_not_retried(http_origin):
+    port, handler = http_origin
+    handler.replace_after_head = True
+    with pytest.raises((FileOpenError, FileReadError)):
+        TsFileReader("s3://bucket/file", s3={"endpoint": f"http://127.0.0.1:{port}"})
+    assert [request[0] for request in handler.requests] == ["HEAD", "GET"]
+
+
+@requires_native_s3
+@pytest.mark.parametrize("etag", [None, 'W/"weak"'])
+def test_requires_strong_etag(http_origin, etag):
+    port, handler = http_origin
+    handler.etag = etag
+    with pytest.raises(FileOpenError, match="strong ETag"):
+        TsFileReader("s3://bucket/file", s3={"endpoint": f"http://127.0.0.1:{port}"})
+
+
+def test_explicit_credentials_are_a_single_set(monkeypatch):
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "env-id")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "env-secret")
+    monkeypatch.setenv("AWS_SESSION_TOKEN", "env-token")
+    options = {"region": "us-east-1", "access_key_id": "", "secret_access_key": ""}
+    anonymous = resolve_s3_options("s3://bucket/key", options)
+    assert not any(
+        anonymous[name]
+        for name in ("access_key_id", "secret_access_key", "session_token")
+    )
+    options.update(access_key_id="explicit-id", secret_access_key="explicit-secret")
+    assert resolve_s3_options("s3://bucket/key", options)["session_token"] == ""
+    del options["secret_access_key"]
+    with pytest.raises(ValueError, match="together"):
+        resolve_s3_options("s3://bucket/key", options)
 
 
 def test_resolve_s3_options_validation():

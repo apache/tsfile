@@ -140,7 +140,7 @@ struct TransferContext {
           skip(0),
           want(0),
           copied(0),
-          seen(0),
+          handle(nullptr),
           status(0),
           content_length(-1),
           overflow(false) {}
@@ -149,18 +149,21 @@ struct TransferContext {
     int64_t skip;
     int64_t want;
     int64_t copied;
-    int64_t seen;
+    CURL* handle;
     long status;
     int64_t content_length;
     bool overflow;
     std::string etag;
-    std::string body_head;
 };
 
 size_t write_cb(char* ptr, size_t size, size_t nmemb, void* userdata) {
     TransferContext* ctx = static_cast<TransferContext*>(userdata);
     const size_t total = size * nmemb;
-    ctx->seen += static_cast<int64_t>(total);
+    if (ctx->status == 0 &&
+        curl_easy_getinfo(ctx->handle, CURLINFO_RESPONSE_CODE, &ctx->status) !=
+            CURLE_OK) {
+        return 0;
+    }
     size_t start = 0;
     if (ctx->skip > 0 && ctx->status == 200) {
         // The server ignored the Range header and sent the whole object.
@@ -211,10 +214,10 @@ size_t header_cb(char* buffer, size_t size, size_t nitems, void* userdata) {
     TransferContext* ctx = static_cast<TransferContext*>(userdata);
     const size_t length = size * nitems;
     if (length >= 5 && std::strncmp(buffer, "HTTP/", 5) == 0) {
-        long status = 0;
-        if (std::sscanf(buffer, "HTTP/%*d.%*d %ld", &status) == 1) {
-            ctx->status = status;
-        }
+        // A proxy or informational response can precede the object's headers.
+        ctx->status = 0;
+        ctx->content_length = -1;
+        ctx->etag.clear();
         return length;
     }
     size_t start = 0;
@@ -227,10 +230,6 @@ size_t header_cb(char* buffer, size_t size, size_t nitems, void* userdata) {
                                   value[value.size() - 1] == '\n' ||
                                   value[value.size() - 1] == ' ')) {
             value.erase(value.size() - 1);
-        }
-        if (value.size() >= 2 && value[0] == '"' &&
-            value[value.size() - 1] == '"') {
-            value = value.substr(1, value.size() - 2);
         }
         ctx->etag = value;
     }
@@ -356,6 +355,8 @@ int S3ReadFile::perform(int64_t offset, int32_t size, char* buffer,
         return common::E_OOM;
     }
     curl_easy_reset(handle);
+    context->handle = handle;
+    curl_easy_setopt(handle, CURLOPT_PATH_AS_IS, 1L);
     curl_easy_setopt(handle, CURLOPT_URL, target_.url.c_str());
     curl_easy_setopt(handle, CURLOPT_NOSIGNAL, 1L);
     curl_easy_setopt(handle, CURLOPT_CONNECTTIMEOUT_MS,
@@ -390,6 +391,10 @@ int S3ReadFile::perform(int64_t offset, int32_t size, char* buffer,
     }
 
     struct curl_slist* headers = nullptr;
+    std::vector<std::string> request_headers;
+    if (!head_request) {
+        request_headers.push_back("If-Match: " + etag_);
+    }
     std::string amz_date;
     if (credentials_.has_credentials()) {
         amz_date = s3_amz_date_now();
@@ -408,26 +413,33 @@ int S3ReadFile::perform(int64_t offset, int32_t size, char* buffer,
         }
         const std::string authorization =
             s3_authorization_header(canonical, credentials_, amz_date, "s3");
-        headers =
-            curl_slist_append(headers, ("x-amz-date: " + amz_date).c_str());
-        headers = curl_slist_append(
-            headers,
-            (std::string("x-amz-content-sha256: ") + kEmptyPayloadSha256)
-                .c_str());
+        request_headers.push_back("x-amz-date: " + amz_date);
+        request_headers.push_back(std::string("x-amz-content-sha256: ") +
+                                  kEmptyPayloadSha256);
         if (!credentials_.session_token.empty()) {
-            headers = curl_slist_append(
-                headers, ("x-amz-security-token: " + credentials_.session_token)
-                             .c_str());
+            request_headers.push_back("x-amz-security-token: " +
+                                      credentials_.session_token);
         }
-        headers = curl_slist_append(
-            headers, ("Authorization: " + authorization).c_str());
-        curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
+        request_headers.push_back("Authorization: " + authorization);
     }
-
-    const CURLcode code = curl_easy_perform(handle);
-    if (headers != nullptr) {
-        curl_slist_free_all(headers);
+    for (const auto& header : request_headers) {
+        curl_slist* next = curl_slist_append(headers, header.c_str());
+        if (next == nullptr) {
+            curl_slist_free_all(headers);
+            release_handle(handle);
+            return common::E_OOM;
+        }
+        headers = next;
     }
+    CURLcode code = curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
+    if (code == CURLE_OK) {
+        code = curl_easy_perform(handle);
+    }
+    if (code == CURLE_OK) {
+        code =
+            curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &context->status);
+    }
+    curl_slist_free_all(headers);
     release_handle(handle);
 
     if (code != CURLE_OK) {
@@ -455,10 +467,16 @@ int S3ReadFile::open(std::string* error_message) {
         const int ret = perform(0, 0, nullptr, true, &context, &last_error);
         if (ret == common::E_OK && context.status >= 200 &&
             context.status < 300 && context.content_length >= 0) {
+            if (context.etag.size() < 2 || context.etag.front() != '"' ||
+                context.etag.back() != '"') {
+                last_error =
+                    "HEAD " + display_path_ + " returned no strong ETag";
+                break;
+            }
             file_size_ = context.content_length;
             etag_ = context.etag;
-            generation_fingerprint_ = fnv1a_hash(
-                etag_.empty() ? "no-etag" + std::to_string(file_size_) : etag_);
+            generation_fingerprint_ =
+                fnv1a_hash(etag_.substr(1, etag_.size() - 2));
             return common::E_OK;
         }
         if (ret == common::E_OK) {
@@ -508,6 +526,12 @@ int S3ReadFile::read(int64_t offset, char* buffer, int32_t size,
         context.skip = offset;
         const int ret =
             perform(offset, want, buffer, false, &context, &last_error);
+        if (context.status == 412 ||
+            (ret == common::E_OK &&
+             (context.status == 200 || context.status == 206) &&
+             !context.etag.empty() && context.etag != etag_)) {
+            return common::E_FILE_READ_ERR;
+        }
         if (ret == common::E_OK && context.copied == want &&
             !context.overflow &&
             (context.status == 200 || context.status == 206)) {
