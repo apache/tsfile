@@ -47,6 +47,19 @@ FORCE_INLINE int popcount8(uint8_t v) {
 #endif
 }
 
+// Counts logical bits in an Arrow (LSB-first) bitmap, ignoring tail padding.
+FORCE_INLINE uint32_t count_valid_bits(const uint8_t* data, uint32_t bits) {
+    uint32_t count = 0;
+    for (uint32_t i = 0; i < bits / 8; ++i) count += popcount8(data[i]);
+    if (bits % 8) count += popcount8(data[bits / 8] & ((1U << (bits % 8)) - 1));
+    return count;
+}
+FORCE_INLINE uint8_t reverse_byte(uint8_t byte) {
+    byte = uint8_t((byte >> 4) | (byte << 4));
+    byte = uint8_t(((byte & 0xcc) >> 2) | ((byte & 0x33) << 2));
+    return uint8_t(((byte & 0xaa) >> 1) | ((byte & 0x55) << 1));
+}
+
 FORCE_INLINE int ctz_nonzero(uint32_t v) {
 #if defined(__GNUC__) || defined(__clang__)
     return __builtin_ctz(v);

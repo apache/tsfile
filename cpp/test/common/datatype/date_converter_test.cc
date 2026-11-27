@@ -22,6 +22,7 @@
 
 #include "common/datatype/value.h"
 #include "common/record.h"
+#include "utils/date_utils.h"
 
 namespace common {
 
@@ -37,6 +38,18 @@ class DateConverterTest : public ::testing::Test {
     std::tm valid_tm_{};
     int32_t valid_int_{};
 };
+
+TEST(ArrowDateTest, CivilDatesRoundTripAcrossTheSupportedRange) {
+    const int32_t cases[][2] = {
+        {10000101, -354285}, {19000301, -25508}, {19691231, -1},
+        {19700101, 0},       {20000229, 11016},  {20240701, 19905},
+        {99991231, 2932896},
+    };
+    for (const auto& date : cases) {
+        EXPECT_EQ(YYYYMMDDToDaysSinceEpoch(date[0]), date[1]);
+        EXPECT_EQ(DaysSinceEpochToYYYYMMDD(date[1]), date[0]);
+    }
+}
 
 // Test normal date conversion
 TEST_F(DateConverterTest, DateToIntValidDate) {

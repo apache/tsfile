@@ -664,7 +664,6 @@ std::string TsFileIOReader::device_node_cache_key(
 int TsFileIOReader::get_cached_device_node(std::shared_ptr<IDeviceID> device_id,
                                            common::PageArena& pa,
                                            CachedDeviceNode& out) {
-    (void)pa;
     std::string dev_name = device_node_cache_key(device_id);
 
     {
@@ -681,7 +680,7 @@ int TsFileIOReader::get_cached_device_node(std::shared_ptr<IDeviceID> device_id,
     int64_t device_ie_end_offset = 0;
     if (RET_FAIL(load_device_index_entry(
             std::make_shared<DeviceIDComparable>(device_id), device_index_entry,
-            device_ie_end_offset))) {
+            device_ie_end_offset, &pa))) {
         return ret;
     }
 
@@ -797,6 +796,14 @@ int TsFileIOReader::load_timeseries_index_for_ssi(
 int TsFileIOReader::load_device_index_entry(
     std::shared_ptr<IComparable> device_name,
     std::shared_ptr<IMetaIndexEntry>& device_index_entry, int64_t& end_offset) {
+    return load_device_index_entry(device_name, device_index_entry, end_offset,
+                                   nullptr);
+}
+
+int TsFileIOReader::load_device_index_entry(
+    std::shared_ptr<IComparable> device_name,
+    std::shared_ptr<IMetaIndexEntry>& device_index_entry, int64_t& end_offset,
+    common::PageArena* result_pa) {
     int ret = E_OK;
     std::shared_ptr<DeviceIDComparable> device_id_comparable =
         std::dynamic_pointer_cast<DeviceIDComparable>(device_name);
@@ -812,10 +819,12 @@ int TsFileIOReader::load_device_index_entry(
     auto index_node = it->second;
     if (index_node->node_type_ == LEAF_DEVICE) {
         ret = index_node->binary_search_children(
-            device_name, true, device_index_entry, end_offset);
+            device_name, true, device_index_entry, end_offset,
+            result_pa ? *result_pa : *index_node->pa_);
     } else {
         ret = search_from_internal_node(device_name, true, index_node,
-                                        device_index_entry, end_offset);
+                                        device_index_entry, end_offset,
+                                        result_pa);
     }
     if (ret == E_NOT_EXIST) {
         ret = E_DEVICE_NOT_EXIST;
@@ -925,6 +934,17 @@ int TsFileIOReader::read_device_meta_index(int64_t start_offset,
     return ret;
 }
 
+int TsFileIOReader::get_device_time_index(std::shared_ptr<IDeviceID> device_id,
+                                          TimeseriesIndex*& index,
+                                          common::PageArena& pa) {
+    index = nullptr;
+    CachedDeviceNode cached;
+    int ret = get_cached_device_node(device_id, pa, cached);
+    if (ret != common::E_OK) return ret;
+    if (!cached.is_aligned) return common::E_NOT_SUPPORT;
+    return get_time_column_metadata(cached.top_node, index, pa);
+}
+
 int TsFileIOReader::get_timeseries_indexes(
     std::shared_ptr<IDeviceID> device_id,
     const std::unordered_set<std::string>& measurement_names,
@@ -936,7 +956,7 @@ int TsFileIOReader::get_timeseries_indexes(
     int64_t measurement_ie_end_offset = 0;
     if (RET_FAIL(load_device_index_entry(
             std::make_shared<DeviceIDComparable>(device_id), device_index_entry,
-            device_ie_end_offset))) {
+            device_ie_end_offset, &pa))) {
         return ret;
     }
 
@@ -972,6 +992,14 @@ int TsFileIOReader::get_timeseries_indexes(
         }
     }
 
+    // A missing/empty projection has no aligned index to carry this owner.
+    // Release its heap-backed members while the caller's arena is still live.
+    auto destroy_index = [](TimeseriesIndex* index) {
+        if (index) index->~TimeseriesIndex();
+    };
+    std::unique_ptr<TimeseriesIndex, decltype(destroy_index)> unclaimed_time(
+        time_timeseries_index, destroy_index);
+
     // A wide projection is served better by one pass over the measurement index
     // tree and one pread of the whole TimeseriesIndex range than by a binary
     // search, a pread, a deserialize into a scratch arena and a clone per
@@ -992,6 +1020,11 @@ int TsFileIOReader::get_timeseries_indexes(
         std::unordered_map<std::string, ITimeseriesIndex*> name_to_index;
         name_to_index.reserve(loaded_indexes.size());
         for (ITimeseriesIndex* loaded : loaded_indexes) {
+            if (!measurement_names.count(
+                    loaded->get_measurement_name().to_std_string())) {
+                static_cast<TimeseriesIndex*>(loaded)->~TimeseriesIndex();
+                continue;
+            }
             if (is_aligned) {
                 void* aligned_buf = pa.alloc(sizeof(AlignedTimeseriesIndex));
                 if (IS_NULL(aligned_buf)) {
@@ -1008,6 +1041,7 @@ int TsFileIOReader::get_timeseries_indexes(
                     loaded;
             }
         }
+        if (!name_to_index.empty()) unclaimed_time.release();
         int64_t idx = 0;
         for (const auto& measurement_name : measurement_names) {
             const auto it = name_to_index.find(measurement_name);
@@ -1048,6 +1082,7 @@ int TsFileIOReader::get_timeseries_indexes(
                 dynamic_cast<AlignedTimeseriesIndex*>(timeseries_indexs[idx]);
             if (aligned_timeseries_index) {
                 aligned_timeseries_index->time_ts_idx_ = time_timeseries_index;
+                unclaimed_time.release();
             }
         }
 

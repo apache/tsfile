@@ -76,9 +76,10 @@ class FailingReadFile : public storage::RandomAccessReadFile {
     }
     int read(int64_t offset, char* buffer, int32_t size,
              int32_t& read_size) override {
-        ++reads;
+        const int read_number = ++reads;
         read_size = 0;
-        if (fail_at > 0 && (persistent ? reads >= fail_at : reads == fail_at)) {
+        if (fail_at > 0 &&
+            (persistent ? read_number >= fail_at : read_number == fail_at)) {
             failed = true;
             return short_read ? common::E_OK : common::E_FILE_READ_ERR;
         }
@@ -91,11 +92,11 @@ class FailingReadFile : public storage::RandomAccessReadFile {
     }
     void close() override { opened_ = false; }
 
-    int reads = 0;
+    std::atomic<int> reads{0};
     int fail_at = 0;
     bool persistent = false;
     bool short_read = false;
-    bool failed = false;
+    std::atomic<bool> failed{false};
 
    private:
     const std::vector<char>& bytes_;
@@ -247,8 +248,7 @@ TEST_P(TableReadFailureTest, EveryReadFailureReachesCaller) {
                       filter ? 30 : std::get<1>(GetParam()) * 30);
             for (bool persistent : {false, true}) {
                 for (bool short_read : {false, true}) {
-                    for (int fail_at = baseline.open_reads + 1;
-                         fail_at <= baseline.reads; ++fail_at) {
+                    for (int fail_at = baseline.open_reads + 1;; ++fail_at) {
                         SCOPED_TRACE(::testing::Message()
                                      << filter << ":" << batch_size << ":"
                                      << persistent << ":" << short_read << ":"
@@ -257,7 +257,15 @@ TEST_P(TableReadFailureTest, EveryReadFailureReachesCaller) {
                         ASSERT_NO_FATAL_FAILURE(scan(filter, batch_size,
                                                      fail_at, persistent,
                                                      short_read, failed));
-                        EXPECT_TRUE(failed.failed);
+                        // Concurrent misses in the shared index cache can
+                        // change the number of physical reads between scans.
+                        if (failed.reads < fail_at) {
+                            EXPECT_FALSE(failed.failed);
+                            EXPECT_EQ(failed.ret, common::E_OK);
+                            EXPECT_EQ(failed.rows, baseline.rows);
+                            break;
+                        }
+                        ASSERT_TRUE(failed.failed);
                         EXPECT_EQ(failed.ret, common::E_FILE_READ_ERR);
                     }
                 }

@@ -27,6 +27,7 @@
 #include <string>
 #include <vector>
 
+#include "common/arrow_batch.h"
 #include "common/tsblock/tsblock.h"
 #include "reader/filter/filter.h"
 #include "reader/filter/selection_mask.h"
@@ -45,6 +46,7 @@ class AlignedFieldFilter : public Filter {
     enum class CompareOp { EQ, NE, LT, LE, GT, GE };
 
     struct ColumnView {
+        const common::ArrowColumn* arrow_column = nullptr;
         std::string name;
         common::TSDataType type = common::INVALID_DATATYPE;
         const char* fixed_values = nullptr;

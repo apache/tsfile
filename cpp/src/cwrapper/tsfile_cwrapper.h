@@ -28,6 +28,8 @@ extern "C" {
 #include <stdint.h>
 #include <sys/stat.h>
 
+#include "common/arrow_c_data.h"
+
 typedef enum {
     TS_DATATYPE_BOOLEAN = 0,
     TS_DATATYPE_INT32 = 1,
@@ -308,39 +310,6 @@ typedef struct TsFilePreparedLocator {
     uint64_t time_metadata_offset;
     uint32_t time_metadata_length;
 } TsFilePreparedLocator;
-
-typedef struct arrow_schema {
-    // Array type description
-    const char* format;
-    const char* name;
-    const char* metadata;
-    int64_t flags;
-    int64_t n_children;
-    struct arrow_schema** children;
-    struct arrow_schema* dictionary;
-
-    // Release callback
-    void (*release)(struct arrow_schema*);
-    // Opaque producer-specific data
-    void* private_data;
-} ArrowSchema;
-
-typedef struct arrow_array {
-    // Array data description
-    int64_t length;
-    int64_t null_count;
-    int64_t offset;
-    int64_t n_buffers;
-    int64_t n_children;
-    const void** buffers;
-    struct arrow_array** children;
-    struct arrow_array* dictionary;
-
-    // Release callback
-    void (*release)(struct arrow_array*);
-    // Opaque producer-specific data
-    void* private_data;
-} ArrowArray;
 
 typedef int32_t ERRNO;
 typedef int64_t Timestamp;
@@ -1003,22 +972,32 @@ ResultSet tsfile_query_table_batch(TsFileReader reader, const char* table_name,
 bool tsfile_result_set_next(ResultSet result_set, ERRNO* error_code);
 
 /**
- * @brief Gets the next TsBlock from batch ResultSet and converts it to Arrow
- * format.
+ * @brief Exports the next native Arrow batch without copying its data buffers.
  *
  * @param result_set [in] Valid ResultSet handle from batch query
  * (tsfile_query_table_batch).
  * @param out_array [out] Pointer to ArrowArray pointer. Will be set to the
- * converted Arrow array.
+ * exported Arrow array.
  * @param out_schema [out] Pointer to ArrowSchema pointer. Will be set to the
- * converted Arrow schema.
- * @return ERRNO - E_OK(0) on success, E_NO_MORE_DATA if no more blocks, or
+ * exported Arrow schema.
+ * @return ERRNO - E_OK(0) on success, E_NO_MORE_DATA if no more results, or
  * other error codes.
  * @note Caller should release ArrowArray and ArrowSchema by calling their
  * release callbacks when done.
  * @note This function should only be called on ResultSet obtained from
  * tsfile_query_table_batch with batch_size > 0.
  */
+ERRNO tsfile_result_set_get_next_arrow_batch(ResultSet result_set,
+                                             ArrowArray* out_array,
+                                             ArrowSchema* out_schema);
+
+/** Export the next array using the schema already obtained from this result
+ * set. The caller owns the array and must release it. Returns E_NO_MORE_DATA at
+ * EOF. */
+ERRNO tsfile_result_set_get_next_arrow_array(ResultSet result_set,
+                                             ArrowArray* out_array);
+
+// Compatibility alias for tsfile_result_set_get_next_arrow_batch.
 ERRNO tsfile_result_set_get_next_tsblock_as_arrow(ResultSet result_set,
                                                   ArrowArray* out_array,
                                                   ArrowSchema* out_schema);

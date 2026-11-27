@@ -810,6 +810,10 @@ int AlignedFieldFilter::evaluate_leaf(const ColumnView& column,
                                       uint32_t row_count,
                                       SelectionMask& mask) const {
     if (column.type == common::INVALID_DATATYPE) return common::E_INVALID_ARG;
+    if (column.arrow_column != nullptr &&
+        static_cast<uint64_t>(column.row_offset) + row_count >
+            column.arrow_column->capacity())
+        return common::E_INVALID_ARG;
     if ((column.notnull_bitmap != nullptr &&
          static_cast<uint64_t>(column.row_offset) + row_count >
              static_cast<uint64_t>(column.notnull_bitmap_size) * 8U) ||
@@ -830,7 +834,12 @@ int AlignedFieldFilter::evaluate_leaf(const ColumnView& column,
 
         const char* data = nullptr;
         uint32_t len = 0;
-        if (!is_null) {
+        char arrow_scratch[8];
+        if (column.arrow_column != nullptr) {
+            data = column.arrow_column->native_value(source_row, arrow_scratch,
+                                                     len);
+            is_null = data == nullptr;
+        } else if (!is_null) {
             if (nonnull_index >= column.value_count)
                 return common::E_INVALID_ARG;
             if (column.type == common::STRING || column.type == common::TEXT ||

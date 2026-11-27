@@ -28,6 +28,30 @@ from tsfile import Tablet
 from tsfile import TsFileTableWriter, TsFileReader
 
 
+def test_arrow_result_reuses_schema_across_nullable_double_batches(tmp_path):
+    path = str(tmp_path / "dense.tsfile")
+    schema = TableSchema(
+        "t", [ColumnSchema("v", TSDataType.DOUBLE, ColumnCategory.FIELD)]
+    )
+    values = [None if row % 11 in (0, 1) else row + 0.5 for row in range(83)]
+    with TsFileTableWriter(path, schema) as writer:
+        tablet = Tablet(["v"], [TSDataType.DOUBLE], len(values))
+        for row, value in enumerate(values):
+            tablet.add_timestamp(row, row)
+            if value is not None:
+                tablet.add_value_by_name("v", row, value)
+        writer.write_table(tablet)
+
+    with TsFileReader(path) as reader:
+        with reader.query_table("t", ["v"], batch_size=32) as result:
+            batches = list(iter(result.read_arrow_record_batch, None))
+
+    assert [len(b) for b in batches] == [32, 32, 19]
+    assert all(b.schema.equals(batches[0].schema) for b in batches)
+    assert [v for b in batches for v in b.column(1).to_pylist()] == values
+    assert sum(b.column(1).null_count for b in batches) == values.count(None)
+
+
 def test_batch_read_arrow_basic():
     file_path = "test_batch_arrow_basic.tsfile"
     table = TableSchema(
@@ -72,12 +96,14 @@ def test_batch_read_arrow_basic():
 
         total_rows = 0
         batch_count = 0
+        batch_lengths = []
         while True:
             table = result_set.read_arrow_batch()
             if table is None:
                 break
 
             batch_count += 1
+            batch_lengths.append(len(table))
             assert isinstance(table, pa.Table)
             assert len(table) > 0
             total_rows += len(table)
@@ -89,7 +115,7 @@ def test_batch_read_arrow_basic():
             assert "value2" in column_names
 
         assert total_rows == 1000
-        assert batch_count > 0
+        assert batch_lengths == [256, 256, 256, 232]
 
         result_set.close()
         reader.close()

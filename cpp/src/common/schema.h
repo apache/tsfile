@@ -319,6 +319,9 @@ class TableSchema {
                 } else if (RET_FAIL(common::SerializationUtil::read_i32(
                                column_category, in))) {
                 }
+                if (ret != common::E_OK) return ret;
+                column_pos_index_.emplace(column_schema->measurement_name_,
+                                          column_schemas_.size());
                 column_schemas_.emplace_back(column_schema);
                 column_categories_.emplace_back(
                     static_cast<common::ColumnCategory>(column_category));
@@ -343,6 +346,12 @@ class TableSchema {
         return ret;
     }
 
+    common::ColumnCategory get_column_category(size_t index) const {
+        return column_categories_[index];
+    }
+    common::TSDataType get_column_type(size_t index) const {
+        return column_schemas_[index]->data_type_;
+    }
     int32_t get_columns_num() const { return column_schemas_.size(); }
 
     int find_column_index(const std::string& column_name) {

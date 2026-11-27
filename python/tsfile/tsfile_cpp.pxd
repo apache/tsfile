@@ -512,7 +512,8 @@ cdef extern from "cwrapper/tsfile_cwrapper.h":
         void* private_data
 
     # Arrow batch reading function
-    ErrorCode tsfile_result_set_get_next_tsblock_as_arrow(ResultSet result_set,
+    ErrorCode tsfile_result_set_get_next_arrow_array(ResultSet result_set, ArrowArray* out_array) nogil
+    ErrorCode tsfile_result_set_get_next_arrow_batch(ResultSet result_set,
                                                           ArrowArray* out_array,
                                                           ArrowSchema* out_schema) nogil
 

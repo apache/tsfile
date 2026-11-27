@@ -20,6 +20,7 @@
 #define READER_TABLE_RESULT_SET_H
 #include <memory>
 
+#include "reader/arrow/query_scan_executor.h"
 #include "reader/block/tsblock_reader.h"
 #include "reader/result_set.h"
 
@@ -39,6 +40,19 @@ class TableResultSet : public ResultSet {
           return_mode_(return_mode) {
         init();
     }
+    explicit TableResultSet(std::unique_ptr<QueryScanExecutor> scan,
+                            std::vector<std::string> column_names,
+                            std::vector<common::TSDataType> data_types,
+                            int return_mode = RETURN_ROW,
+                            std::shared_ptr<TableSchema> table_schema = nullptr)
+        : scan_(std::move(scan)),
+          table_schema_(std::move(table_schema)),
+          column_names_(std::move(column_names)),
+          data_types_(std::move(data_types)),
+          return_mode_(return_mode) {
+        init();
+    }
+    int get_next_arrow_batch(std::shared_ptr<common::ArrowBatch>& batch);
     ~TableResultSet() override;
     int next(bool& has_next) override;
     bool is_null(const std::string& column_name) override;
@@ -66,6 +80,13 @@ class TableResultSet : public ResultSet {
     // caller actually requests the RowRecord (or a non-fast accessor).
     void materialize_current_row();
 
+    int ensure_arrow_batch();
+    std::unique_ptr<QueryScanExecutor> scan_;
+    std::shared_ptr<common::ArrowBatch> arrow_batch_;
+    uint32_t arrow_row_ = 0;
+    std::shared_ptr<TableSchema> table_schema_;
+    common::TupleDesc adapted_desc_;
+    std::unique_ptr<common::TsBlock> adapted_block_;
     std::unique_ptr<TsBlockReader> tsblock_reader_;
     common::RowIterator* row_iterator_ = nullptr;
     common::TsBlock* tsblock_ = nullptr;

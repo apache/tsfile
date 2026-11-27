@@ -93,9 +93,8 @@ int DeviceMetaIterator::next(
 }
 
 int DeviceMetaIterator::load_results() {
-    while (!meta_index_nodes_.empty()) {
+    while (result_cache_.empty() && !meta_index_nodes_.empty()) {
         auto pending = meta_index_nodes_.front();
-        meta_index_nodes_.pop();
         auto meta_data_index_node = pending.first;
         const auto& node_type = meta_data_index_node->node_type_;
         int ret = common::E_OK;
@@ -106,6 +105,13 @@ int DeviceMetaIterator::load_results() {
         } else {
             ret = common::E_INVALID_NODE_TYPE;
         }
+        if (ret == common::E_OK &&
+            node_type == MetaIndexNodeType::LEAF_DEVICE &&
+            next_leaf_child_ < meta_data_index_node->children_.size()) {
+            break;
+        }
+        meta_index_nodes_.pop();
+        next_leaf_child_ = 0;
         if (pending.second) {
             meta_data_index_node->~MetaIndexNode();
         }
@@ -119,7 +125,8 @@ int DeviceMetaIterator::load_results() {
 int DeviceMetaIterator::load_leaf_device(MetaIndexNode* meta_index_node) {
     int ret = common::E_OK;
     const auto& leaf_children = meta_index_node->children_;
-    for (size_t i = 0; i < leaf_children.size(); i++) {
+    while (next_leaf_child_ < leaf_children.size()) {
+        const size_t i = next_leaf_child_++;
         std::shared_ptr<IMetaIndexEntry> child = leaf_children[i];
         if (id_filter_ != nullptr) {
             if (!id_filter_->satisfyRow(
@@ -141,6 +148,7 @@ int DeviceMetaIterator::load_leaf_device(MetaIndexNode* meta_index_node) {
                 device_id->split_table_name();
             }
             result_cache_.push(std::make_pair(device_id, child_node));
+            break;
         }
     }
     return ret;

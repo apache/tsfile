@@ -64,8 +64,13 @@ class TupleDesc {
 
     FORCE_INLINE void push_back(const ColumnSchema& schema) {
         if (schema.column_category_ == ColumnCategory::TIME) {
-            ASSERT(time_column_index_ == -1);
-            time_column_index_ = static_cast<int>(column_list_.size());
+            // A projection may repeat the same registered TIME column.
+            if (time_column_index_ == -1) {
+                time_column_index_ = static_cast<int>(column_list_.size());
+            } else {
+                ASSERT(column_list_[time_column_index_].column_name_ ==
+                       schema.column_name_);
+            }
         }
         column_list_.push_back(schema);
     }
@@ -116,6 +121,12 @@ class TupleDesc {
 
         if (removing_time) {
             time_column_index_ = -1;
+            for (size_t i = idx; i < column_list_.size(); ++i) {
+                if (column_list_[i].column_category_ == ColumnCategory::TIME) {
+                    time_column_index_ = static_cast<int>(i);
+                    break;
+                }
+            }
         } else if (time_column_index_ != -1 &&
                    static_cast<int>(idx) < time_column_index_) {
             --time_column_index_;

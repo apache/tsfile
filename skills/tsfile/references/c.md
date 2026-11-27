@@ -53,3 +53,9 @@ Use this reference only for the C wrapper around the C++ implementation. Read
 - Verify the wrapper and linked C++ library come from compatible builds.
 - Compile and run the maintained C examples before adapting them into another
   build system.
+
+For table batch queries, call `tsfile_result_set_get_next_arrow_batch` to receive
+the first array and schema. A consumer that retains the imported schema can call
+`tsfile_result_set_get_next_arrow_array` for each subsequent batch of the same
+result set. Release each exported array independently. Both functions return
+`E_NO_MORE_DATA` at end of results.
