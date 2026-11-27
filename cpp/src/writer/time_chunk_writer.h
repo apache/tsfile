@@ -100,6 +100,11 @@ class TimeChunkWriter {
 
     bool hasData();
 
+    // Highest timestamp written so far (sealed pages plus the current
+    // unsealed page).  Only meaningful when hasData() is true; returns the
+    // minimum int64 value when nothing has been written.
+    int64_t get_last_time();
+
     int64_t estimate_max_series_mem_size();
 
     // Current (unsealed) page point count.

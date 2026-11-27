@@ -127,9 +127,18 @@ class TsFileTableReaderTest : public ::testing::Test {
                                              static_cast<int64_t>(i));
                             break;
                         case TSDataType::STRING:
-                            tablet.add_value(row_index,
-                                             column_schema->measurement_name_,
-                                             literal_str);
+                            if (device_num > 1 &&
+                                column_schema->measurement_name_ == "id1") {
+                                std::string id_value =
+                                    "device_id_" + std::to_string(i);
+                                tablet.add_value(
+                                    row_index, column_schema->measurement_name_,
+                                    id_value.c_str());
+                            } else {
+                                tablet.add_value(
+                                    row_index, column_schema->measurement_name_,
+                                    literal_str);
+                            }
                             break;
                         default:
                             break;
@@ -179,21 +188,43 @@ class TsFileTableReaderTest : public ::testing::Test {
                                   (row_num / points_per_device) % device_num);
                         break;
                     case TSDataType::STRING:
-                        ASSERT_EQ(table_result_set
-                                      ->get_value<common::String*>(
-                                          column_schema->measurement_name_)
-                                      ->compare(literal_str),
-                                  0);
+                        if (device_num > 1 &&
+                            column_schema->measurement_name_ == "id1") {
+                            std::string expected =
+                                "device_id_" +
+                                std::to_string((row_num / points_per_device) %
+                                               device_num);
+                            ASSERT_EQ(table_result_set
+                                          ->get_value<common::String*>(
+                                              column_schema->measurement_name_)
+                                          ->to_std_string(),
+                                      expected);
+                        } else {
+                            ASSERT_EQ(table_result_set
+                                          ->get_value<common::String*>(
+                                              column_schema->measurement_name_)
+                                          ->compare(literal_str),
+                                      0);
+                        }
                         break;
                     default:
                         break;
                 }
             }
             for (int i = 2; i <= 6; i++) {
-                ASSERT_EQ(
-                    table_result_set->get_value<common::String*>(i)->compare(
-                        literal_str),
-                    0);
+                if (device_num > 1 && i == 3) {
+                    std::string expected =
+                        "device_id_" +
+                        std::to_string((row_num / points_per_device) %
+                                       device_num);
+                    ASSERT_EQ(table_result_set->get_value<common::String*>(i)
+                                  ->to_std_string(),
+                              expected);
+                } else {
+                    ASSERT_EQ(table_result_set->get_value<common::String*>(i)
+                                  ->compare(literal_str),
+                              0);
+                }
             }
             for (int i = 7; i <= 11; i++) {
                 ASSERT_EQ(table_result_set->get_value<int64_t>(i),
