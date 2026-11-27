@@ -398,6 +398,52 @@ TEST_F(QDSWithTimeGeneratorTest, MissingSeriesFailsTheQuery) {
     EXPECT_EQ(result, nullptr);
 }
 
+TEST_F(QDSWithTimeGeneratorTest, OrWithMissingMeasurementKeepsLiveSeries) {
+    // A measurement that does not exist in the file yields an empty leaf (no
+    // timestamps); the OR must still emit the existing series' rows and the
+    // result must remain destroyable.
+    Expression* expression =
+        new Expression(OR_EXPR, series_expr(device_, "s1", TimeFilter::eq(2)),
+                       series_expr(device_, "missing", TimeFilter::gt(0)));
+    ResultSet* result = query(expression, {"s1"});
+    ASSERT_NE(result, nullptr);
+
+    std::vector<RowSnapshot> rows;
+    collect_rows(result, rows);
+    ASSERT_EQ(timestamps(rows), (std::vector<int64_t>{2}));
+    EXPECT_EQ(rows[0].value1, 20);
+    reader_.destroy_query_data_set(result);
+}
+
+TEST_F(QDSWithTimeGeneratorTest, AndWithMissingMeasurementReturnsNoRows) {
+    // The missing measurement's empty leaf means the AND can never match.
+    Expression* expression =
+        new Expression(AND_EXPR, series_expr(device_, "s1", TimeFilter::eq(2)),
+                       series_expr(device_, "missing", TimeFilter::gt(0)));
+    ResultSet* result = query(expression, {"s1"});
+    ASSERT_NE(result, nullptr);
+
+    bool has_next = true;
+    ASSERT_EQ(result->next(has_next), E_OK);
+    EXPECT_FALSE(has_next);
+    reader_.destroy_query_data_set(result);
+}
+
+TEST_F(QDSWithTimeGeneratorTest, OrWithMissingDeviceKeepsLiveSeries) {
+    // A predicate on a device that does not exist also produces an empty leaf.
+    Expression* expression = new Expression(
+        OR_EXPR, series_expr(device_, "s1", TimeFilter::eq(2)),
+        series_expr("root.qds_no_such_device", "x", TimeFilter::gt(0)));
+    ResultSet* result = query(expression, {"s1"});
+    ASSERT_NE(result, nullptr);
+
+    std::vector<RowSnapshot> rows;
+    collect_rows(result, rows);
+    ASSERT_EQ(timestamps(rows), (std::vector<int64_t>{2}));
+    EXPECT_EQ(rows[0].value1, 20);
+    reader_.destroy_query_data_set(result);
+}
+
 class QDSWithTimeGeneratorMultiBlockTest : public ::testing::Test {
    protected:
     void SetUp() override {
