@@ -327,9 +327,10 @@ TEST_F(TsFileWriterTableTest, WriteDisorderTest) {
 
     ASSERT_EQ(tsfile_table_writer_->write_table(tablet),
               common::E_OUT_OF_ORDER);
-    ASSERT_EQ(tsfile_table_writer_->flush(), common::E_DATA_INCONSISTENCY);
-    ASSERT_EQ(tsfile_table_writer_->close(), common::E_DATA_INCONSISTENCY);
-    ASSERT_EQ(tsfile_table_writer_->close(), common::E_DATA_INCONSISTENCY);
+    // The whole tablet is validated up front, so the out-of-order batch
+    // writes no rows and leaves the writer usable; flush/close succeed.
+    ASSERT_EQ(tsfile_table_writer_->flush(), common::E_OK);
+    ASSERT_EQ(tsfile_table_writer_->close(), common::E_OK);
     delete table_schema;
 }
 

@@ -19,6 +19,9 @@
 
 #include "time_chunk_writer.h"
 
+#include <algorithm>
+#include <limits>
+
 #include "common/logger/elog.h"
 
 using namespace common;
@@ -197,6 +200,19 @@ int64_t TimeChunkWriter::estimate_max_series_mem_size() {
 bool TimeChunkWriter::hasData() {
     return num_of_pages_ > 0 || (time_page_writer_.get_statistic() != nullptr &&
                                  time_page_writer_.get_statistic()->count_ > 0);
+}
+
+int64_t TimeChunkWriter::get_last_time() {
+    int64_t last = std::numeric_limits<int64_t>::min();
+    if (chunk_statistic_ != nullptr && chunk_statistic_->get_count() > 0) {
+        last = chunk_statistic_->get_end_time();
+    }
+    if (time_page_writer_.get_statistic() != nullptr &&
+        time_page_writer_.get_statistic()->get_count() > 0) {
+        last =
+            std::max(last, time_page_writer_.get_statistic()->get_end_time());
+    }
+    return last;
 }
 
 }  // end namespace storage

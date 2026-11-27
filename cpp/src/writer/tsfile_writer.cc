@@ -1327,6 +1327,62 @@ int TsFileWriter::write_table(Tablet& tablet) {
     auto device_id_end_index_pairs = split_tablet_by_device(tablet);
 
     if (table_aligned_) {
+        // Validate the whole tablet's time order up front so a rejected
+        // batch leaves no partial rows behind: a device's timestamps must be
+        // monotonic across all of its (possibly non-contiguous) segments, and
+        // its first timestamp must come after that device's already-written
+        // data.  Out-of-order input is rejected here before anything is
+        // written, keeping the writer coherent for a later flush/close.
+        if (tablet.timestamps_) {
+            const bool allow_non_decreasing =
+                g_config_value_.allow_non_decreasing_timestamps_;
+            auto out_of_order = [allow_non_decreasing](int64_t time,
+                                                       int64_t last_time) {
+                return allow_non_decreasing ? time < last_time
+                                            : time <= last_time;
+            };
+            std::map<std::shared_ptr<IDeviceID>, int64_t, IDeviceIDComparator>
+                last_time_in_tablet;
+            int order_start = 0;
+            for (auto& pair : device_id_end_index_pairs) {
+                int order_end = pair.second;
+                if (order_end == 0) continue;
+                const int64_t first_ts = tablet.timestamps_[order_start];
+                const int64_t last_ts = tablet.timestamps_[order_end - 1];
+
+                auto seen = last_time_in_tablet.find(pair.first);
+                if (seen != last_time_in_tablet.end()) {
+                    // A later segment of an already-seen device must continue
+                    // monotonically from the previous segment's last time.
+                    if (out_of_order(first_ts, seen->second)) {
+                        return E_OUT_OF_ORDER;
+                    }
+                } else {
+                    // First segment of this device: it must come after the
+                    // device's existing (un-flushed) chunk data.
+                    auto schema_it = schemas_.find(pair.first);
+                    if (schema_it != schemas_.end() &&
+                        schema_it->second != nullptr &&
+                        schema_it->second->time_chunk_writer_ != nullptr &&
+                        schema_it->second->time_chunk_writer_->hasData() &&
+                        out_of_order(first_ts,
+                                     schema_it->second->time_chunk_writer_
+                                         ->get_last_time())) {
+                        return E_OUT_OF_ORDER;
+                    }
+                }
+
+                for (int i = order_start + 1; i < order_end; i++) {
+                    if (out_of_order(tablet.timestamps_[i],
+                                     tablet.timestamps_[i - 1])) {
+                        return E_OUT_OF_ORDER;
+                    }
+                }
+                last_time_in_tablet[pair.first] = last_ts;
+                order_start = order_end;
+            }
+        }
+
         struct ValueTask {
             ValueChunkWriter* vcw;
             uint32_t col_idx;
