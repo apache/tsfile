@@ -207,6 +207,42 @@ C API 可通过 `tsfile_set_file_read_backend(TSFILE_READ_BACKEND_*)` 设置相�
 成功后会关闭原始文件描述符，映射本身会保持有效直至 reader 关闭。映射
 reader 打开期间不得修改或截断文件。
 
+### 对象存储读取后端
+
+当以 `ENABLE_S3=ON`（默认）构建且 configure 阶段找到 libcurl 7.42 或更新版本时，SDK 可以直接
+从 S3 兼容对象存储（AWS S3、阿里云 OSS、MinIO 等）读取 TsFile，内部通过带
+SigV4 签名的 HTTP Range 请求完成。可用 `s3_support_available()` 判断当前构建
+是否包含该能力。打开对象时需要强 ETag，每次 Range GET 都会携带对应的
+`If-Match`。对象被覆盖后，请重新打开 reader 以读取新版本。同步读取和后台预取使用相同的缓存容量上限。
+
+```cpp
+#include "file/cached_random_access_read_file.h"
+#include "file/s3_random_access_read_file.h"
+#include "reader/tsfile_reader.h"
+
+storage::S3Options options;
+options.endpoint = "https://oss-cn-beijing.aliyuncs.com";  // 或 AWS/MinIO
+options.bucket = "bucket";
+options.key = "path/example.tsfile";
+options.access_key_id = "...";       // 两者都为空表示匿名访问
+options.secret_access_key = "...";
+options.region = "cn-beijing";       // 为空时从 endpoint 推导
+std::string error;
+std::unique_ptr<storage::RandomAccessReadFile> source =
+    storage::open_s3_read_file(options, &error);
+
+storage::ReadCacheOptions cache;
+cache.prefetch_threads = 4;          // 后台按连续块组并发拉取
+source = storage::make_cached_read_file(std::move(source), cache);
+
+storage::TsFileReader reader;
+reader.open(std::move(source));
+```
+
+签名和 HTTP 错误通过 `error` 返回，`read()` 会按 `max_retries` 重试瞬时失败。
+块缓存层对远程源强烈建议启用；块大小、缓存容量与预读量见
+`ReadCacheOptions`。
+
 ---
 
 ## 使用 TsFile

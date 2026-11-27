@@ -36,6 +36,7 @@ enable_lz4=ON
 enable_lzokay=ON
 enable_zlib=ON
 enable_zstd=ON
+enable_s3=ON
 build_jobs=""
 # Keep the default build compatible with CMake 3.11-era industrial toolchains.
 # Bundled XZ Utils requires CMake 3.20+, so LZMA2 must be enabled explicitly.
@@ -92,6 +93,11 @@ Options:
   --disable-zlib
   --enable-zstd=<ON|OFF>
   --disable-zstd
+  --enable-s3=<ON|OFF>
+                         Enable native S3/OSS reads when libcurl is found
+                         (default: ON; the feature stays off when libcurl is
+                         unavailable).
+  --disable-s3
   --enable-lzma2=<ON|OFF>
                          Enable LZMA2 explicitly (default: OFF; bundled XZ
                          requires CMake 3.20 or newer).
@@ -177,6 +183,8 @@ parse_options()
       enable_zlib=$(get_key_value "$1");;
     --enable-zstd=*)
       enable_zstd=$(get_key_value "$1");;
+    --enable-s3=*)
+      enable_s3=$(get_key_value "$1");;
     --enable-lzma2=*)
       enable_lzma2=$(get_key_value "$1");;
     --disable-antlr4)
@@ -191,6 +199,8 @@ parse_options()
       enable_zlib=OFF;;
     --disable-zstd)
       enable_zstd=OFF;;
+    --disable-s3)
+      enable_s3=OFF;;
     --disable-lzma2)
       enable_lzma2=OFF;;
     -h | --help)
@@ -270,6 +280,7 @@ cmake ../../                           \
   -DENABLE_LZOKAY=$enable_lzokay       \
   -DENABLE_ZLIB=$enable_zlib           \
   -DENABLE_ZSTD=$enable_zstd           \
+  -DENABLE_S3=$enable_s3               \
   -DENABLE_LZMA2=$enable_lzma2
 
 VERBOSE=1 make -j"${build_jobs}"

@@ -383,6 +383,23 @@ if (ENABLE_SIMD)
     include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/SIMDeDependency.cmake)
 endif()
 
+# Native S3/OSS object-storage reads need an HTTP client with TLS. libcurl is
+# optional: when it is missing the Python and C++ APIs still exist but report
+# that native object-storage support was not built.
+option(ENABLE_S3 "Enable native S3/OSS reads when libcurl is available" ON)
+message("cmake using: ENABLE_S3=${ENABLE_S3}")
+if (ENABLE_S3)
+    find_package(CURL 7.42 QUIET)
+    if (CURL_FOUND)
+        message(STATUS "native S3/OSS reads: enabled (libcurl ${CURL_VERSION_STRING})")
+        add_definitions(-DTSFILE_ENABLE_S3)
+    else ()
+        message(STATUS "native S3/OSS reads: disabled (libcurl not found)")
+    endif ()
+else ()
+    message(STATUS "native S3/OSS reads: disabled by ENABLE_S3=OFF")
+endif ()
+
 # All libs will be stored here, including libtsfile, compress-encoding lib.
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
 
@@ -445,6 +462,9 @@ if (ENABLE_LZMA2)
 endif ()
 if (ENABLE_SIMD)
     list(APPEND _TSFILE_PROJECT_DEPENDENCIES TsFile::SIMDe)
+endif ()
+if (ENABLE_S3 AND CURL_FOUND)
+    list(APPEND _TSFILE_PROJECT_DEPENDENCIES CURL::libcurl)
 endif ()
 
 if (NOT "${_TSFILE_PROJECT_DEPENDENCIES}" STREQUAL "")

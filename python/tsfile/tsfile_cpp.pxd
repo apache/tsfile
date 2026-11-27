@@ -550,6 +550,10 @@ cdef extern from "common/config/config.h" namespace "common":
         cppbool parallel_read_enabled_;
         cppbool parallel_write_enabled_;
         int32_t thread_count_;
+        cppbool read_cache_enabled_;
+        uint32_t read_cache_block_size_;
+        uint32_t read_cache_capacity_;
+        uint32_t read_cache_max_readahead_blocks_;
 
 cdef extern from "common/global.h" namespace "common":
     ConfigValue g_config_value_

@@ -64,6 +64,25 @@ class TrackingBytesIO(io.BytesIO):
         super().close()
 
 
+@pytest.fixture
+def uncached_sources():
+    """Run the test with the block cache disabled.
+
+    The failure-injection tests in this file assert that source-level read
+    errors surface at specific calls. A block already served from the cache
+    legitimately never reaches the source, so these tests exercise the
+    uncached path; the cache-hit path is covered by the block-cache tests.
+    """
+    from tsfile import get_tsfile_config, set_tsfile_config
+
+    original = get_tsfile_config()["read_cache_enabled_"]
+    set_tsfile_config({"read_cache_enabled_": False})
+    try:
+        yield
+    finally:
+        set_tsfile_config({"read_cache_enabled_": original})
+
+
 def collect_table_rows(source):
     with TsFileReader(source) as reader:
         result = reader.query_table("test", ["s0", "s2"])
@@ -305,7 +324,9 @@ def test_source_read_error_during_open_preserves_cursor():
     assert source.close_calls == 0
 
 
-def test_source_read_error_during_query_preserves_cursor_and_source():
+def test_source_read_error_during_query_preserves_cursor_and_source(
+    uncached_sources,
+):
     path = RESOURCES / "simple_table_t1.tsfile"
 
     class FailingBytesIO(TrackingBytesIO):
@@ -334,7 +355,9 @@ def test_source_read_error_during_query_preserves_cursor_and_source():
 
 @pytest.mark.parametrize("measurements", [["temperature"], ["temperature", "status"]])
 @pytest.mark.parametrize("stage", ["initial_block", "next_block"])
-def test_tree_query_propagates_data_block_read_errors(tmp_path, measurements, stage):
+def test_tree_query_propagates_data_block_read_errors(
+    tmp_path, measurements, stage, uncached_sources
+):
     class FailingBytesIO(TrackingBytesIO):
         read_calls = 0
         fail_at = None
@@ -415,7 +438,7 @@ def test_tree_query_propagates_data_block_read_errors(tmp_path, measurements, st
         "get_timeseries_metadata",
     ],
 )
-def test_metadata_read_failure_is_not_an_empty_result(method):
+def test_metadata_read_failure_is_not_an_empty_result(method, uncached_sources):
     class FailingBytesIO(TrackingBytesIO):
         fail_reads = False
         failed = False
@@ -440,7 +463,9 @@ def test_metadata_read_failure_is_not_an_empty_result(method):
     assert source.close_calls == 0
 
 
-def test_device_index_read_failure_does_not_return_partial_devices(tmp_path):
+def test_device_index_read_failure_does_not_return_partial_devices(
+    tmp_path, uncached_sources
+):
     class FailingBytesIO(TrackingBytesIO):
         fail_index_reads = False
         index_reads = 0
@@ -492,7 +517,14 @@ def test_device_index_read_failure_does_not_return_partial_devices(tmp_path):
 @pytest.mark.parametrize("short_read", [False, True])
 @pytest.mark.parametrize("persistent", [False, True])
 def test_table_queries_propagate_every_read_failure(
-    method, columns, offset, tag_kind, batch_size, short_read, persistent
+    method,
+    columns,
+    offset,
+    tag_kind,
+    batch_size,
+    short_read,
+    persistent,
+    uncached_sources,
 ):
     class FailingBytesIO(TrackingBytesIO):
         read_calls = 0
@@ -572,3 +604,51 @@ def test_table_queries_propagate_every_read_failure(
         assert source.tell() == 17
         assert not source.closed
         assert source.close_calls == 0
+
+
+def _run_table_query(reader):
+    result = reader.query_table("test", ["s0", "s2"])
+    try:
+        rows = []
+        while result.next():
+            rows.append(tuple(result.get_value_by_index(i) for i in range(1, 4)))
+        return rows
+    finally:
+        result.close()
+
+
+def test_file_object_repeated_query_is_served_from_block_cache():
+    """The second identical query must not issue new reads on the source."""
+    path = RESOURCES / "simple_table_t1.tsfile"
+    source = TrackingBytesIO(path.read_bytes())
+    with TsFileReader(source) as reader:
+        first = _run_table_query(reader)
+        assert first
+        reads_after_first = len(source.read_sizes)
+        second = _run_table_query(reader)
+    assert second == first
+    assert len(source.read_sizes) == reads_after_first
+
+
+def test_file_object_block_cache_can_be_disabled():
+    from tsfile import get_tsfile_config, set_tsfile_config
+
+    path = RESOURCES / "simple_table_t1.tsfile"
+    expected = collect_table_rows(str(path))
+
+    original = get_tsfile_config()["read_cache_enabled_"]
+    try:
+        set_tsfile_config({"read_cache_enabled_": False})
+        uncached_source = TrackingBytesIO(path.read_bytes())
+        assert collect_table_rows(uncached_source) == expected
+        uncached_reads = len(uncached_source.read_sizes)
+
+        set_tsfile_config({"read_cache_enabled_": True})
+        cached_source = TrackingBytesIO(path.read_bytes())
+        assert collect_table_rows(cached_source) == expected
+        cached_reads = len(cached_source.read_sizes)
+    finally:
+        set_tsfile_config({"read_cache_enabled_": original})
+
+    assert uncached_reads > 0
+    assert cached_reads < uncached_reads

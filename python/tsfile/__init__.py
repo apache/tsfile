@@ -70,7 +70,11 @@ from .tablet import *
 from .field import *
 from .date_utils import *
 from .exceptions import *
-from .tsfile_reader import TsFileReaderPy as TsFileReader, ResultSetPy as ResultSet
+from .tsfile_reader import (
+    TsFileReaderPy as TsFileReader,
+    ResultSetPy as ResultSet,
+    s3_available,
+)
 from .tag_filter import (
     TagFilter,
     tag_eq,

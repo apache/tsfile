@@ -98,6 +98,7 @@ set(_TSFILE_OBJECT_TARGETS
         dataset_obj
         file_obj
         read_obj
+        utils_obj
         write_obj)
 if (ENABLE_ANTLR4)
     list(APPEND _TSFILE_OBJECT_TARGETS parser_obj)
@@ -164,7 +165,7 @@ unset(_TSFILE_OBJECT_SOURCES)
 unset(_TSFILE_OBJECT_TARGET)
 unset(_TSFILE_OBJECT_TARGETS)
 
-add_dependencies(tsfile utils_obj encoding_obj)
+add_dependencies(tsfile encoding_obj)
 
 set_property(DIRECTORY PROPERTY LINK_LIBRARIES
         "${_TSFILE_SRC_LINK_LIBRARIES}")

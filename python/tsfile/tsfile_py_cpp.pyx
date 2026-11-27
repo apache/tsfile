@@ -946,6 +946,10 @@ cpdef object get_tsfile_config():
         "default_compression_type_": CompressorPy(int(g_config_value_.default_compression_type_)),
         "file_read_backend_": FileReadBackendPy(int(tsfile_get_file_read_backend())),
         "allow_non_decreasing_timestamps_": g_config_value_.allow_non_decreasing_timestamps_,
+        "read_cache_enabled_": bool(g_config_value_.read_cache_enabled_),
+        "read_cache_block_size_": g_config_value_.read_cache_block_size_,
+        "read_cache_capacity_": g_config_value_.read_cache_capacity_,
+        "read_cache_max_readahead_blocks_": g_config_value_.read_cache_max_readahead_blocks_,
         "parallel_read_enabled_": bool(g_config_value_.parallel_read_enabled_),
         "parallel_write_enabled_": bool(g_config_value_.parallel_write_enabled_),
         "thread_count_": g_config_value_.thread_count_,
@@ -1105,6 +1109,18 @@ cpdef void set_tsfile_config(dict new_config):
         _check_bool(new_config["allow_non_decreasing_timestamps_"])
         set_allow_non_decreasing_timestamps(
             <bint> new_config["allow_non_decreasing_timestamps_"])
+    if "read_cache_enabled_" in new_config:
+        _check_bool(new_config["read_cache_enabled_"])
+        g_config_value_.read_cache_enabled_ = <bint> new_config["read_cache_enabled_"]
+    if "read_cache_block_size_" in new_config:
+        _check_uint32(new_config["read_cache_block_size_"])
+        g_config_value_.read_cache_block_size_ = new_config["read_cache_block_size_"]
+    if "read_cache_capacity_" in new_config:
+        _check_uint32(new_config["read_cache_capacity_"])
+        g_config_value_.read_cache_capacity_ = new_config["read_cache_capacity_"]
+    if "read_cache_max_readahead_blocks_" in new_config:
+        _check_uint32(new_config["read_cache_max_readahead_blocks_"])
+        g_config_value_.read_cache_max_readahead_blocks_ = new_config["read_cache_max_readahead_blocks_"]
 
 cdef _check_uint32(value):
     if not isinstance(value, int) or value < 0 or value > 0xFFFFFFFF:

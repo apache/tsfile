@@ -34,6 +34,7 @@ from libc.stdint cimport INT64_MIN, INT64_MAX, uint32_t, uintptr_t
 from tsfile.schema import TSDataType as TSDataTypePy
 from tsfile.schema import DeviceID, DeviceTimeseriesMetadataGroup
 from tsfile.exceptions import TsFileCorruptedError
+from tsfile.s3 import is_object_uri
 from tsfile.tag_filter import ComparisonTagFilter, BetweenTagFilter, AndTagFilter, OrTagFilter, NotTagFilter, cache_key
 from .date_utils import parse_int_to_date
 from .tsfile_cpp cimport *
@@ -42,6 +43,25 @@ from .tsfile_py_cpp cimport *
 cdef extern from "python_random_access_read_file.h":
     TsFileReader create_tsfile_reader_from_python_file(
         PyObject* source, int32_t* error_code) except? NULL
+
+cdef extern from "python_s3_read_file.h":
+    void* create_tsfile_reader_from_s3(
+        const char* uri, const char* endpoint, const char* region,
+        const char* access_key_id, const char* secret_access_key,
+        const char* session_token, int32_t path_style,
+        int32_t connect_timeout_ms, int32_t request_timeout_ms,
+        int32_t max_retries, int32_t prefetch_threads, char* error_buffer,
+        int32_t error_buffer_size, int32_t* error_code) nogil
+    int s3_native_support_available() nogil
+
+
+def s3_available():
+    """True when this build reads s3:// / oss:// objects natively.
+
+    Native object reads need libcurl at build time; the wheel or source build
+    in use may have been produced without it.
+    """
+    return s3_native_support_available() != 0
 
 
 def _query_cache_size():
@@ -400,24 +420,90 @@ cdef class TsFileReaderPy:
     cdef object _prepared_query_cache
     cdef int _prepared_query_cache_size
 
-    def __init__(self, source):
+    def __init__(self, source, s3 = None):
         """
-        Initialize from a str/bytes/PathLike path or seekable binary file object.
+        Initialize from a str/bytes/PathLike path, an ``s3://`` / ``oss://``
+        object URI, or a seekable binary file object.
+
+        For object URIs, ``s3`` is an optional mapping with ``endpoint``,
+        ``region``, ``access_key_id``, ``secret_access_key``, ``session_token``,
+        ``path_style``, ``connect_timeout_ms``, ``request_timeout_ms``,
+        ``max_retries`` and ``prefetch_threads``. Missing values fall back to
+        the environment (TSFILE_S3_* / AWS_*); empty credentials select
+        anonymous access.
         """
         self.reader = NULL
         self.activate_result_set_list = weakref.WeakSet()
         self._prepared_query_cache = OrderedDict()
         self._prepared_query_cache_size = _query_cache_size()
-        self.init_reader(source)
+        self.init_reader(source, s3)
 
-    cdef init_reader(self, source):
+    cdef init_reader(self, source, s3_config):
         cdef ErrorCode error_code = 0
+        if isinstance(source, str) and is_object_uri(source):
+            if s3_config is not None and not isinstance(s3_config, dict):
+                raise TypeError("s3 must be a dict of connection options")
+            self._open_s3_reader(source, s3_config)
+            return
         if isinstance(source, (str, bytes, os.PathLike)):
             self.reader = tsfile_reader_new_c(os.fspath(source))
             return
         self.reader = create_tsfile_reader_from_python_file(
             <PyObject*>source, &error_code)
         check_error(error_code)
+
+    cdef _open_s3_reader(self, str uri, object s3_config):
+        from tsfile.exceptions import get_exception
+        from tsfile.s3 import resolve_s3_options
+
+        options = resolve_s3_options(uri, s3_config)
+        cdef char error_buffer[512]
+        cdef ErrorCode error_code = 0
+        memset(error_buffer, 0, sizeof(error_buffer))
+        cdef bytes b_uri = options["uri"].encode("utf-8")
+        cdef bytes b_endpoint = options["endpoint"].encode("utf-8")
+        cdef bytes b_region = options["region"].encode("utf-8")
+        cdef bytes b_access = options["access_key_id"].encode("utf-8")
+        cdef bytes b_secret = options["secret_access_key"].encode("utf-8")
+        cdef bytes b_token = options["session_token"].encode("utf-8")
+        cdef const char* c_uri = b_uri
+        cdef const char* c_endpoint = b_endpoint
+        cdef const char* c_region = b_region
+        cdef const char* c_access = b_access
+        cdef const char* c_secret = b_secret
+        cdef const char* c_token = b_token
+        cdef int32_t c_path_style = 1 if options["path_style"] else 0
+        cdef int32_t c_connect_timeout = options["connect_timeout_ms"]
+        cdef int32_t c_request_timeout = options["request_timeout_ms"]
+        cdef int32_t c_max_retries = options["max_retries"]
+        cdef int32_t c_prefetch_threads = options["prefetch_threads"]
+        cdef int32_t c_buffer_size = sizeof(error_buffer)
+        cdef TsFileReader handle = NULL
+        # Opening performs a blocking HEAD request; other Python threads must
+        # keep running while it is in flight.
+        with nogil:
+            handle = create_tsfile_reader_from_s3(
+                c_uri,
+                c_endpoint,
+                c_region,
+                c_access,
+                c_secret,
+                c_token,
+                c_path_style,
+                c_connect_timeout,
+                c_request_timeout,
+                c_max_retries,
+                c_prefetch_threads,
+                error_buffer,
+                c_buffer_size,
+                &error_code,
+            )
+        self.reader = handle
+        if self.reader == NULL:
+            message = error_buffer.decode("utf-8", "replace")
+            if error_code == 0:
+                error_code = 28  # E_FILE_OPEN_ERR
+            raise get_exception(error_code, message or None)
 
     def query_table(self, table_name : str, column_names : List[str],
                     start_time : int = INT64_MIN, end_time : int = INT64_MAX,
