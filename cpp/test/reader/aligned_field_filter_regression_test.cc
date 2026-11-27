@@ -1034,6 +1034,81 @@ TEST_P(AlignedFieldFilterRegressionTest, UnusableTsBlockCapacityReportsError) {
     EXPECT_EQ(ret, E_INVALID_ARG);
 }
 
+// A wide table queried through a TimeBetween filter used to spin forever when
+// tsblock_max_memory_ was smaller than one result row: the SSI's 0-row retry
+// branch saw has_more_data() stay true without any progress.  The read must
+// surface E_INVALID_ARG instead of looping.
+TEST_P(AlignedFieldFilterRegressionTest,
+       TimeBetweenFilterUnusableCapacityReportsError) {
+    g_config_value_.tsblock_max_memory_ = 8;
+    const int kTags = 10;
+    const int kFields = 100;
+    const int kRows = 100;
+    const int64_t kBase = 1000000;
+
+    std::vector<ColumnSchema> columns;
+    for (int t = 0; t < kTags; ++t)
+        columns.emplace_back("tag" + std::to_string(t), STRING, UNCOMPRESSED,
+                             PLAIN, ColumnCategory::TAG);
+    for (int f = 0; f < kFields; ++f)
+        columns.emplace_back("f" + std::to_string(f), INT64, UNCOMPRESSED,
+                             PLAIN, ColumnCategory::FIELD);
+    TableSchema schema("t", columns);
+
+    WriteFile file;
+    create(file);
+    TsFileTableWriter writer(&file, &schema);
+    std::vector<std::string> names;
+    std::vector<TSDataType> types;
+    std::vector<ColumnCategory> categories;
+    for (int t = 0; t < kTags; ++t) {
+        names.push_back("tag" + std::to_string(t));
+        types.push_back(STRING);
+        categories.push_back(ColumnCategory::TAG);
+    }
+    for (int f = 0; f < kFields; ++f) {
+        names.push_back("f" + std::to_string(f));
+        types.push_back(INT64);
+        categories.push_back(ColumnCategory::FIELD);
+    }
+    Tablet tablet("t", names, types, categories, kRows);
+    for (int r = 0; r < kRows; ++r) {
+        ASSERT_EQ(tablet.add_timestamp(r, kBase + r), E_OK);
+        for (int t = 0; t < kTags; ++t) {
+            const std::string v = "tag" + std::to_string(t) + "_v";
+            ASSERT_EQ(tablet.add_value(r, t, v.c_str()), E_OK);
+        }
+        for (int f = 0; f < kFields; ++f)
+            ASSERT_EQ(
+                tablet.add_value(r, kTags + f, static_cast<int64_t>(r + f)),
+                E_OK);
+    }
+    ASSERT_EQ(writer.write_table(tablet), E_OK);
+    ASSERT_EQ(writer.close(), E_OK);
+
+    std::vector<std::string> query_columns;
+    for (int t = 0; t < kTags; ++t)
+        query_columns.push_back("tag" + std::to_string(t));
+    for (int f = 0; f < kFields; ++f)
+        query_columns.push_back("f" + std::to_string(f));
+
+    LocalRandomAccessReadFile rfile;
+    ASSERT_EQ(rfile.open(filename_), E_OK);
+    TableQueryExecutor executor(&rfile, std::get<1>(GetParam()));
+    Filter* tf = new TimeBetween(kBase + 10, kBase + 80, false);
+    ResultSet* result = nullptr;
+    int ret =
+        executor.query("t", query_columns, tf, nullptr, nullptr, 0, -1, result);
+    if (ret == E_OK) {
+        ASSERT_NE(result, nullptr);
+        bool next = false;
+        ret = result->next(next);
+        EXPECT_FALSE(next);
+        executor.destroy_query_data_set(result);
+    }
+    EXPECT_EQ(ret, E_INVALID_ARG);
+}
+
 INSTANTIATE_TEST_SUITE_P(RowAndBatchParallelModes,
                          AlignedFieldFilterRegressionTest,
                          ::testing::Combine(::testing::Bool(),

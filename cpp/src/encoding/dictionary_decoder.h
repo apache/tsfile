@@ -58,8 +58,12 @@ class DictionaryDecoder : public Decoder {
     }
     int read_String(common::String& ret_value, common::PageArena& pa,
                     common::ByteStream& in) override {
-        auto std_str = read_string(in);
-        return ret_value.dup_from(std_str, pa);
+        std::string str;
+        int ret = read_string(str, in);
+        if (ret != common::E_OK) {
+            return ret;
+        }
+        return ret_value.dup_from(str, pa);
     }
 
     void init() { value_decoder_.init(); }
@@ -69,13 +73,24 @@ class DictionaryDecoder : public Decoder {
         entry_index_.clear();
     }
 
-    std::string read_string(common::ByteStream& buffer) {
+    int read_string(std::string& str, common::ByteStream& buffer) {
+        int ret = common::E_OK;
         if (entry_index_.empty()) {
-            init_map(buffer);
+            ret = init_map(buffer);
+            if (ret != common::E_OK) {
+                return ret;
+            }
         }
         int32_t code = 0;
-        value_decoder_.read_int(code, buffer);
-        return entry_index_[code];
+        ret = value_decoder_.read_int(code, buffer);
+        if (ret != common::E_OK) {
+            return ret;
+        }
+        if (code < 0 || static_cast<size_t>(code) >= entry_index_.size()) {
+            return common::E_TSFILE_CORRUPTED;
+        }
+        str = entry_index_[code];
+        return ret;
     }
 
     bool has_next(common::ByteStream& buffer) {
@@ -90,6 +105,9 @@ class DictionaryDecoder : public Decoder {
         int length = 0;
         if (RET_FAIL(common::SerializationUtil::read_var_int(length, buffer))) {
             return common::E_PARTIAL_READ;
+        }
+        if (length < 0) {
+            return common::E_TSFILE_CORRUPTED;
         }
         for (int i = 0; i < length; i++) {
             std::string str;

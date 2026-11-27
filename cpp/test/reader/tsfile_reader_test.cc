@@ -2394,3 +2394,49 @@ TEST_F(TsFileReaderTest, DestroyResultSetAfterClose) {
     // Destroying the result set after close must still delete it (no leak).
     reader.destroy_query_data_set(result_set);
 }
+
+// Regression: a non-aligned (tree) scan with a TsBlock capacity smaller than
+// a single row spun forever in the query stage.  With capacity 8 bytes and a
+// 16-byte row (time INT64 + value INT64), TsBlock::init() computes
+// max_row_count_ == 0, so the per-type decode loops report E_OVERFLOW before
+// appending anything.  decode_cur_page_data() rewrote that to E_OK with zero
+// rows, and the scan iterator retried the same page endlessly.  The fix
+// surfaces the impossible capacity as E_INVALID_ARG instead of looping.
+TEST_F(TsFileReaderTest, NonAlignedTreeSmallTsBlockDoesNotHang) {
+    const std::string device = "root.dev_non_aligned_small_block";
+    MeasurementSchema schema("v0", INT64, PLAIN, UNCOMPRESSED);
+    ASSERT_EQ(tsfile_writer_->register_timeseries(device, schema), E_OK);
+
+    const int N = 10;
+    auto schemas = std::make_shared<std::vector<MeasurementSchema>>(1, schema);
+    Tablet tablet(device, schemas, N);
+    for (int i = 0; i < N; ++i) {
+        ASSERT_EQ(tablet.add_timestamp(i, i), E_OK);
+        ASSERT_EQ(tablet.add_value(i, 0u, static_cast<int64_t>(i)), E_OK);
+    }
+    ASSERT_EQ(tsfile_writer_->write_tablet(tablet), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    uint32_t prev_capacity = common::g_config_value_.tsblock_max_memory_;
+    struct Guard {
+        uint32_t cap;
+        ~Guard() { common::g_config_value_.tsblock_max_memory_ = cap; }
+    } guard{prev_capacity};
+    common::g_config_value_.tsblock_max_memory_ = 8;
+
+    storage::TsFileIOReader io_reader;
+    ASSERT_EQ(io_reader.init(file_name_), E_OK);
+    auto device_id = std::make_shared<StringArrayDeviceID>(device);
+    storage::TsFileSeriesScanIterator* ssi = nullptr;
+    common::PageArena pa;
+    pa.init(512, common::MOD_TSFILE_READER);
+    ASSERT_EQ(io_reader.alloc_ssi(device_id, "v0", ssi, pa), E_OK);
+    ASSERT_NE(ssi, nullptr);
+
+    common::TsBlock* block = nullptr;
+    const int ret = ssi->get_next(block, /*alloc_tsblock=*/true);
+    EXPECT_EQ(ret, common::E_INVALID_ARG);
+
+    io_reader.revert_ssi(ssi);
+}

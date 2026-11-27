@@ -25,6 +25,7 @@
 #include <future>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -52,6 +53,13 @@ extern int set_page_max_point_count(uint32_t page_max_ponint_count);
 // tree); leaves the field untouched on rejection.
 extern int set_max_degree_of_index_node(uint32_t max_degree_of_index_node);
 
+// A single TsFileWriter is safe to share across threads: every public
+// operation that touches the writer's internal state (schema map, chunk
+// writers, the underlying IO buffer, and flush/close bookkeeping) is
+// serialized by an internal recursive mutex, so concurrent writes to
+// different devices no longer race.  Note that calls are serialized rather
+// than truly parallel; for independent, fully parallel write throughput use
+// one writer per thread instead.
 class TsFileWriter {
    public:
     TsFileWriter();
@@ -201,6 +209,11 @@ class TsFileWriter {
     split_tablet_by_device(const Tablet& tablet);
 
    private:
+    // Serializes every public operation so one writer can be shared across
+    // threads.  Recursive because flush() is reached both directly and from
+    // write_record/write_tablet/write_table via check_memory_size..., and
+    // because close() calls flush().
+    mutable std::recursive_mutex write_mutex_;
     storage::RandomAccessWriteFile* write_file_;
     storage::TsFileIOWriter* io_writer_;
     // device_id -> MeasurementSchemaGroup
