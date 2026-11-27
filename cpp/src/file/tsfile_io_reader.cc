@@ -90,11 +90,24 @@ int TsFileIOReader::alloc_ssi(std::shared_ptr<IDeviceID> device_id,
                               const std::string& measurement_name,
                               TsFileSeriesScanIterator*& ssi,
                               common::PageArena& pa, Filter* time_filter) {
+    return alloc_ssi(device_id, measurement_name, ssi, pa, time_filter,
+                     nullptr);
+}
+
+int TsFileIOReader::alloc_ssi(std::shared_ptr<IDeviceID> device_id,
+                              const std::string& measurement_name,
+                              TsFileSeriesScanIterator*& ssi,
+                              common::PageArena& pa, Filter* time_filter,
+                              common::TSDataType* out_series_type) {
     int ret = E_OK;
     if (RET_FAIL(load_tsfile_meta_if_necessary())) {
     } else if (!bloom_filter_contains(device_id->get_device_name(),
                                       measurement_name)) {
-        return E_NO_MORE_DATA;
+        // The measurement is absent from this file (the bloom filter has no
+        // false negatives). Report it as not-found rather than E_NO_MORE_DATA
+        // so callers can tell a missing series apart from one that exists but
+        // has no data in the query range.
+        return E_NOT_EXIST;
     } else {
         void* ssi_buf =
             mem_alloc(sizeof(TsFileSeriesScanIterator), MOD_TSFILE_READER);
@@ -106,6 +119,9 @@ int TsFileIOReader::alloc_ssi(std::shared_ptr<IDeviceID> device_id,
         } else if (time_filter != nullptr &&
                    !filter_stasify(ssi->itimeseries_index_, time_filter)) {
             ret = E_NO_MORE_DATA;
+            if (out_series_type != nullptr) {
+                *out_series_type = ssi->get_data_type();
+            }
         } else if (RET_FAIL(ssi->init_chunk_reader())) {
         }
         if (ret != E_OK) {
@@ -1303,7 +1319,7 @@ int TsFileIOReader::do_load_timeseries_index(
         std::cout << "do_load_timeseries_index, reader file at " << start_offset
                   << " to " << end_offset << std::endl;
 #endif
-        while (IS_SUCC(ret)) {
+        while (IS_SUCC(ret) && bs.has_remaining()) {
             TimeseriesIndex cur_timeseries_index;
             PageArena cur_timeseries_index_pa;
             cur_timeseries_index_pa.init(512, MOD_TSFILE_READER);  // TODO 512
@@ -1352,7 +1368,10 @@ int TsFileIOReader::do_load_timeseries_index(
                 break;
             }
         }  // end while
-        if (!found) {
+        if (!found && IS_SUCC(ret)) {
+            // Every complete entry in the range was scanned without a match.
+            // A deserialization error mid-entry (E_PARTIAL_READ, E_OOM, ...)
+            // is propagated instead of being masked as a missing series.
             ret = E_NOT_EXIST;
         }
     }

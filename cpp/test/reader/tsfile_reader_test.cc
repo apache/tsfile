@@ -2303,6 +2303,149 @@ TEST_F(TsFileReaderTest, RepeatedGetTimeseriesMetadataDoesNotLeakArena) {
     reader.close();
 }
 
+TEST_F(TsFileReaderTest, MultiPathKeepsNullColumnForSeriesEmptyInRange) {
+    const std::string device = "root.t";
+    ASSERT_EQ(tsfile_writer_->register_timeseries(
+                  device,
+                  MeasurementSchema("v1", TSDataType::INT64, TSEncoding::PLAIN,
+                                    CompressionType::UNCOMPRESSED)),
+              E_OK);
+    ASSERT_EQ(tsfile_writer_->register_timeseries(
+                  device,
+                  MeasurementSchema("v2", TSDataType::INT64, TSEncoding::PLAIN,
+                                    CompressionType::UNCOMPRESSED)),
+              E_OK);
+
+    // v1 has data only outside the query range; v2 has data inside it.
+    TsRecord r1(100, device);
+    r1.add_point("v1", static_cast<int64_t>(1));
+    ASSERT_EQ(tsfile_writer_->write_record(r1), E_OK);
+    TsRecord r2(101, device);
+    r2.add_point("v1", static_cast<int64_t>(2));
+    ASSERT_EQ(tsfile_writer_->write_record(r2), E_OK);
+    TsRecord r3(1000, device);
+    r3.add_point("v2", static_cast<int64_t>(20));
+    ASSERT_EQ(tsfile_writer_->write_record(r3), E_OK);
+    TsRecord r4(1001, device);
+    r4.add_point("v2", static_cast<int64_t>(21));
+    ASSERT_EQ(tsfile_writer_->write_record(r4), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    std::vector<std::string> paths = {"root.t.v1", "root.t.v2"};
+    storage::ResultSet* result = nullptr;
+    ASSERT_EQ(reader.query(paths, 1000, 1001, result), E_OK);
+    ASSERT_NE(result, nullptr);
+
+    auto metadata = result->get_metadata();
+    ASSERT_EQ(metadata->get_column_count(), 3u);
+    ASSERT_EQ(metadata->get_column_name(1), "time");
+    ASSERT_EQ(metadata->get_column_name(2), "root.t.v1");
+    ASSERT_EQ(metadata->get_column_name(3), "root.t.v2");
+    ASSERT_EQ(metadata->get_column_type(2), TSDataType::INT64);
+    ASSERT_EQ(metadata->get_column_type(3), TSDataType::INT64);
+
+    bool has_next = false;
+    ASSERT_EQ(result->next(has_next), E_OK);
+    ASSERT_TRUE(has_next);
+    EXPECT_TRUE(result->is_null(2));  // v1 has no data in range -> NULL
+    EXPECT_FALSE(result->is_null(3));
+    EXPECT_EQ(result->get_value<int64_t>(3), 20);
+
+    ASSERT_EQ(result->next(has_next), E_OK);
+    ASSERT_TRUE(has_next);
+    EXPECT_TRUE(result->is_null(2));
+    EXPECT_FALSE(result->is_null(3));
+    EXPECT_EQ(result->get_value<int64_t>(3), 21);
+
+    ASSERT_EQ(result->next(has_next), E_OK);
+    EXPECT_FALSE(has_next);
+
+    reader.destroy_query_data_set(result);
+    reader.close();
+}
+
+TEST_F(TsFileReaderTest, SinglePathEmptyInRangeKeepsColumnWithNoRows) {
+    const std::string device = "root.t";
+    ASSERT_EQ(tsfile_writer_->register_timeseries(
+                  device,
+                  MeasurementSchema("v1", TSDataType::INT64, TSEncoding::PLAIN,
+                                    CompressionType::UNCOMPRESSED)),
+              E_OK);
+    TsRecord r1(100, device);
+    r1.add_point("v1", static_cast<int64_t>(1));
+    ASSERT_EQ(tsfile_writer_->write_record(r1), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    std::vector<std::string> paths = {"root.t.v1"};
+    storage::ResultSet* result = nullptr;
+    ASSERT_EQ(reader.query(paths, 1000, 1001, result), E_OK);
+    ASSERT_NE(result, nullptr);
+
+    auto metadata = result->get_metadata();
+    ASSERT_EQ(metadata->get_column_count(), 2u);
+    ASSERT_EQ(metadata->get_column_name(1), "time");
+    ASSERT_EQ(metadata->get_column_name(2), "root.t.v1");
+    ASSERT_EQ(metadata->get_column_type(2), TSDataType::INT64);
+
+    bool has_next = false;
+    ASSERT_EQ(result->next(has_next), E_OK);
+    EXPECT_FALSE(has_next);
+
+    reader.destroy_query_data_set(result);
+    reader.close();
+}
+
+TEST_F(TsFileReaderTest, AllSelectedEmptyInRangeKeepColumnsWithNoRows) {
+    const std::string device = "root.t";
+    ASSERT_EQ(tsfile_writer_->register_timeseries(
+                  device,
+                  MeasurementSchema("v1", TSDataType::INT64, TSEncoding::PLAIN,
+                                    CompressionType::UNCOMPRESSED)),
+              E_OK);
+    ASSERT_EQ(tsfile_writer_->register_timeseries(
+                  device,
+                  MeasurementSchema("v2", TSDataType::INT64, TSEncoding::PLAIN,
+                                    CompressionType::UNCOMPRESSED)),
+              E_OK);
+
+    TsRecord r1(100, device);
+    r1.add_point("v1", static_cast<int64_t>(1));
+    ASSERT_EQ(tsfile_writer_->write_record(r1), E_OK);
+    TsRecord r2(200, device);
+    r2.add_point("v2", static_cast<int64_t>(2));
+    ASSERT_EQ(tsfile_writer_->write_record(r2), E_OK);
+    ASSERT_EQ(tsfile_writer_->flush(), E_OK);
+    ASSERT_EQ(tsfile_writer_->close(), E_OK);
+
+    storage::TsFileReader reader;
+    ASSERT_EQ(reader.open(file_name_), E_OK);
+    std::vector<std::string> paths = {"root.t.v1", "root.t.v2"};
+    storage::ResultSet* result = nullptr;
+    ASSERT_EQ(reader.query(paths, 1000, 1001, result), E_OK);
+    ASSERT_NE(result, nullptr);
+
+    auto metadata = result->get_metadata();
+    ASSERT_EQ(metadata->get_column_count(), 3u);
+    ASSERT_EQ(metadata->get_column_name(1), "time");
+    ASSERT_EQ(metadata->get_column_name(2), "root.t.v1");
+    ASSERT_EQ(metadata->get_column_name(3), "root.t.v2");
+    ASSERT_EQ(metadata->get_column_type(2), TSDataType::INT64);
+    ASSERT_EQ(metadata->get_column_type(3), TSDataType::INT64);
+
+    bool has_next = false;
+    ASSERT_EQ(result->next(has_next), E_OK);
+    EXPECT_FALSE(has_next);
+
+    reader.destroy_query_data_set(result);
+    reader.close();
+}
+
 // Regression: querying a closed TsFileReader used to dereference the
 // already-deleted internal executor and crash with SIGSEGV.  After close()
 // every query/execute entry point must return a clear error instead.
