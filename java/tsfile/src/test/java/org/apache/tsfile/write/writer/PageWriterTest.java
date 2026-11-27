@@ -31,13 +31,36 @@ import org.apache.tsfile.write.schema.MeasurementSchema;
 
 import org.junit.Test;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 public class PageWriterTest {
+
+  @Test
+  public void testRetainedMemoryEstimateIncludesCapacityAfterReset() {
+    PageWriter writer = new PageWriter();
+    writer.setTimeEncoder(new PlainEncoder(TSDataType.INT64, 0));
+    writer.setValueEncoder(new PlainEncoder(TSDataType.TEXT, 0));
+    writer.initStatistics(TSDataType.TEXT);
+
+    byte[] payload = new byte[64 * 1024];
+    writer.write(1L, new Binary(payload));
+
+    ByteArrayOutputStream valueLength = new ByteArrayOutputStream();
+    int encodedLengthSize = ReadWriteForEncodingUtils.writeVarInt(payload.length, valueLength);
+    assertEquals(8 + encodedLengthSize + payload.length, writer.estimateMaxMemSize());
+    assertTrue(writer.estimateRetainedMemSize() > writer.estimateMaxMemSize());
+
+    writer.reset(new MeasurementSchema("s0", TSDataType.TEXT, TSEncoding.PLAIN));
+
+    assertEquals(0, writer.estimateMaxMemSize());
+    assertTrue(writer.estimateRetainedMemSize() >= payload.length);
+  }
 
   @Test
   public void testWriteInt() {

@@ -25,6 +25,8 @@ import org.apache.tsfile.exception.encoding.TsFileEncodingException;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.PublicBAOS;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import org.slf4j.Logger;
@@ -34,6 +36,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -83,6 +86,16 @@ public abstract class RleEncoder<T extends Comparable<T>> extends Encoder {
    */
   protected List<byte[]> bytesBuffer;
 
+  private int maximumValuesSize;
+
+  private long currentValuesRetainedSize;
+
+  private int maximumBytesBufferSize;
+
+  private long currentBytesBufferRetainedSize;
+
+  private int maximumByteCacheSize;
+
   /** flag which indicate encoding mode false -- rle true -- bit-packing. */
   protected boolean isBitPackRun;
 
@@ -105,18 +118,42 @@ public abstract class RleEncoder<T extends Comparable<T>> extends Encoder {
     bytesBuffer = new ArrayList<>();
     isBitPackRun = false;
     isBitWidthSaved = false;
-    byteCache = new ByteArrayOutputStream();
+    byteCache = new PublicBAOS();
+  }
+
+  final void recordValueForRetainedSize(T value, long retainedValueSize) {
+    values.add(value);
+    currentValuesRetainedSize += retainedValueSize;
+    maximumValuesSize = Math.max(maximumValuesSize, values.size());
+  }
+
+  final void recordBytesBufferForRetainedSize(byte[] bytes) {
+    bytesBuffer.add(bytes);
+    currentBytesBufferRetainedSize += RamUsageEstimator.sizeOf(bytes);
+    maximumBytesBufferSize = Math.max(maximumBytesBufferSize, bytesBuffer.size());
+  }
+
+  private void clearBytesBuffer() {
+    bytesBuffer.clear();
+    currentBytesBufferRetainedSize = 0;
   }
 
   protected void reset() {
+    if (byteCache != null) {
+      maximumByteCacheSize = Math.max(maximumByteCacheSize, byteCache.size());
+    }
     numBufferedValues = 0;
     repeatCount = 0;
     bitPackedGroupCount = 0;
-    bytesBuffer.clear();
+    clearBytesBuffer();
     isBitPackRun = false;
     isBitWidthSaved = false;
     byteCache.reset();
     values.clear();
+    currentValuesRetainedSize = 0;
+    if (bufferedValues != null) {
+      Arrays.fill(bufferedValues, null);
+    }
   }
 
   /**
@@ -163,6 +200,18 @@ public abstract class RleEncoder<T extends Comparable<T>> extends Encoder {
    */
   protected abstract void writeRleRun() throws IOException;
 
+  @Override
+  public long getRetainedSizeInBytes() {
+    if (byteCache != null) {
+      maximumByteCacheSize = Math.max(maximumByteCacheSize, byteCache.size());
+    }
+    return RamUsageEstimator.shallowSizeOf(this)
+        + estimateArrayListRetainedSize(maximumValuesSize, currentValuesRetainedSize)
+        + RamUsageEstimator.shallowSizeOf(bufferedValues)
+        + estimateArrayListRetainedSize(maximumBytesBufferSize, currentBytesBufferRetainedSize)
+        + estimateByteArrayOutputStreamRetainedSize(byteCache, maximumByteCacheSize);
+  }
+
   /** Start a bit-packing run transform values to bytes and buffer them in cache. */
   public void writeOrAppendBitPackedRun() {
     if (bitPackedGroupCount >= TSFileConfig.RLE_MAX_BIT_PACKED_NUM) {
@@ -199,7 +248,7 @@ public abstract class RleEncoder<T extends Comparable<T>> extends Encoder {
     for (byte[] bytes : bytesBuffer) {
       byteCache.write(bytes, 0, bytes.length);
     }
-    bytesBuffer.clear();
+    clearBytesBuffer();
     isBitPackRun = false;
     bitPackedGroupCount = 0;
   }

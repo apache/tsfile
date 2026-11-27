@@ -22,9 +22,13 @@ import org.apache.tsfile.encoding.encoder.Encoder;
 import org.apache.tsfile.encoding.encoder.PlainEncoder;
 import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.MetaMarker;
+import org.apache.tsfile.file.header.PageHeader;
 import org.apache.tsfile.file.metadata.enums.CompressionType;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.file.metadata.statistics.Statistics;
+import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.PublicBAOS;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 import org.apache.tsfile.write.chunk.ValueChunkWriter;
@@ -35,9 +39,48 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 public class ValueChunkWriterTest {
+
+  @Test
+  public void testRetainedSizeIncludesStatisticsAndCapacityAfterFlush() throws IOException {
+    ValueChunkWriter chunkWriter =
+        new ValueChunkWriter(
+            "s1",
+            CompressionType.UNCOMPRESSED,
+            TSDataType.TEXT,
+            TSEncoding.PLAIN,
+            new PlainEncoder(TSDataType.TEXT, 0));
+    byte[] payload = new byte[64 * 1024];
+    chunkWriter.write(1, new Binary(payload), false);
+    Statistics<?> firstPageStatistics = chunkWriter.getPageWriter().getStatistics();
+    chunkWriter.sealCurrentPage();
+
+    long sealedEstimate = chunkWriter.estimateMaxSeriesMemSize();
+    int pageBufferCapacity = chunkWriter.getPageBuffer().getBuf().length;
+    assertSame(firstPageStatistics.getFirstValue(), chunkWriter.getStatistics().getFirstValue());
+    assertSame(firstPageStatistics.getLastValue(), chunkWriter.getStatistics().getLastValue());
+    assertTrue(sealedEstimate >= pageBufferCapacity + payload.length);
+    long estimateWithoutFirstPageStatistics =
+        RamUsageEstimator.shallowSizeOf(chunkWriter)
+            + RamUsageEstimator.shallowSizeOf(chunkWriter.getPageBuffer())
+            + RamUsageEstimator.sizeOf(chunkWriter.getPageBuffer().getBuf())
+            + chunkWriter.getPageWriter().estimateRetainedMemSize()
+            + PageHeader.estimateMaxPageHeaderSizeWithoutStatistics()
+            + chunkWriter.getStatistics().getRetainedSizeInBytes();
+    assertEquals(
+        estimateWithoutFirstPageStatistics + RamUsageEstimator.shallowSizeOf(firstPageStatistics),
+        sealedEstimate);
+
+    TsFileIOWriter fileWriter = new TsFileIOWriter(new TestTsFileOutput(), true);
+    chunkWriter.writeToFileWriter(fileWriter);
+
+    assertEquals(0, chunkWriter.getPageBuffer().size());
+    assertTrue(chunkWriter.estimateMaxSeriesMemSize() >= pageBufferCapacity);
+  }
 
   @Test
   public void testWrite1() {

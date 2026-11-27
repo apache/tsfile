@@ -23,6 +23,7 @@ import org.apache.tsfile.encoding.bitpacking.IntPacker;
 import org.apache.tsfile.encoding.fire.IntFire;
 import org.apache.tsfile.exception.encoding.TsFileEncodingException;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import java.io.ByteArrayOutputStream;
@@ -64,6 +65,15 @@ public class FloatSprintzEncoder extends SprintzEncoder {
   @Override
   public long getMaxByteSize() {
     return 1 + (long) (values.size() + 1) * Integer.BYTES;
+  }
+
+  @Override
+  public long getRetainedSizeInBytes() {
+    return super.getRetainedSizeInBytes()
+        + getVectorRetainedSize(values, Float.class)
+        + RamUsageEstimator.sizeOf(convertBuffer)
+        + (firePred == null ? 0 : firePred.getRetainedSizeInBytes())
+        + RamUsageEstimator.shallowSizeOf(packer);
   }
 
   protected int predict(Float value, Float preVlaue) throws TsFileEncodingException {

@@ -30,6 +30,7 @@ import org.apache.tsfile.read.common.block.column.TimeColumn;
 import org.apache.tsfile.read.common.block.column.TimeColumnBuilder;
 import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.RamUsageEstimator;
 
 import java.util.List;
 
@@ -37,6 +38,11 @@ import static java.util.Objects.requireNonNull;
 import static org.apache.tsfile.utils.Preconditions.checkArgument;
 
 public class TsBlockBuilder {
+
+  private static final long INSTANCE_SIZE =
+      RamUsageEstimator.shallowSizeOfInstance(TsBlockBuilder.class);
+  private static final long SHARED_STATUS_SIZE =
+      RamUsageEstimator.shallowSizeOfInstance(TsBlockBuilderStatus.class);
 
   // We choose default initial size to be 8 for TsBlockBuilder and ColumnBuilder
   // so the underlying data is larger than the object overhead, and the size is power of 2.
@@ -224,11 +230,15 @@ public class TsBlockBuilder {
   public long getRetainedSizeInBytes() {
     // We use a foreach loop instead of streams
     // as it has much better performance.
-    long retainedSizeInBytes = timeColumnBuilder.getRetainedSizeInBytes();
+    long retainedSizeInBytes =
+        INSTANCE_SIZE
+            + RamUsageEstimator.shallowSizeOf(valueColumnBuilders)
+            + (types == null ? 0 : RamUsageEstimator.shallowSizeOfList(types))
+            + timeColumnBuilder.getRetainedSizeInBytes();
     for (ColumnBuilder columnBuilder : valueColumnBuilders) {
       retainedSizeInBytes += columnBuilder.getRetainedSizeInBytes();
     }
-    return retainedSizeInBytes;
+    return retainedSizeInBytes - valueColumnBuilders.length * SHARED_STATUS_SIZE;
   }
 
   public TsBlock build() {

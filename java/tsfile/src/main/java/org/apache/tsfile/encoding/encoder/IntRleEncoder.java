@@ -21,6 +21,7 @@ package org.apache.tsfile.encoding.encoder;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.encoding.bitpacking.IntPacker;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import java.io.ByteArrayOutputStream;
@@ -29,6 +30,9 @@ import java.util.ArrayList;
 
 /** Encoder for int value using rle or bit-packing. */
 public class IntRleEncoder extends RleEncoder<Integer> {
+
+  private static final long BOXED_VALUE_SIZE =
+      RamUsageEstimator.shallowSizeOfInstance(Integer.class);
 
   /** Packer for packing int values. */
   private IntPacker packer;
@@ -42,7 +46,7 @@ public class IntRleEncoder extends RleEncoder<Integer> {
 
   @Override
   public void encode(int value, ByteArrayOutputStream out) {
-    values.add(value);
+    recordValueForRetainedSize(value, value < -128 || value > 127 ? BOXED_VALUE_SIZE : 0);
   }
 
   @Override
@@ -106,7 +110,7 @@ public class IntRleEncoder extends RleEncoder<Integer> {
     packer.pack8Values(tmpBuffer, 0, bytes);
     // we'll not write bit-packing group to OutputStream immediately
     // we buffer them in list
-    bytesBuffer.add(bytes);
+    recordBytesBufferForRetainedSize(bytes);
   }
 
   @Override
@@ -115,6 +119,11 @@ public class IntRleEncoder extends RleEncoder<Integer> {
     // 4 + 4 + max(4+4,1 + 4 + 4 * 8)
     // length + bitwidth + max(rle-header + num, bit-header + lastNum + 8packer)
     return 45;
+  }
+
+  @Override
+  public long getRetainedSizeInBytes() {
+    return super.getRetainedSizeInBytes() + RamUsageEstimator.shallowSizeOf(packer);
   }
 
   @Override

@@ -24,6 +24,7 @@ import org.apache.tsfile.encrypt.EncryptParameter;
 import org.apache.tsfile.encrypt.EncryptUtils;
 import org.apache.tsfile.file.metadata.statistics.TimeStatistics;
 import org.apache.tsfile.utils.PublicBAOS;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import org.slf4j.Logger;
@@ -157,6 +158,14 @@ public class TimePageWriter {
    */
   public long estimateMaxMemSize() {
     return timeOut.size() + timeEncoder.getMaxByteSize();
+  }
+
+  public long estimateRetainedMemSize() {
+    return RamUsageEstimator.shallowSizeOf(this)
+        + RamUsageEstimator.shallowSizeOf(timeOut)
+        + RamUsageEstimator.sizeOf(timeOut.getBuf())
+        + timeEncoder.getRetainedSizeInBytes()
+        + statistics.getRetainedSizeInBytes();
   }
 
   /** reset this page */

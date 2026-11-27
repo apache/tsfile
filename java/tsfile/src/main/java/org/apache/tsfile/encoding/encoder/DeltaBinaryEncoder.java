@@ -22,6 +22,7 @@ package org.apache.tsfile.encoding.encoder;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.BytesUtils;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteIOUtils;
 
 import org.slf4j.Logger;
@@ -64,6 +65,11 @@ public abstract class DeltaBinaryEncoder extends Encoder {
   protected DeltaBinaryEncoder(int size) {
     super(TSEncoding.TS_2DIFF);
     blockSize = size;
+  }
+
+  @Override
+  public long getRetainedSizeInBytes() {
+    return RamUsageEstimator.shallowSizeOf(this) + RamUsageEstimator.sizeOf(encodingBlockBuffer);
   }
 
   protected abstract void writeHeader() throws IOException;
@@ -221,6 +227,11 @@ public abstract class DeltaBinaryEncoder extends Encoder {
       // The meaning of 24 is: index(4)+width(4)+minDeltaBase(4)+firstValue(4)
       return (long) 24 + writeIndex * 4;
     }
+
+    @Override
+    public long getRetainedSizeInBytes() {
+      return super.getRetainedSizeInBytes() + RamUsageEstimator.sizeOf(deltaBlockBuffer);
+    }
   }
 
   public static class LongDeltaEncoder extends DeltaBinaryEncoder {
@@ -295,6 +306,11 @@ public abstract class DeltaBinaryEncoder extends Encoder {
     public long getMaxByteSize() {
       // The meaning of 24 is: index(4)+width(4)+minDeltaBase(8)+firstValue(8)
       return (long) 24 + writeIndex * 8;
+    }
+
+    @Override
+    public long getRetainedSizeInBytes() {
+      return super.getRetainedSizeInBytes() + RamUsageEstimator.sizeOf(deltaBlockBuffer);
     }
 
     /**

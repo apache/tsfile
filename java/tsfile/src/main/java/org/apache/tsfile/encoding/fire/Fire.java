@@ -19,6 +19,8 @@
 
 package org.apache.tsfile.encoding.fire;
 
+import org.apache.tsfile.utils.RamUsageEstimator;
+
 /**
  * This class is used for Fast Integer REgression in Sprintz encoding method.Users can create a Fire
  * object and use it to train and predict the time-ordered integer-like data.
@@ -53,4 +55,20 @@ public abstract class Fire<T extends Comparable<T>> {
    * @param err the predictive error of current value
    */
   public abstract void train(T pre, T val, T err);
+
+  public long getRetainedSizeInBytes() {
+    long retainedSize = RamUsageEstimator.shallowSizeOf(this);
+    if (delta instanceof Integer value) {
+      if (value < -128 || value > 127) {
+        retainedSize += RamUsageEstimator.shallowSizeOf(delta);
+      }
+    } else if (delta instanceof Long value) {
+      if (value < -128 || value > 127) {
+        retainedSize += RamUsageEstimator.shallowSizeOf(delta);
+      }
+    } else if (delta != null) {
+      retainedSize += RamUsageEstimator.shallowSizeOf(delta);
+    }
+    return retainedSize;
+  }
 }

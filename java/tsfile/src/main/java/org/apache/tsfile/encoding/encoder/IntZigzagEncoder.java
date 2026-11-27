@@ -21,6 +21,7 @@ package org.apache.tsfile.encoding.encoder;
 
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import org.slf4j.Logger;
@@ -37,9 +38,14 @@ import java.util.List;
  * https://gist.github.com/mfuerstenau/ba870a29e16536fdbaba
  */
 public class IntZigzagEncoder extends Encoder {
+
+  private static final long BOXED_VALUE_SIZE =
+      RamUsageEstimator.shallowSizeOfInstance(Integer.class);
   private static final Logger logger = LoggerFactory.getLogger(IntZigzagEncoder.class);
   private List<Integer> values;
   byte[] buf = new byte[5];
+  private int maximumValuesSize;
+  private long currentValuesRetainedSize;
 
   public IntZigzagEncoder() {
     super(TSEncoding.ZIGZAG);
@@ -65,6 +71,10 @@ public class IntZigzagEncoder extends Encoder {
 
   public void encode(int value, ByteArrayOutputStream out) {
     values.add(value);
+    maximumValuesSize = Math.max(maximumValuesSize, values.size());
+    if (value < -128 || value > 127) {
+      currentValuesRetainedSize += BOXED_VALUE_SIZE;
+    }
   }
 
   @Override
@@ -89,6 +99,7 @@ public class IntZigzagEncoder extends Encoder {
 
   private void reset() {
     values.clear();
+    currentValuesRetainedSize = 0;
   }
 
   @Override
@@ -98,5 +109,12 @@ public class IntZigzagEncoder extends Encoder {
     }
     // try to calculate max value
     return (long) 8 + values.size() * 4;
+  }
+
+  @Override
+  public long getRetainedSizeInBytes() {
+    return RamUsageEstimator.shallowSizeOf(this)
+        + RamUsageEstimator.sizeOf(buf)
+        + estimateArrayListRetainedSize(maximumValuesSize, currentValuesRetainedSize);
   }
 }

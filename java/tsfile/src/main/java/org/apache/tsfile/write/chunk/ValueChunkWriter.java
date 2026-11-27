@@ -34,6 +34,7 @@ import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.PublicBAOS;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.write.page.ValuePageWriter;
 import org.apache.tsfile.write.writer.TsFileIOWriter;
@@ -337,10 +338,17 @@ public class ValueChunkWriter {
   }
 
   public long estimateMaxSeriesMemSize() {
-    return pageBuffer.size()
-        + pageWriter.estimateMaxMemSize()
+    return RamUsageEstimator.shallowSizeOf(this)
+        + RamUsageEstimator.shallowSizeOf(pageBuffer)
+        + RamUsageEstimator.sizeOf(pageBuffer.getBuf())
+        + pageWriter.estimateRetainedMemSize()
         + PageHeader.estimateMaxPageHeaderSizeWithoutStatistics()
-        + pageWriter.getStatistics().getSerializedSize();
+        + (firstPageStatistics == null
+            ? 0
+            : firstPageStatistics.getClass() == statistics.getClass()
+                ? RamUsageEstimator.shallowSizeOf(firstPageStatistics)
+                : firstPageStatistics.getRetainedSizeInBytes())
+        + statistics.getRetainedSizeInBytes();
   }
 
   public long getCurrentChunkSize() {

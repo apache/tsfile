@@ -46,6 +46,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -84,6 +85,8 @@ public class Tablet implements Accountable {
 
   /** MeasurementId->indexOf({@link MeasurementSchema}) */
   private final Map<String, Integer> measurementIndex;
+
+  private boolean schemasMayDifferFromMeasurementIndex;
 
   private long[] timestamps;
 
@@ -280,6 +283,7 @@ public class Tablet implements Accountable {
 
   public void setSchemas(List<IMeasurementSchema> schemas) {
     this.schemas = schemas;
+    this.schemasMayDifferFromMeasurementIndex = true;
   }
 
   public void initBitMaps() {
@@ -1331,6 +1335,7 @@ public class Tablet implements Accountable {
         TABLET_SIZE
             + RamUsageEstimator.sizeOf(insertTargetName)
             + RamUsageEstimator.sizeOf(timestamps)
+            + RamUsageEstimator.shallowSizeOf(values)
             + shallowSizeOfList(columnCategories)
             + RamUsageEstimator.sizeOf(bitMaps)
             + RamUsageEstimator.shallowSizeOfList(tagColumnIndexes)
@@ -1341,13 +1346,26 @@ public class Tablet implements Accountable {
 
     if (timeSeries != null) {
       totalSizeInBytes += RamUsageEstimator.shallowSizeOfList(timeSeries);
+      IdentityHashMap<String, Boolean> retainedMeasurementNames = null;
+      if (schemasMayDifferFromMeasurementIndex) {
+        retainedMeasurementNames = new IdentityHashMap<>();
+        for (String measurementName : measurementIndex.keySet()) {
+          retainedMeasurementNames.put(measurementName, Boolean.TRUE);
+        }
+      }
       for (int column = 0; column < timeSeries.size(); column++) {
         final IMeasurementSchema measurementSchema = timeSeries.get(column);
         if (measurementSchema == null) {
           continue;
         }
-        // Measurement schema size
-        totalSizeInBytes += 75;
+        String measurementName = measurementSchema.getMeasurementName();
+        long measurementNameSize =
+            retainedMeasurementNames == null
+                ? RamUsageEstimator.sizeOf(measurementName)
+                : retainedMeasurementNames.put(measurementName, Boolean.TRUE) == null
+                    ? 0
+                    : RamUsageEstimator.sizeOf(measurementName);
+        totalSizeInBytes += measurementSchema.ramBytesUsed() - measurementNameSize;
 
         final TSDataType tsDataType = measurementSchema.getType();
         if (tsDataType == null) {

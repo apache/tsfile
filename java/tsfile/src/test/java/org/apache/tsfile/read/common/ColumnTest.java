@@ -19,9 +19,11 @@
 
 package org.apache.tsfile.read.common;
 
+import org.apache.tsfile.block.TsBlockBuilderStatus;
 import org.apache.tsfile.block.column.Column;
 import org.apache.tsfile.block.column.ColumnBuilder;
 import org.apache.tsfile.enums.TSDataType;
+import org.apache.tsfile.read.common.block.TsBlockBuilder;
 import org.apache.tsfile.read.common.block.column.BinaryColumn;
 import org.apache.tsfile.read.common.block.column.BinaryColumnBuilder;
 import org.apache.tsfile.read.common.block.column.BooleanColumn;
@@ -42,6 +44,7 @@ import org.apache.tsfile.read.common.block.column.TimeColumnBuilder;
 import org.apache.tsfile.read.common.type.Type;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BytesUtils;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.TsPrimitiveType;
 
 import org.junit.Assert;
@@ -53,9 +56,91 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 
 public class ColumnTest {
+
+  @Test
+  public void tsBlockBuilderRetainedSizeDoesNotCountSharedStatusTwice() {
+    List<TSDataType> types = Arrays.asList(TSDataType.TEXT);
+    TsBlockBuilder blockBuilder = new TsBlockBuilder(1, types);
+
+    long expectedRetainedSize =
+        RamUsageEstimator.shallowSizeOfInstance(TsBlockBuilder.class)
+            + RamUsageEstimator.shallowSizeOf(new ColumnBuilder[1])
+            + RamUsageEstimator.shallowSizeOfList(types)
+            + blockBuilder.getTimeColumnBuilder().getRetainedSizeInBytes()
+            + blockBuilder.getColumnBuilder(0).getRetainedSizeInBytes()
+            - RamUsageEstimator.shallowSizeOfInstance(TsBlockBuilderStatus.class);
+
+    Assert.assertEquals(expectedRetainedSize, blockBuilder.getRetainedSizeInBytes());
+  }
+
+  @Test
+  public void binaryColumnBuilderRetainedSizeIncludesBinaryPayload() {
+    int valueCount = 32;
+    int payloadSize = 1024;
+    long emptyValueEstimate = getRetainedSizeForBinaryColumn(valueCount, 0);
+    long payloadEstimate = getRetainedSizeForBinaryColumn(valueCount, payloadSize);
+    Binary emptyValue = new Binary(new byte[0]);
+    Binary payload = new Binary(new byte[payloadSize]);
+
+    Assert.assertEquals(
+        valueCount * (payload.ramBytesUsed() - emptyValue.ramBytesUsed()),
+        payloadEstimate - emptyValueEstimate);
+  }
+
+  @Test
+  public void binaryColumnBuilderRetainedSizeCountsSharedBinaryOnce() {
+    Binary value = new Binary(new byte[1024]);
+    BinaryColumnBuilder onePosition = new BinaryColumnBuilder(null, 2);
+    onePosition.writeBinary(value);
+    BinaryColumnBuilder twoPositions = new BinaryColumnBuilder(null, 2);
+    twoPositions.writeBinary(value).writeBinary(value);
+
+    Assert.assertEquals(
+        onePosition.getRetainedSizeInBytes(), twoPositions.getRetainedSizeInBytes());
+  }
+
+  @Test
+  public void binaryColumnBuilderRetainedSizeCountsSharedPayloadOnce() {
+    byte[] payload = new byte[1024];
+    Binary first = new Binary(payload);
+    Binary second = new Binary(payload);
+    BinaryColumnBuilder onePosition = new BinaryColumnBuilder(null, 2);
+    onePosition.writeBinary(first);
+    BinaryColumnBuilder twoPositions = new BinaryColumnBuilder(null, 2);
+    twoPositions.writeBinary(first).writeBinary(second);
+
+    Assert.assertEquals(
+        RamUsageEstimator.shallowSizeOf(second),
+        twoPositions.getRetainedSizeInBytes() - onePosition.getRetainedSizeInBytes());
+  }
+
+  private long getRetainedSizeForBinaryColumn(int valueCount, int payloadSize) {
+    TsBlockBuilder blockBuilder = new TsBlockBuilder(1, Arrays.asList(TSDataType.TEXT));
+    ColumnBuilder columnBuilder = blockBuilder.getColumnBuilder(0);
+    for (int i = 0; i < valueCount; i++) {
+      columnBuilder.writeBinary(new Binary(new byte[payloadSize]));
+    }
+    return blockBuilder.getRetainedSizeInBytes();
+  }
+
+  @Test
+  public void binaryColumnBuilderRetainedSizeTracksBinaryPayloadReplacement() {
+    BinaryColumnBuilder columnBuilder = new BinaryColumnBuilder(null, 1);
+    Binary value = new Binary(new byte[16]);
+    columnBuilder.writeBinary(value);
+    long retainedSizeBeforeReplacement = columnBuilder.getRetainedSizeInBytes();
+    byte[] replacement = new byte[2048];
+
+    value.setValues(replacement);
+
+    Assert.assertEquals(
+        RamUsageEstimator.sizeOf(replacement) - RamUsageEstimator.sizeOf(new byte[16]),
+        columnBuilder.getRetainedSizeInBytes() - retainedSizeBeforeReplacement);
+  }
 
   @Test
   public void testDictionaryTsPrimitiveType() {

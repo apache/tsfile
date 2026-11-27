@@ -33,8 +33,6 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.Objects;
 
-import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfCharArray;
-
 public class StringStatistics extends Statistics<Binary> {
   public static final long INSTANCE_SIZE =
       RamUsageEstimator.shallowSizeOfInstance(StringStatistics.class)
@@ -64,11 +62,11 @@ public class StringStatistics extends Statistics<Binary> {
 
   @Override
   public long getRetainedSizeInBytes() {
-    return INSTANCE_SIZE
-        + sizeOfCharArray(firstValue.getLength())
-        + sizeOfCharArray(lastValue.getLength())
-        + sizeOfCharArray(minValue.getLength())
-        + sizeOfCharArray(maxValue.getLength());
+    return RamUsageEstimator.shallowSizeOf(this)
+        + BinaryStatistics.getUniqueBinaryRetainedSize(firstValue, null, null, null)
+        + BinaryStatistics.getUniqueBinaryRetainedSize(lastValue, firstValue, null, null)
+        + BinaryStatistics.getUniqueBinaryRetainedSize(minValue, firstValue, lastValue, null)
+        + BinaryStatistics.getUniqueBinaryRetainedSize(maxValue, firstValue, lastValue, minValue);
   }
 
   public void initializeStats(Binary first, Binary last, Binary min, Binary max) {

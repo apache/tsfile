@@ -20,6 +20,7 @@
 package org.apache.tsfile.encoding.encoder;
 
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.utils.RamUsageEstimator;
 
 import java.io.ByteArrayOutputStream;
 
@@ -77,6 +78,13 @@ public class IntChimpEncoder extends GorillaEncoderV2 {
   @Override
   public final int getOneItemMaxSize() {
     return ONE_ITEM_MAX_SIZE;
+  }
+
+  @Override
+  public long getRetainedSizeInBytes() {
+    return super.getRetainedSizeInBytes()
+        + RamUsageEstimator.sizeOf(storedValues)
+        + RamUsageEstimator.sizeOf(indices);
   }
 
   @Override

@@ -33,7 +33,7 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.Objects;
 
-import static org.apache.tsfile.utils.RamUsageEstimator.sizeOfCharArray;
+import static org.apache.tsfile.utils.RamUsageEstimator.sizeOf;
 
 /** Statistics for string type. */
 public class BinaryStatistics extends Statistics<Binary> {
@@ -60,9 +60,28 @@ public class BinaryStatistics extends Statistics<Binary> {
 
   @Override
   public long getRetainedSizeInBytes() {
-    return INSTANCE_SIZE
-        + sizeOfCharArray(firstValue.getLength())
-        + sizeOfCharArray(lastValue.getLength());
+    return RamUsageEstimator.shallowSizeOf(this)
+        + getUniqueBinaryRetainedSize(firstValue, null, null, null)
+        + getUniqueBinaryRetainedSize(lastValue, firstValue, null, null);
+  }
+
+  static long getUniqueBinaryRetainedSize(
+      Binary value, Binary previous1, Binary previous2, Binary previous3) {
+    if (value == null) {
+      return 0;
+    }
+    long retainedSize =
+        value == previous1 || value == previous2 || value == previous3
+            ? 0
+            : RamUsageEstimator.shallowSizeOf(value);
+    byte[] payload = value.getValues();
+    if (payload != null
+        && (previous1 == null || payload != previous1.getValues())
+        && (previous2 == null || payload != previous2.getValues())
+        && (previous3 == null || payload != previous3.getValues())) {
+      retainedSize += sizeOf(payload);
+    }
+    return retainedSize;
   }
 
   /**
