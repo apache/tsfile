@@ -73,7 +73,9 @@ TEST_F(DictionaryTest, ReadJavaBinaryDictionary) {
     decoder.init();
     for (const auto& value : expected) {
         ASSERT_TRUE(decoder.has_next(stream));
-        ASSERT_EQ(decoder.read_string(stream), value);
+        std::string decoded;
+        ASSERT_EQ(decoder.read_string(decoded, stream), common::E_OK);
+        ASSERT_EQ(decoded, value);
     }
     ASSERT_FALSE(decoder.has_next(stream));
 }
@@ -94,7 +96,9 @@ TEST_F(DictionaryTest, DictionaryPreservesBinaryStrings) {
     decoder.init();
     for (const auto& expected : values) {
         ASSERT_TRUE(decoder.has_next(stream));
-        ASSERT_EQ(decoder.read_string(stream), expected);
+        std::string decoded;
+        ASSERT_EQ(decoder.read_string(decoded, stream), common::E_OK);
+        ASSERT_EQ(decoded, expected);
     }
     ASSERT_FALSE(decoder.has_next(stream));
 }
@@ -113,17 +117,22 @@ TEST_F(DictionaryTest, DictionaryEncoderAndDecoder) {
     DictionaryDecoder decoder;
     decoder.init();
 
+    std::string decoded;
     ASSERT_TRUE(decoder.has_next(stream));
-    ASSERT_EQ(decoder.read_string(stream), "apple");
+    ASSERT_EQ(decoder.read_string(decoded, stream), common::E_OK);
+    ASSERT_EQ(decoded, "apple");
 
     ASSERT_TRUE(decoder.has_next(stream));
-    ASSERT_EQ(decoder.read_string(stream), "banana");
+    ASSERT_EQ(decoder.read_string(decoded, stream), common::E_OK);
+    ASSERT_EQ(decoded, "banana");
 
     ASSERT_TRUE(decoder.has_next(stream));
-    ASSERT_EQ(decoder.read_string(stream), "cherry");
+    ASSERT_EQ(decoder.read_string(decoded, stream), common::E_OK);
+    ASSERT_EQ(decoded, "cherry");
 
     ASSERT_TRUE(decoder.has_next(stream));
-    ASSERT_EQ(decoder.read_string(stream), "apple");
+    ASSERT_EQ(decoder.read_string(decoded, stream), common::E_OK);
+    ASSERT_EQ(decoded, "apple");
 }
 
 TEST_F(DictionaryTest, DictionaryEncoderAndDecoderOneItem) {
@@ -138,7 +147,9 @@ TEST_F(DictionaryTest, DictionaryEncoderAndDecoderOneItem) {
     decoder.init();
 
     ASSERT_TRUE(decoder.has_next(stream));
-    ASSERT_EQ(decoder.read_string(stream), "apple");
+    std::string decoded;
+    ASSERT_EQ(decoder.read_string(decoded, stream), common::E_OK);
+    ASSERT_EQ(decoded, "apple");
 
     ASSERT_FALSE(decoder.has_next(stream));
 }
@@ -160,7 +171,9 @@ TEST_F(DictionaryTest, DictionaryEncoderAndDecoderRepeatedItems) {
 
     for (char c = 'a'; c <= 'z'; c++) {
         for (int i = 0; i < 100; i++) {
-            ASSERT_EQ(decoder.read_string(stream), std::string(c, 3));
+            std::string decoded;
+            ASSERT_EQ(decoder.read_string(decoded, stream), common::E_OK);
+            ASSERT_EQ(decoded, std::string(c, 3));
         }
     }
 }
@@ -209,7 +222,8 @@ TEST_F(DictionaryTest,
 
     // Decode and verify all strings
     for (const auto& expected_str : test_strings) {
-        std::string decoded_str = decoder.read_string(stream);
+        std::string decoded_str;
+        ASSERT_EQ(decoder.read_string(decoded_str, stream), common::E_OK);
         ASSERT_EQ(decoded_str, expected_str);
     }
 }
