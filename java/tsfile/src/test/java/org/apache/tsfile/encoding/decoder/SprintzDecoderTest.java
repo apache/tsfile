@@ -590,4 +590,56 @@ public class SprintzDecoderTest {
       }
     }
   }
+
+  @Test
+  public void testIntWideRangeRoundTrip() throws IOException {
+    Encoder encoder = new IntSprintzEncoder();
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    List<Integer> values = new ArrayList<>();
+    for (int r = 0; r < 1000; r++) {
+      int v = (int) ((long) r * 2654435761L);
+      values.add(v);
+      encoder.encode(v, baos);
+    }
+    encoder.flush(baos);
+
+    ByteBuffer buffer = ByteBuffer.wrap(baos.toByteArray());
+    Decoder decoder = new IntSprintzDecoder();
+    for (int i = 0; i < values.size(); i++) {
+      if (decoder.hasNext(buffer)) {
+        assertEquals(values.get(i).intValue(), decoder.readInt(buffer));
+      } else {
+        fail("missing value at index " + i);
+      }
+    }
+    if (decoder.hasNext(buffer)) {
+      fail("extra values remain");
+    }
+  }
+
+  @Test
+  public void testLongWideRangeRoundTrip() throws IOException {
+    Encoder encoder = new LongSprintzEncoder();
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    List<Long> values = new ArrayList<>();
+    for (int r = 0; r < 1000; r++) {
+      long v = (long) r * 0x9E3779B97F4A7C15L;
+      values.add(v);
+      encoder.encode(v, baos);
+    }
+    encoder.flush(baos);
+
+    ByteBuffer buffer = ByteBuffer.wrap(baos.toByteArray());
+    Decoder decoder = new LongSprintzDecoder();
+    for (int i = 0; i < values.size(); i++) {
+      if (decoder.hasNext(buffer)) {
+        assertEquals(values.get(i).longValue(), decoder.readLong(buffer));
+      } else {
+        fail("missing value at index " + i);
+      }
+    }
+    if (decoder.hasNext(buffer)) {
+      fail("extra values remain");
+    }
+  }
 }

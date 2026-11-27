@@ -76,9 +76,16 @@ class IntFire : public Fire<int> {
     }
 
     void train(int pre, int val, int err) override {
-        int gradient = err > 0 ? -delta_ : delta_;
-        accumulator_ -= gradient;
-        delta_ = val - pre;
+        // Wrap the negation and the accumulator/delta updates so training
+        // never executes signed overflow on wide-range inputs, matching Java's
+        // wrapping int semantics.
+        int gradient =
+            err > 0 ? static_cast<int>(0u - static_cast<uint32_t>(delta_))
+                    : delta_;
+        accumulator_ = static_cast<int>(static_cast<uint32_t>(accumulator_) -
+                                        static_cast<uint32_t>(gradient));
+        delta_ = static_cast<int>(static_cast<uint32_t>(val) -
+                                  static_cast<uint32_t>(pre));
     }
 };
 
@@ -107,9 +114,16 @@ class LongFire : public Fire<int64_t> {
     }
 
     void train(int64_t pre, int64_t val, int64_t err) override {
-        int64_t gradient = err > 0 ? -delta_ : delta_;
-        accumulator_ -= gradient;
-        delta_ = val - pre;
+        // Wrap the negation, the 32-bit accumulator update (Java's LongFire
+        // narrows its accumulator to int), and the delta update so training
+        // never executes signed overflow on wide-range inputs.
+        int64_t gradient =
+            err > 0 ? static_cast<int64_t>(0ull - static_cast<uint64_t>(delta_))
+                    : delta_;
+        accumulator_ = static_cast<int>(static_cast<uint32_t>(accumulator_) -
+                                        static_cast<uint32_t>(gradient));
+        delta_ = static_cast<int64_t>(static_cast<uint64_t>(val) -
+                                      static_cast<uint64_t>(pre));
     }
 };
 

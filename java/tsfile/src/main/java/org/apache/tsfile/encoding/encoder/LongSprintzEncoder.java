@@ -73,12 +73,14 @@ public class LongSprintzEncoder extends SprintzEncoder {
       throw new TsFileEncodingException(
           Messages.get("error.encoding.sprintz_encoder_unsupported_predict_method"));
     }
-    if (pred <= 0) {
-      pred = -2 * pred;
-    } else {
-      pred = 2 * pred - 1; // TODO:overflow
+    if (pred == Long.MIN_VALUE) {
+      // The classic mapping sends MIN_VALUE to 2^64, which overflows to 0 and
+      // collides with the zero residual. Map it to 0xFFFFFFFFFFFFFFFF instead
+      // so the mapping stays a bijection over 64 bits (matching the C++ codec).
+      return -1L;
     }
-    return pred;
+    // Wraps to the correct 64-bit bit pattern for every other residual.
+    return (pred <= 0) ? -2 * pred : 2 * pred - 1;
   }
 
   @Override

@@ -90,8 +90,12 @@ public class IntSprintzDecoder extends SprintzDecoder {
   @Override
   protected void recalculate() {
     for (int i = 1; i <= Block_size; i++) {
-      if (currentBuffer[i] % 2 == 0) currentBuffer[i] = -currentBuffer[i] / 2;
-      else currentBuffer[i] = (currentBuffer[i] + 1) / 2;
+      // Unsigned inverse: a residual whose encoded form has bit 31 set arrives
+      // as a negative int; use a logical shift so it decodes correctly, and so
+      // the 0xFFFFFFFF sentinel for Integer.MIN_VALUE maps back to MIN_VALUE.
+      int z = currentBuffer[i];
+      if ((z & 1) == 0) currentBuffer[i] = -(z >>> 1);
+      else currentBuffer[i] = (z >>> 1) + 1;
     }
     if (predictScheme.equals("delta")) {
       for (int i = 1; i < currentBuffer.length; i++) {
