@@ -29,6 +29,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Random;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 
 public class DeltaBinaryEncoderIntegerTest {
@@ -88,6 +89,37 @@ public class DeltaBinaryEncoderIntegerTest {
     shouldReadAndWrite(data, ROW_NUM);
   }
 
+  @Test
+  public void testBitPackedDataBytesMatchFormat() {
+    writer = new DeltaBinaryEncoder.IntDeltaEncoder();
+    out = new ByteArrayOutputStream();
+    writer.encode(10, out);
+    writer.encode(13, out);
+    writer.encode(15, out);
+    writer.flush(out);
+
+    assertArrayEquals(
+        new byte[] {0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 10, (byte) 0x80},
+        out.toByteArray());
+  }
+
+  @Test
+  public void testFlushThenReusePreservesDeltaState() throws IOException {
+    out = new ByteArrayOutputStream();
+    int[] firstBatch = {Integer.MIN_VALUE, 0, Integer.MAX_VALUE};
+    int[] secondBatch = {15, -10, 5};
+    writeData(firstBatch, firstBatch.length);
+    writeData(secondBatch, secondBatch.length);
+
+    int[] expected = {Integer.MIN_VALUE, 0, Integer.MAX_VALUE, 15, -10, 5};
+    buffer = ByteBuffer.wrap(out.toByteArray());
+    int index = 0;
+    while (reader.hasNext(buffer)) {
+      assertEquals(expected[index++], reader.readInt(buffer));
+    }
+    assertEquals(expected.length, index);
+  }
+
   private void writeData(int[] data, int length) {
     for (int i = 0; i < length; i++) {
       writer.encode(data[i], out);
@@ -106,5 +138,6 @@ public class DeltaBinaryEncoderIntegerTest {
     while (reader.hasNext(buffer)) {
       assertEquals(data[i++], reader.readInt(buffer));
     }
+    assertEquals(length, i);
   }
 }

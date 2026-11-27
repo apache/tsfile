@@ -21,6 +21,8 @@ package org.apache.tsfile.encoding.encoder;
 
 import org.apache.tsfile.common.bitStream.BitOutputStream;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.utils.PublicBAOS;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import java.io.ByteArrayOutputStream;
@@ -51,7 +53,7 @@ public class CamelEncoder extends Encoder {
   public static final long[] threshold = new long[DECIMAL_MAX_COUNT];
 
   private final BitOutputStream out;
-  private final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+  private final PublicBAOS baos = new PublicBAOS();
 
   static {
     for (int l = 1; l <= DECIMAL_MAX_COUNT; l++) {
@@ -129,6 +131,15 @@ public class CamelEncoder extends Encoder {
   public long getMaxByteSize() {
     // bitstream buffer | bytes buffer | storedVal | previousValue
     return 1 + this.baos.size() + 8 + 8;
+  }
+
+  @Override
+  public long getRetainedSizeInBytes() {
+    return RamUsageEstimator.shallowSizeOf(this)
+        + RamUsageEstimator.shallowSizeOf(baos)
+        + RamUsageEstimator.sizeOf(baos.getBuf())
+        + RamUsageEstimator.shallowSizeOf(out)
+        + RamUsageEstimator.shallowSizeOf(gorillaEncoder);
   }
 
   public class GorillaEncoder {

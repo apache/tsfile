@@ -21,6 +21,7 @@ package org.apache.tsfile.encoding.encoder;
 
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import org.slf4j.Logger;
@@ -52,9 +53,15 @@ import java.util.Set;
 public class BitmapEncoder extends Encoder {
 
   private static final Logger logger = LoggerFactory.getLogger(BitmapEncoder.class);
+  private static final long BOXED_VALUE_SIZE =
+      RamUsageEstimator.shallowSizeOfInstance(Integer.class);
 
   /** Bitmap Encoder stores all current values in a list temporally. */
   private List<Integer> values;
+
+  private int maximumValuesSize;
+
+  private long currentValuesRetainedSize;
 
   /** BitmapEncoder constructor. */
   public BitmapEncoder() {
@@ -76,6 +83,10 @@ public class BitmapEncoder extends Encoder {
   @Override
   public void encode(int value, ByteArrayOutputStream out) {
     values.add(value);
+    maximumValuesSize = Math.max(maximumValuesSize, values.size());
+    if (value < -128 || value > 127) {
+      currentValuesRetainedSize += BOXED_VALUE_SIZE;
+    }
   }
 
   /**
@@ -117,6 +128,7 @@ public class BitmapEncoder extends Encoder {
 
   private void reset() {
     values.clear();
+    currentValuesRetainedSize = 0;
   }
 
   @Override
@@ -128,5 +140,11 @@ public class BitmapEncoder extends Encoder {
   public long getMaxByteSize() {
     // byteCacheSize + byteDictSize + (byte array + array length) * byteDictSize
     return (long) 4 + 4 + ((values.size() + 7) / 8 + 4) * values.size();
+  }
+
+  @Override
+  public long getRetainedSizeInBytes() {
+    return RamUsageEstimator.shallowSizeOf(this)
+        + estimateArrayListRetainedSize(maximumValuesSize, currentValuesRetainedSize);
   }
 }

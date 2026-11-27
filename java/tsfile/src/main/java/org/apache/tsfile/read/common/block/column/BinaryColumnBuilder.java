@@ -31,6 +31,7 @@ import org.apache.tsfile.write.UnSupportedDataTypeException;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.IdentityHashMap;
 
 import static java.lang.Math.max;
 import static org.apache.tsfile.read.common.block.column.ColumnUtil.calculateBlockResetSize;
@@ -80,9 +81,10 @@ public class BinaryColumnBuilder implements ColumnBuilder {
     hasNonNullValue = true;
     positionCount++;
     if (columnBuilderStatus != null) {
-      columnBuilderStatus.addBytes(
+      long bytesToAdd =
           BinaryColumn.SHALLOW_SIZE_IN_BYTES_PER_POSITION
-              + (value == null ? 0 : (int) value.ramBytesUsed()));
+              + (value == null ? 0 : value.ramBytesUsed());
+      columnBuilderStatus.addBytes((int) Math.min(bytesToAdd, Integer.MAX_VALUE));
     }
     return this;
   }
@@ -167,11 +169,33 @@ public class BinaryColumnBuilder implements ColumnBuilder {
 
   @Override
   public long getRetainedSizeInBytes() {
-    long size = INSTANCE_SIZE + arraysRetainedSizeInBytes;
+    long size = INSTANCE_SIZE + arraysRetainedSizeInBytes + getBinaryValuesRetainedSize();
     if (columnBuilderStatus != null) {
       size += ColumnBuilderStatus.INSTANCE_SIZE;
     }
     return size;
+  }
+
+  private long getBinaryValuesRetainedSize() {
+    IdentityHashMap<Object, Boolean> retainedObjects = null;
+    long retainedSize = 0;
+    for (int position = 0; position < positionCount; position++) {
+      Binary value = values[position];
+      if (value == null) {
+        continue;
+      }
+      if (retainedObjects == null) {
+        retainedObjects = new IdentityHashMap<>();
+      }
+      if (retainedObjects.put(value, Boolean.TRUE) == null) {
+        retainedSize += RamUsageEstimator.shallowSizeOf(value);
+      }
+      byte[] payload = value.getValues();
+      if (payload != null && retainedObjects.put(payload, Boolean.TRUE) == null) {
+        retainedSize += RamUsageEstimator.sizeOf(payload);
+      }
+    }
+    return retainedSize;
   }
 
   @Override
@@ -194,6 +218,6 @@ public class BinaryColumnBuilder implements ColumnBuilder {
   }
 
   private void updateArraysDataSize() {
-    arraysRetainedSizeInBytes = sizeOf(valueIsNull) + sizeOf(values);
+    arraysRetainedSizeInBytes = sizeOf(valueIsNull) + RamUsageEstimator.shallowSizeOf(values);
   }
 }

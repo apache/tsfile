@@ -27,6 +27,7 @@ import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.BitMap;
 import org.apache.tsfile.utils.PublicBAOS;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import org.slf4j.Logger;
@@ -448,6 +449,16 @@ public class ValuePageWriter {
    */
   public long estimateMaxMemSize() {
     return Integer.BYTES + bitmapOut.size() + 1 + valueOut.size() + valueEncoder.getMaxByteSize();
+  }
+
+  public long estimateRetainedMemSize() {
+    return RamUsageEstimator.shallowSizeOf(this)
+        + RamUsageEstimator.shallowSizeOf(bitmapOut)
+        + RamUsageEstimator.sizeOf(bitmapOut.getBuf())
+        + RamUsageEstimator.shallowSizeOf(valueOut)
+        + RamUsageEstimator.sizeOf(valueOut.getBuf())
+        + valueEncoder.getRetainedSizeInBytes()
+        + statistics.getRetainedSizeInBytes();
   }
 
   /** reset this page */

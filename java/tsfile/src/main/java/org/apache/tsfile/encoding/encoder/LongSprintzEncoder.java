@@ -23,6 +23,7 @@ import org.apache.tsfile.encoding.bitpacking.LongPacker;
 import org.apache.tsfile.encoding.fire.LongFire;
 import org.apache.tsfile.exception.encoding.TsFileEncodingException;
 import org.apache.tsfile.i18n.Messages;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import java.io.ByteArrayOutputStream;
@@ -61,6 +62,14 @@ public class LongSprintzEncoder extends SprintzEncoder {
   @Override
   public long getMaxByteSize() {
     return 1 + (1L + values.size()) * Long.BYTES;
+  }
+
+  @Override
+  public long getRetainedSizeInBytes() {
+    return super.getRetainedSizeInBytes()
+        + getVectorRetainedSize(values, Long.class)
+        + (firePred == null ? 0 : firePred.getRetainedSizeInBytes())
+        + RamUsageEstimator.shallowSizeOf(packer);
   }
 
   protected Long predict(Long value, Long preVlaue) throws TsFileEncodingException {

@@ -22,6 +22,7 @@ package org.apache.tsfile.encoding.encoder;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import org.slf4j.Logger;
@@ -44,12 +45,17 @@ import java.util.List;
  * }</pre>
  */
 public class DictionaryEncoder extends Encoder {
+
+  private static final long BOXED_INDEX_SIZE =
+      RamUsageEstimator.shallowSizeOfInstance(Integer.class);
   private static final Logger logger = LoggerFactory.getLogger(DictionaryEncoder.class);
 
   private HashMap<Binary, Integer> entryIndex;
   private List<Binary> indexEntry;
   private IntRleEncoder valuesEncoder;
   private long mapSize;
+  private long dictionaryEntriesRetainedSize;
+  private int maximumDictionarySize;
 
   public DictionaryEncoder() {
     super(TSEncoding.DICTIONARY);
@@ -66,9 +72,15 @@ public class DictionaryEncoder extends Encoder {
         entryIndex.computeIfAbsent(
             value,
             v -> {
+              int index = indexEntry.size();
               indexEntry.add(v);
               mapSize += v.getLength();
-              return entryIndex.size();
+              dictionaryEntriesRetainedSize += v.ramBytesUsed();
+              if (index > 127) {
+                dictionaryEntriesRetainedSize += BOXED_INDEX_SIZE;
+              }
+              maximumDictionarySize = Math.max(maximumDictionarySize, indexEntry.size());
+              return index;
             });
     valuesEncoder.encode(i, out);
   }
@@ -96,6 +108,28 @@ public class DictionaryEncoder extends Encoder {
     return 4 + mapSize + valuesEncoder.getMaxByteSize();
   }
 
+  @Override
+  public long getRetainedSizeInBytes() {
+    return RamUsageEstimator.shallowSizeOf(this)
+        + RamUsageEstimator.shallowSizeOf(entryIndex)
+        + (long) entryIndex.size() * RamUsageEstimator.SHALLOW_SIZE_OF_HASHMAP_ENTRY
+        + dictionaryEntriesRetainedSize
+        + estimateHashMapTableSize(maximumDictionarySize)
+        + estimateArrayListRetainedSize(maximumDictionarySize, 0)
+        + valuesEncoder.getRetainedSizeInBytes();
+  }
+
+  private long estimateHashMapTableSize(int size) {
+    if (size == 0) {
+      return 0;
+    }
+    int capacity = 16;
+    while ((long) size > (long) capacity * 3 / 4 && capacity < (1 << 30)) {
+      capacity <<= 1;
+    }
+    return RamUsageEstimator.sizeOfObjectArray(capacity);
+  }
+
   private void writeMap(ByteArrayOutputStream out) throws IOException {
     ReadWriteForEncodingUtils.writeVarInt(indexEntry.size(), out);
     for (Binary value : indexEntry) {
@@ -113,5 +147,6 @@ public class DictionaryEncoder extends Encoder {
     indexEntry.clear();
     valuesEncoder.reset();
     mapSize = 0;
+    dictionaryEntriesRetainedSize = 0;
   }
 }

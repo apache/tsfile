@@ -22,12 +22,15 @@ package org.apache.tsfile.encoding.encoder;
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.common.conf.TSFileDescriptor;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
+import org.apache.tsfile.utils.PublicBAOS;
+import org.apache.tsfile.utils.RamUsageEstimator;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.Vector;
 
 public abstract class SprintzEncoder extends Encoder {
   protected static final Logger logger = LoggerFactory.getLogger(SprintzEncoder.class);
@@ -55,16 +58,50 @@ public abstract class SprintzEncoder extends Encoder {
 
   protected TSFileConfig config = TSFileDescriptor.getInstance().getConfig();
 
+  private int maximumByteCacheSize;
+
   protected SprintzEncoder() {
     super(TSEncoding.SPRINTZ);
-    byteCache = new ByteArrayOutputStream();
+    byteCache = new PublicBAOS();
   }
 
   protected void reset() {
+    if (byteCache != null) {
+      maximumByteCacheSize = Math.max(maximumByteCacheSize, byteCache.size());
+    }
     byteCache.reset();
     isFirstCached = false;
     groupNum = 0;
   }
 
   protected abstract void bitPack() throws IOException;
+
+  @Override
+  public long getRetainedSizeInBytes() {
+    if (byteCache != null) {
+      maximumByteCacheSize = Math.max(maximumByteCacheSize, byteCache.size());
+    }
+    return RamUsageEstimator.shallowSizeOf(this)
+        + estimateByteArrayOutputStreamRetainedSize(byteCache, maximumByteCacheSize);
+  }
+
+  protected long getVectorRetainedSize(Vector<?> values, Class<?> valueType) {
+    long retainedValuesSize = 0;
+    for (Object value : values) {
+      if (value instanceof Integer integerValue) {
+        if (integerValue < -128 || integerValue > 127) {
+          retainedValuesSize += RamUsageEstimator.shallowSizeOfInstance(valueType);
+        }
+      } else if (value instanceof Long longValue) {
+        if (longValue < -128 || longValue > 127) {
+          retainedValuesSize += RamUsageEstimator.sizeOf(longValue);
+        }
+      } else if (value != null) {
+        retainedValuesSize += RamUsageEstimator.shallowSizeOfInstance(valueType);
+      }
+    }
+    return RamUsageEstimator.shallowSizeOf(values)
+        + RamUsageEstimator.sizeOfObjectArray(values.capacity())
+        + retainedValuesSize;
+  }
 }

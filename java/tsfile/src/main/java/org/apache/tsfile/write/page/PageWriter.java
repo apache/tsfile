@@ -26,6 +26,7 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.file.metadata.statistics.Statistics;
 import org.apache.tsfile.utils.Binary;
 import org.apache.tsfile.utils.PublicBAOS;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 
@@ -275,6 +276,17 @@ public class PageWriter {
         + valueOut.size()
         + timeEncoder.getMaxByteSize()
         + valueEncoder.getMaxByteSize();
+  }
+
+  public long estimateRetainedMemSize() {
+    return RamUsageEstimator.shallowSizeOf(this)
+        + RamUsageEstimator.shallowSizeOf(timeOut)
+        + RamUsageEstimator.sizeOf(timeOut.getBuf())
+        + RamUsageEstimator.shallowSizeOf(valueOut)
+        + RamUsageEstimator.sizeOf(valueOut.getBuf())
+        + timeEncoder.getRetainedSizeInBytes()
+        + valueEncoder.getRetainedSizeInBytes()
+        + statistics.getRetainedSizeInBytes();
   }
 
   /** reset this page */

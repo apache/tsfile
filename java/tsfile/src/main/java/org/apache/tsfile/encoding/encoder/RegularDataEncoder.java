@@ -22,6 +22,7 @@ package org.apache.tsfile.encoding.encoder;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.BytesUtils;
+import org.apache.tsfile.utils.RamUsageEstimator;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,6 +63,18 @@ public abstract class RegularDataEncoder extends Encoder {
   protected RegularDataEncoder(int size) {
     super(TSEncoding.REGULAR);
     blockSize = size;
+  }
+
+  @Override
+  public long getRetainedSizeInBytes() {
+    return RamUsageEstimator.shallowSizeOf(this);
+  }
+
+  protected long getBitmapRetainedSize(BitSet bitmap) {
+    return bitmap == null
+        ? 0
+        : RamUsageEstimator.shallowSizeOf(bitmap)
+            + RamUsageEstimator.sizeOfLongArray((int) (bitmap.size() / Long.SIZE));
   }
 
   protected abstract void writeHeader() throws IOException;
@@ -165,6 +178,13 @@ public abstract class RegularDataEncoder extends Encoder {
       // The meaning of 20 is:
       // identifier(4)+bitmapLength(4)+index(4)+minDeltaBase(4)+firstValue(4)
       return (long) 20 + (writeIndex * 2 / 8) + (writeIndex * 4);
+    }
+
+    @Override
+    public long getRetainedSizeInBytes() {
+      return super.getRetainedSizeInBytes()
+          + RamUsageEstimator.sizeOf(data)
+          + getBitmapRetainedSize(bitmap);
     }
 
     @Override
@@ -292,6 +312,13 @@ public abstract class RegularDataEncoder extends Encoder {
       // The meaning of 20 is:
       // identifier(4)+bitmapLength(4)+index(4)+minDeltaBase(8)+firstValue(8)
       return (long) 28 + (writeIndex * 2 / 8) + (writeIndex * 8);
+    }
+
+    @Override
+    public long getRetainedSizeInBytes() {
+      return super.getRetainedSizeInBytes()
+          + RamUsageEstimator.sizeOf(data)
+          + getBitmapRetainedSize(bitmap);
     }
 
     @Override

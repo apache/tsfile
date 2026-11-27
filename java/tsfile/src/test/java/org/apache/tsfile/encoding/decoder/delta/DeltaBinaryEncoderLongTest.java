@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.stream.Stream;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 
 public class DeltaBinaryEncoderLongTest {
@@ -101,6 +102,39 @@ public class DeltaBinaryEncoderLongTest {
       data[i] = (i & 1) == 0 ? Long.MAX_VALUE : Long.MIN_VALUE;
     }
     shouldReadAndWrite(data, ROW_NUM);
+  }
+
+  @Test
+  public void testBitPackedDataBytesMatchFormat() {
+    writer = new DeltaBinaryEncoder.LongDeltaEncoder();
+    out = new ByteArrayOutputStream();
+    writer.encode(10L, out);
+    writer.encode(13L, out);
+    writer.encode(15L, out);
+    writer.flush(out);
+
+    assertArrayEquals(
+        new byte[] {
+          0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 10, (byte) 0x80
+        },
+        out.toByteArray());
+  }
+
+  @Test
+  public void testFlushThenReusePreservesDeltaState() throws IOException {
+    out = new ByteArrayOutputStream();
+    long[] firstBatch = {Long.MIN_VALUE, 0, Long.MAX_VALUE};
+    long[] secondBatch = {15, -10, 5};
+    writeData(firstBatch, firstBatch.length);
+    writeData(secondBatch, secondBatch.length);
+
+    long[] expected = {Long.MIN_VALUE, 0, Long.MAX_VALUE, 15, -10, 5};
+    buffer = ByteBuffer.wrap(out.toByteArray());
+    int index = 0;
+    while (reader.hasNext(buffer)) {
+      assertEquals(expected[index++], reader.readLong(buffer));
+    }
+    assertEquals(expected.length, index);
   }
 
   @Test
@@ -197,5 +231,6 @@ public class DeltaBinaryEncoderLongTest {
     while (reader.hasNext(buffer)) {
       assertEquals(data[i++], reader.readLong(buffer));
     }
+    assertEquals(length, i);
   }
 }

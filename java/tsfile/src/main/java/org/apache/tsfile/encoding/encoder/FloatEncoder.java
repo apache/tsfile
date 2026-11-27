@@ -24,6 +24,7 @@ import org.apache.tsfile.exception.encoding.TsFileEncodingException;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.BitMap;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import java.io.ByteArrayOutputStream;
@@ -52,6 +53,8 @@ public class FloatEncoder extends Encoder {
 
   /** flag to check whether maxPointNumber is saved in the stream. */
   private boolean isMaxPointNumberSaved;
+
+  private int maximumUnderflowFlagsSize;
 
   // value * maxPointValue not overflow -> True
   // value * maxPointValue overflow -> False
@@ -101,6 +104,7 @@ public class FloatEncoder extends Encoder {
   public void encode(float value, ByteArrayOutputStream out) {
     saveMaxPointNumber(out);
     int valueInt = convertFloatToInt(value);
+    maximumUnderflowFlagsSize = Math.max(maximumUnderflowFlagsSize, underflowFlags.size());
     encoder.encode(valueInt, out);
   }
 
@@ -108,6 +112,7 @@ public class FloatEncoder extends Encoder {
   public void encode(double value, ByteArrayOutputStream out) {
     saveMaxPointNumber(out);
     long valueLong = convertDoubleToLong(value);
+    maximumUnderflowFlagsSize = Math.max(maximumUnderflowFlagsSize, underflowFlags.size());
     encoder.encode(valueLong, out);
   }
 
@@ -223,5 +228,12 @@ public class FloatEncoder extends Encoder {
   @Override
   public long getMaxByteSize() {
     return encoder.getMaxByteSize();
+  }
+
+  @Override
+  public long getRetainedSizeInBytes() {
+    return RamUsageEstimator.shallowSizeOf(this)
+        + encoder.getRetainedSizeInBytes()
+        + estimateArrayListRetainedSize(maximumUnderflowFlagsSize, 0);
   }
 }

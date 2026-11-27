@@ -22,6 +22,8 @@ import org.apache.tsfile.exception.encoding.TsFileEncodingException;
 import org.apache.tsfile.file.metadata.enums.TSEncoding;
 import org.apache.tsfile.i18n.Messages;
 import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.PublicBAOS;
+import org.apache.tsfile.utils.RamUsageEstimator;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -116,5 +118,53 @@ public abstract class Encoder {
    */
   public long getMaxByteSize() {
     throw new UnsupportedOperationException();
+  }
+
+  public long getRetainedSizeInBytes() {
+    long retainedSize = RamUsageEstimator.shallowSizeOf(this);
+    try {
+      return retainedSize + getMaxByteSize();
+    } catch (UnsupportedOperationException e) {
+      return retainedSize;
+    }
+  }
+
+  protected static long estimateArrayListRetainedSize(int maximumSize, long retainedValuesSize) {
+    long estimatedCapacity = 0;
+    if (maximumSize > 0) {
+      estimatedCapacity = 10;
+      while (estimatedCapacity < maximumSize) {
+        estimatedCapacity =
+            Math.min(Integer.MAX_VALUE, estimatedCapacity + Math.max(1, estimatedCapacity >> 1));
+      }
+    }
+    return RamUsageEstimator.ARRAY_LIST_INSTANCE_SIZE
+        + (estimatedCapacity == 0
+            ? 0
+            : RamUsageEstimator.sizeOfObjectArray((int) estimatedCapacity))
+        + retainedValuesSize;
+  }
+
+  protected static long estimateByteArrayOutputStreamRetainedSize(
+      ByteArrayOutputStream output, int maximumObservedSize) {
+    if (output == null) {
+      return 0;
+    }
+    long retainedSize = RamUsageEstimator.shallowSizeOf(output);
+    if (output instanceof PublicBAOS publicOutput) {
+      return retainedSize + RamUsageEstimator.sizeOf(publicOutput.getBuf());
+    }
+
+    int minimumCapacity = Math.max(output.size(), maximumObservedSize);
+    int estimatedCapacity = 32;
+    while (estimatedCapacity < minimumCapacity) {
+      int nextCapacity = estimatedCapacity << 1;
+      if (nextCapacity <= 0) {
+        estimatedCapacity = minimumCapacity;
+        break;
+      }
+      estimatedCapacity = Math.max(nextCapacity, minimumCapacity);
+    }
+    return retainedSize + RamUsageEstimator.sizeOfByteArray(estimatedCapacity);
   }
 }

@@ -20,6 +20,7 @@ package org.apache.tsfile.file.metadata.statistics;
 
 import org.apache.tsfile.common.conf.TSFileConfig;
 import org.apache.tsfile.utils.Binary;
+import org.apache.tsfile.utils.RamUsageEstimator;
 
 import org.junit.Test;
 
@@ -27,6 +28,64 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 
 public class StringStatisticsTest {
+
+  @Test
+  public void testBinaryStatisticsRetainedSizeUsesByteArraySize() {
+    Binary first = new Binary(new byte[2048]);
+    Binary last = new Binary(new byte[4096]);
+    BinaryStatistics statistics = new BinaryStatistics();
+    statistics.initializeStats(first, last);
+
+    assertEquals(
+        BinaryStatistics.INSTANCE_SIZE
+            + RamUsageEstimator.sizeOf(first.getValues())
+            + RamUsageEstimator.sizeOf(last.getValues()),
+        statistics.getRetainedSizeInBytes());
+  }
+
+  @Test
+  public void testBinaryStatisticsCountsAliasedPayloadOnce() {
+    Binary value = new Binary(new byte[2048]);
+    BinaryStatistics statistics = new BinaryStatistics();
+    statistics.initializeStats(value, value);
+
+    assertEquals(
+        RamUsageEstimator.shallowSizeOf(statistics)
+            + RamUsageEstimator.shallowSizeOf(value)
+            + RamUsageEstimator.sizeOf(value.getValues()),
+        statistics.getRetainedSizeInBytes());
+  }
+
+  @Test
+  public void testStringStatisticsRetainedSizeUsesByteArraySize() {
+    Binary first = new Binary(new byte[1024]);
+    Binary last = new Binary(new byte[2048]);
+    Binary min = new Binary(new byte[3072]);
+    Binary max = new Binary(new byte[4096]);
+    StringStatistics statistics = new StringStatistics();
+    statistics.initializeStats(first, last, min, max);
+
+    assertEquals(
+        StringStatistics.INSTANCE_SIZE
+            + RamUsageEstimator.sizeOf(first.getValues())
+            + RamUsageEstimator.sizeOf(last.getValues())
+            + RamUsageEstimator.sizeOf(min.getValues())
+            + RamUsageEstimator.sizeOf(max.getValues()),
+        statistics.getRetainedSizeInBytes());
+  }
+
+  @Test
+  public void testStringStatisticsCountsAliasedPayloadOnce() {
+    Binary value = new Binary(new byte[1024]);
+    StringStatistics statistics = new StringStatistics();
+    statistics.initializeStats(value, value, value, value);
+
+    assertEquals(
+        RamUsageEstimator.shallowSizeOf(statistics)
+            + RamUsageEstimator.shallowSizeOf(value)
+            + RamUsageEstimator.sizeOf(value.getValues()),
+        statistics.getRetainedSizeInBytes());
+  }
 
   @Test
   public void testUpdate() {

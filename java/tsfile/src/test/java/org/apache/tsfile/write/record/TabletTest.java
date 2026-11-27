@@ -31,6 +31,7 @@ import org.apache.tsfile.utils.BitMap;
 import org.apache.tsfile.utils.BytesUtils;
 import org.apache.tsfile.utils.Pair;
 import org.apache.tsfile.utils.PublicBAOS;
+import org.apache.tsfile.utils.RamUsageEstimator;
 import org.apache.tsfile.write.schema.IMeasurementSchema;
 import org.apache.tsfile.write.schema.MeasurementSchema;
 
@@ -62,6 +63,104 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 public class TabletTest {
+
+  @Test
+  public void testRamBytesUsedIncludesBinaryPayload() {
+    Tablet tablet =
+        new Tablet(
+            "root.sg.d1",
+            Arrays.asList(new MeasurementSchema("s1", TSDataType.TEXT, TSEncoding.PLAIN)),
+            1);
+    long sizeBeforePayload = tablet.ramBytesUsed();
+
+    byte[] payload = new byte[64 * 1024];
+    tablet.addValue(0, 0, payload);
+
+    assertTrue(tablet.ramBytesUsed() - sizeBeforePayload >= payload.length);
+  }
+
+  @Test
+  public void testRamBytesUsedDoesNotCountMeasurementNameTwice() {
+    String shortName = "s";
+    String longName = "m".repeat(1024);
+    Tablet shortNameTablet = createTextTablet(shortName);
+    Tablet longNameTablet = createTextTablet(longName);
+
+    assertEquals(
+        RamUsageEstimator.sizeOf(longName) - RamUsageEstimator.sizeOf(shortName),
+        longNameTablet.ramBytesUsed() - shortNameTablet.ramBytesUsed());
+  }
+
+  @Test
+  public void testRamBytesUsedIncludesSchemaNameNotPresentInMeasurementIndex() {
+    Tablet tablet = createTextTablet(String.valueOf('s'));
+    String replacementName = String.valueOf('m').repeat(65_536);
+    MeasurementSchema replacementSchema =
+        new MeasurementSchema(replacementName, TSDataType.TEXT, TSEncoding.PLAIN);
+    List<IMeasurementSchema> replacementSchemas = new ArrayList<>();
+    replacementSchemas.add(replacementSchema);
+    tablet.setSchemas(replacementSchemas);
+
+    assertTrue(
+        tablet.ramBytesUsed()
+            >= RamUsageEstimator.shallowSizeOfList(replacementSchemas)
+                + replacementSchema.ramBytesUsed());
+  }
+
+  @Test
+  public void testRamBytesUsedCountsSharedSchemaNameOnceAfterSetSchemas() {
+    String measurementName = "m".repeat(1024);
+    Tablet sharedNameTablet = createTextTablet(measurementName);
+    List<IMeasurementSchema> sharedNameSchemas = new ArrayList<>();
+    sharedNameSchemas.add(
+        new MeasurementSchema(measurementName, TSDataType.TEXT, TSEncoding.PLAIN));
+    sharedNameSchemas.add(
+        new MeasurementSchema(measurementName, TSDataType.TEXT, TSEncoding.PLAIN));
+    sharedNameTablet.setSchemas(sharedNameSchemas);
+
+    Tablet distinctNameTablet = createTextTablet(measurementName);
+    List<IMeasurementSchema> distinctNameSchemas = new ArrayList<>();
+    distinctNameSchemas.add(
+        new MeasurementSchema(new String(measurementName), TSDataType.TEXT, TSEncoding.PLAIN));
+    distinctNameSchemas.add(
+        new MeasurementSchema(new String(measurementName), TSDataType.TEXT, TSEncoding.PLAIN));
+    distinctNameTablet.setSchemas(distinctNameSchemas);
+
+    assertEquals(
+        2 * RamUsageEstimator.sizeOf(measurementName),
+        distinctNameTablet.ramBytesUsed() - sharedNameTablet.ramBytesUsed());
+  }
+
+  @Test
+  public void testRamBytesUsedCountsNewSharedSchemaNameOnceAfterSetSchemas() {
+    String measurementName = "m".repeat(1024);
+    Tablet sharedNameTablet = createTextTablet("s");
+    List<IMeasurementSchema> sharedNameSchemas = new ArrayList<>();
+    sharedNameSchemas.add(
+        new MeasurementSchema(measurementName, TSDataType.TEXT, TSEncoding.PLAIN));
+    sharedNameSchemas.add(
+        new MeasurementSchema(measurementName, TSDataType.TEXT, TSEncoding.PLAIN));
+    sharedNameTablet.setSchemas(sharedNameSchemas);
+
+    Tablet distinctNameTablet = createTextTablet("s");
+    List<IMeasurementSchema> distinctNameSchemas = new ArrayList<>();
+    distinctNameSchemas.add(
+        new MeasurementSchema(new String(measurementName), TSDataType.TEXT, TSEncoding.PLAIN));
+    distinctNameSchemas.add(
+        new MeasurementSchema(new String(measurementName), TSDataType.TEXT, TSEncoding.PLAIN));
+    distinctNameTablet.setSchemas(distinctNameSchemas);
+
+    assertEquals(
+        RamUsageEstimator.sizeOf(measurementName),
+        distinctNameTablet.ramBytesUsed() - sharedNameTablet.ramBytesUsed());
+  }
+
+  private Tablet createTextTablet(String measurementName) {
+    return new Tablet(
+        "root.sg.d1",
+        Arrays.asList(new MeasurementSchema(measurementName, TSDataType.TEXT, TSEncoding.PLAIN)),
+        1);
+  }
 
   private static final TypeService<SampleValueGenerator> SAMPLE_VALUE_SERVICE =
       type ->
