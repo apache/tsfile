@@ -1319,7 +1319,7 @@ int TsFileIOReader::do_load_timeseries_index(
         std::cout << "do_load_timeseries_index, reader file at " << start_offset
                   << " to " << end_offset << std::endl;
 #endif
-        while (IS_SUCC(ret)) {
+        while (IS_SUCC(ret) && bs.has_remaining()) {
             TimeseriesIndex cur_timeseries_index;
             PageArena cur_timeseries_index_pa;
             cur_timeseries_index_pa.init(512, MOD_TSFILE_READER);  // TODO 512
@@ -1368,11 +1368,10 @@ int TsFileIOReader::do_load_timeseries_index(
                 break;
             }
         }  // end while
-        if (!found && deserialize_buf_not_enough(ret)) {
-            // A complete scan of the index range found no matching
-            // measurement (the read ran off the end of the buffer). Keep hard
-            // errors such as E_OOM or E_TSFILE_CORRUPTED so callers can
-            // distinguish them from a genuinely missing series.
+        if (!found && IS_SUCC(ret)) {
+            // Every complete entry in the range was scanned without a match.
+            // A deserialization error mid-entry (E_PARTIAL_READ, E_OOM, ...)
+            // is propagated instead of being masked as a missing series.
             ret = E_NOT_EXIST;
         }
     }
