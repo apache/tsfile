@@ -668,13 +668,10 @@ public class TsFileWriter implements AutoCloseable {
     if (recordCount >= recordCountForNextMemCheck) {
       long memSize = calculateMemSizeForAllGroup();
       assert memSize > 0;
+      recordCountForNextMemCheck = Math.max(1, recordCount * chunkGroupSizeThreshold / memSize);
       if (memSize > chunkGroupSizeThreshold) {
         LOG.debug(Messages.get("log.write.flush_chunk_groups"), memSize);
-        recordCountForNextMemCheck = recordCount * chunkGroupSizeThreshold / memSize;
         return flush();
-      } else {
-        recordCountForNextMemCheck = recordCount * chunkGroupSizeThreshold / memSize;
-        return false;
       }
     }
     return false;

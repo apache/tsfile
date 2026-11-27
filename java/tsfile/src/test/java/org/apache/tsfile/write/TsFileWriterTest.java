@@ -295,6 +295,39 @@ public class TsFileWriterTest {
     readNothing();
   }
 
+  @Test
+  public void writeEmptyRecordAfterAutomaticFlush() throws IOException, WriteProcessException {
+    writer.setChunkGroupSizeThreshold(1);
+    int firstBatchSize = 100;
+    long initialPosition = writer.getIOWriter().getPos();
+    for (int timestamp = 0; timestamp < firstBatchSize; timestamp++) {
+      writer.writeRecord(new TSRecord("d1", timestamp).addPoint("s2", timestamp));
+    }
+    long flushedPosition = writer.getIOWriter().getPos();
+    assertTrue(flushedPosition > initialPosition);
+
+    assertFalse(writer.writeRecord(new TSRecord("d1", firstBatchSize)));
+    assertEquals(flushedPosition, writer.getIOWriter().getPos());
+    int lastTimestamp = firstBatchSize + 1;
+    writer.writeRecord(new TSRecord("d1", lastTimestamp).addPoint("s2", lastTimestamp));
+    assertTrue(writer.getIOWriter().getPos() > flushedPosition);
+    closeFile();
+
+    try (TsFileReader reader = new TsFileReader(new TsFileSequenceReader(fileName))) {
+      QueryDataSet dataSet =
+          reader.query(QueryExpression.create().addSelectedPath(new Path("d1", "s2", true)));
+      for (int timestamp = 0; timestamp <= lastTimestamp; timestamp++) {
+        if (timestamp != firstBatchSize) {
+          assertTrue(dataSet.hasNext());
+          RowRecord row = dataSet.next();
+          assertEquals(timestamp, row.getTimestamp());
+          assertEquals(timestamp, row.getFields().get(0).getIntV());
+        }
+      }
+      assertFalse(dataSet.hasNext());
+    }
+  }
+
   private void closeFile() {
     try {
       closed = true;
