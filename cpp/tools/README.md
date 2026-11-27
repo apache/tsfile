@@ -173,9 +173,10 @@ including ALP and GORILLA_V1 for FLOAT/DOUBLE, and RLE for BOOLEAN/FLOAT/DOUBLE.
 GORILLA_V1 reserves NaN as its end marker: CSV NaN values are rejected with the
 column and line number, without committing output; NULL and infinities remain valid.
 FLOAT/DOUBLE RLE follows the SDK's two-decimal scaling and may be lossy.
-`schema` and verbose write summaries report ALP by name. ALP is C++/Python-only;
-Java cannot query ALP series. Native build options control compression
-availability; LZMA2 is opt-in.
+`schema` and verbose write summaries report ALP by name. Java can query
+ALP-encoded FLOAT and DOUBLE series written by C++, but Java writers do not
+encode ALP. Native build options control compression availability; LZMA2 is
+opt-in.
 
 | Option | Meaning |
 |---|---|

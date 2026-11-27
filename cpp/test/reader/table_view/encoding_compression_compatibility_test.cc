@@ -656,7 +656,7 @@ std::vector<std::string> Split(const std::string& line, char delimiter) {
 }
 
 bool ParseEncodingName(const std::string& value, TSEncoding& out) {
-    for (int encoding = PLAIN; encoding <= CAMEL; ++encoding) {
+    for (int encoding = PLAIN; encoding <= ALP; ++encoding) {
         TSEncoding candidate = static_cast<TSEncoding>(encoding);
         if (value == get_encoding_name(candidate)) {
             out = candidate;
@@ -1926,14 +1926,12 @@ TEST_F(EncodingCompressionCompatibilityTest, SpecMatchesCppCapabilities) {
     ASSERT_FALSE(available_compressions.empty());
 
     int missing = 0;
-    // Only the table model is exercised by the cross-language matrix.
+    // Only the table model has a complete capability matrix.
     for (Model model : {Model::TABLE}) {
         for (TSDataType data_type : kMatrixDataTypes) {
-            // The upper bound stops at CAMEL on purpose: ALP (15) is
-            // C++/Python-only and has no matrix rows until the Java
-            // implementation gains an ALP decoder. Extend this bound together
-            // with the Java decoder and the corresponding matrix rows.
-            for (int e = PLAIN; e <= CAMEL; e++) {
+            // Keep this sweep in sync with the Java-readable and C++-writable
+            // encodings declared in compatibility-matrix.csv.
+            for (int e = PLAIN; e <= ALP; e++) {
                 TSEncoding encoding = static_cast<TSEncoding>(e);
                 const bool can_write = EncoderSupported(encoding, data_type);
                 const bool can_read = DecoderSupported(encoding, data_type);

@@ -30,16 +30,11 @@ Status: draft for the C++-first implementation on `colin/alp-codec`.
 - The existing Gorilla default is preserved. A column selects ALP by asking
   for `TSEncoding::ALP`; there is no build flag. Readers that predate the
   encoding reject the chunk instead of misreading it.
-- **Java compatibility warning.** ALP is C++/Python-only for now. The Java
-  implementation has no `ALP` enum value, so a Java reader opens a file that
-  contains an ALP chunk but fails when it parses that chunk header (an
-  `IllegalArgumentException` naming the unknown encoding byte). Do not enable
-  ALP for files that are read by Java, and do not mix ALP and non-ALP writers
-  in a deployment that requires cross-language reads. The compatibility matrix
-  (`compat/compatibility-matrix.csv`) intentionally has no ALP rows until a
-  Java decoder exists.
-- The format is language-neutral so a Java decoder can be added later without
-  changing encoded bytes.
+- Java readers support ALP v1 decoding for FLOAT and DOUBLE; Java writers do
+  not encode ALP. The compatibility matrix (`compat/compatibility-matrix.csv`)
+  declares C++-written ALP cases and validates them with Java.
+- The format is language-neutral, so the read-only Java decoder consumes the
+  same encoded bytes produced by C++ and Python.
 - Python reuses the C++ implementation through the C wrapper.
 
 ## Relationship to TS_2DIFF

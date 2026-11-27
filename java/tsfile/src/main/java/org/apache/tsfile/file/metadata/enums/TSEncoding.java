@@ -43,7 +43,9 @@ public enum TSEncoding {
   CHIMP((byte) 11),
   SPRINTZ((byte) 12),
   RLBE((byte) 13),
-  CAMEL((byte) 14);
+  CAMEL((byte) 14),
+  // Readable for FLOAT and DOUBLE; deliberately absent from the Java writer support map.
+  ALP((byte) 15);
   private final byte type;
 
   @SuppressWarnings("java:S2386") // used by other projects
@@ -145,10 +147,9 @@ public enum TSEncoding {
         return TSEncoding.RLBE;
       case 14:
         return TSEncoding.CAMEL;
+      case 15:
+        return TSEncoding.ALP;
       default:
-        // Encoding ids above CAMEL (15 = ALP) are written by the C++/Python
-        // implementations only; see compat/compatibility-matrix.csv. A file
-        // containing such a chunk opens, but reading that series fails here.
         throw new IllegalArgumentException(Messages.format("error.common.invalid_input", encoding));
     }
   }

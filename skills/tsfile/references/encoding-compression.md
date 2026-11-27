@@ -29,7 +29,7 @@ Validate with `TSEncoding.isSupported(dataType, encoding)`, create encoders with
 `TSEncodingBuilder.getEncodingBuilder(encoding).getEncoder(dataType)`, and
 create decoders with `Decoder.getDecoderByType(encoding, dataType)`.
 
-| data type | current supported encodings |
+| data type | current writable encodings |
 |---|---|
 | `BOOLEAN` | `PLAIN`, `RLE` |
 | `INT32`, `INT64`, `DATE`, `TIMESTAMP` | `PLAIN`, `RLE`, `TS_2DIFF`, `GORILLA`, `ZIGZAG`, `CHIMP`, `SPRINTZ`, `RLBE` |
@@ -37,6 +37,9 @@ create decoders with `Decoder.getDecoderByType(encoding, dataType)`.
 | `DOUBLE` | the FLOAT set plus `CAMEL` |
 | `TEXT`, `STRING` | `PLAIN`, `DICTIONARY` |
 | `BLOB`, `OBJECT` | `PLAIN` |
+
+Java can also read ALP v1 (encoding ID 15) for `FLOAT` and `DOUBLE`.
+Use a C++ or Python writer for this encoding.
 
 Create compressors with `ICompressor.getCompressor(CompressionType)` and
 decompressors with `IUnCompressor.getUnCompressor(CompressionType)`. The
@@ -71,8 +74,7 @@ allocations with `CompressorFactory::free`.
 Python exposes schema encoding/compression enums through the native binding but
 does not expose these Java/C++ low-level factories as an equivalent Python API.
 
-ALP is C++/Python-only; Java cannot query ALP series. CLI encoding overrides
-follow the C++ encoder/decoder factory support matrix.
+CLI encoding overrides follow the C++ encoder/decoder factory support matrix.
 GORILLA_V1 reserves NaN as its end marker; the CLI rejects NaN input for this codec.
 FLOAT/DOUBLE RLE uses two-decimal scaling by default and may be lossy.
 
