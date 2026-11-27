@@ -24,8 +24,10 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -429,6 +431,66 @@ public class BytesUtilsTest {
   }
 
   @Test
+  public void testDataInputStreamReaders() throws IOException {
+    ByteBuffer encoded =
+        ByteBuffer.allocate(1 + Integer.BYTES + Long.BYTES + Float.BYTES + Double.BYTES);
+    encoded.put((byte) 1);
+    encoded.putInt(0x12345678);
+    encoded.putLong(0x123456789ABCDEFL);
+    encoded.putFloat(1.25F);
+    encoded.putDouble(-2.5D);
+    InputStream input = new DataInputStream(new ByteArrayInputStream(encoded.array()));
+
+    assertEquals(true, BytesUtils.readBool(input));
+    assertEquals(0x12345678, BytesUtils.readInt(input));
+    assertEquals(0x123456789ABCDEFL, BytesUtils.readLong(input));
+    assertEquals(1.25F, BytesUtils.readFloat(input), 0.0F);
+    assertEquals(-2.5D, BytesUtils.readDouble(input), 0.0D);
+    assertEquals(-1, input.read());
+
+    for (byte value : new byte[] {0, 1, 2, (byte) 0xff}) {
+      boolean expected = value != 0;
+      assertEquals(expected, BytesUtils.readBool(new ByteArrayInputStream(new byte[] {value})));
+      assertEquals(
+          expected,
+          BytesUtils.readBool(new DataInputStream(new ByteArrayInputStream(new byte[] {value}))));
+    }
+  }
+
+  @Test
+  public void testFixedWidthDataInputStreamReaderUsesBulkReads() throws IOException {
+    int expected = 0x12345678;
+    BulkReadTrackingInputStream underlying =
+        new BulkReadTrackingInputStream(BytesUtils.intToBytes(expected));
+    DataInputStream input = new DataInputStream(underlying);
+
+    Assert.assertEquals(expected, BytesUtils.readInt(input));
+    assertTrue(underlying.bulkReadCount > 0);
+    assertEquals(0, underlying.singleByteReadCount);
+  }
+
+  @Test
+  public void testDataInputStreamTruncationMatchesInputStreamBehavior() {
+    assertDataInputStreamTruncationMatches(input -> BytesUtils.readBool(input), 1);
+    assertDataInputStreamTruncationMatches(input -> BytesUtils.readInt(input), Integer.BYTES);
+    assertDataInputStreamTruncationMatches(input -> BytesUtils.readLong(input), Long.BYTES);
+    assertDataInputStreamTruncationMatches(input -> BytesUtils.readFloat(input), Float.BYTES);
+    assertDataInputStreamTruncationMatches(input -> BytesUtils.readDouble(input), Double.BYTES);
+  }
+
+  @Test
+  public void testDataInputStreamSubclassSingleByteReadsArePreserved() throws IOException {
+    int expected = 0x12345678;
+    SingleByteReadTrackingDataInputStream input =
+        new SingleByteReadTrackingDataInputStream(
+            new FragmentedInputStream(BytesUtils.intToBytes(expected), Integer.BYTES));
+
+    assertEquals(expected, BytesUtils.readInt(input));
+    assertTrue(input.singleByteReadCount > 0);
+    assertEquals(-1, input.read());
+  }
+
+  @Test
   public void testInputStreamReadersHandleFragmentedStream() throws IOException {
     int intValue = 0x12345678;
     Assert.assertEquals(
@@ -475,6 +537,40 @@ public class BytesUtilsTest {
     }
   }
 
+  private static void assertDataInputStreamTruncationMatches(
+      InputStreamReadOperation readOperation, int width) {
+    for (int length = 0; length < width; length++) {
+      byte[] truncated = new byte[length];
+      IOException expected =
+          Assert.assertThrows(
+              IOException.class, () -> readOperation.read(new ByteArrayInputStream(truncated)));
+      IOException actual =
+          Assert.assertThrows(
+              IOException.class,
+              () -> readOperation.read(new DataInputStream(new ByteArrayInputStream(truncated))));
+      Assert.assertEquals(expected.getClass(), actual.getClass());
+      Assert.assertEquals(expected.getMessage(), actual.getMessage());
+    }
+  }
+
+  private interface InputStreamReadOperation {
+    Object read(InputStream inputStream) throws IOException;
+  }
+
+  private static final class SingleByteReadTrackingDataInputStream extends DataInputStream {
+    private int singleByteReadCount;
+
+    private SingleByteReadTrackingDataInputStream(InputStream inputStream) {
+      super(inputStream);
+    }
+
+    @Override
+    public int read() throws IOException {
+      singleByteReadCount++;
+      return super.read();
+    }
+  }
+
   private static final class FragmentedInputStream extends ByteArrayInputStream {
     private final int maxReadLength;
     private boolean returnZeroOnce = true;
@@ -491,6 +587,27 @@ public class BytesUtilsTest {
         return 0;
       }
       return super.read(bytes, offset, Math.min(length, maxReadLength));
+    }
+  }
+
+  private static final class BulkReadTrackingInputStream extends ByteArrayInputStream {
+    private int bulkReadCount;
+    private int singleByteReadCount;
+
+    private BulkReadTrackingInputStream(byte[] bytes) {
+      super(bytes);
+    }
+
+    @Override
+    public synchronized int read(byte[] bytes, int offset, int length) {
+      bulkReadCount++;
+      return super.read(bytes, offset, length);
+    }
+
+    @Override
+    public synchronized int read() {
+      singleByteReadCount++;
+      return super.read();
     }
   }
 }

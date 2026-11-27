@@ -27,7 +27,6 @@ import org.apache.tsfile.utils.ReadWriteForEncodingUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.Vector;
 
 public class LongSprintzEncoder extends SprintzEncoder {
@@ -94,7 +93,7 @@ public class LongSprintzEncoder extends SprintzEncoder {
     }
     packer.pack8Values(tmpBuffer, 0, bytes);
     ReadWriteForEncodingUtils.writeIntLittleEndianPaddedOnBitWidth(bitWidth, byteCache, 1);
-    byteCache.write(ByteBuffer.allocate(8).putLong(preValue).array());
+    writeBigEndian(preValue, Long.BYTES);
     byteCache.write(bytes, 0, bytes.length);
   }
 

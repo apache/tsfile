@@ -36,6 +36,9 @@ import java.nio.ByteBuffer;
  */
 public abstract class DeltaBinaryDecoder extends Decoder {
 
+  private static final int DEFAULT_REUSE_PACK_SIZE = 128;
+  private static final int DEFAULT_REUSE_DELTA_BUFFER_SIZE = DEFAULT_REUSE_PACK_SIZE * Long.BYTES;
+
   protected long count = 0;
   protected byte[] deltaBuf;
 
@@ -71,6 +74,25 @@ public abstract class DeltaBinaryDecoder extends Decoder {
    */
   protected int ceil(int v) {
     return (int) Math.ceil((double) (v) / 8.0);
+  }
+
+  protected void readDeltaBuffer(ByteBuffer buffer) {
+    int currentCapacity = deltaBuf == null ? 0 : deltaBuf.length;
+    int reusableCapacity =
+        getReusableCapacity(currentCapacity, encodingLength, DEFAULT_REUSE_DELTA_BUFFER_SIZE);
+    if (deltaBuf == null || deltaBuf.length != reusableCapacity) {
+      deltaBuf = new byte[reusableCapacity];
+    }
+    buffer.get(deltaBuf, 0, encodingLength);
+  }
+
+  private static int getReusableCapacity(
+      int currentCapacity, int requiredCapacity, int minimumCapacity) {
+    if (currentCapacity == 0 || currentCapacity < requiredCapacity) {
+      return requiredCapacity;
+    }
+    int targetCapacity = Math.max(requiredCapacity, minimumCapacity);
+    return currentCapacity > 2L * targetCapacity ? targetCapacity : currentCapacity;
   }
 
   @Override
@@ -122,8 +144,7 @@ public abstract class DeltaBinaryDecoder extends Decoder {
       readHeader(buffer);
 
       encodingLength = ceil(packNum * packWidth);
-      deltaBuf = new byte[encodingLength];
-      buffer.get(deltaBuf);
+      readDeltaBuffer(buffer);
       allocateDataArray();
 
       previous = firstValue;
@@ -148,7 +169,11 @@ public abstract class DeltaBinaryDecoder extends Decoder {
 
     @Override
     protected void allocateDataArray() {
-      data = new int[packNum];
+      int currentCapacity = data == null ? 0 : data.length;
+      int reusableCapacity = getReusableCapacity(currentCapacity, packNum, DEFAULT_REUSE_PACK_SIZE);
+      if (data == null || data.length != reusableCapacity) {
+        data = new int[reusableCapacity];
+      }
     }
 
     @Override
@@ -202,8 +227,7 @@ public abstract class DeltaBinaryDecoder extends Decoder {
       readHeader(buffer);
 
       encodingLength = ceil(packNum * packWidth);
-      deltaBuf = new byte[encodingLength];
-      buffer.get(deltaBuf);
+      readDeltaBuffer(buffer);
       allocateDataArray();
 
       previous = firstValue;
@@ -234,7 +258,11 @@ public abstract class DeltaBinaryDecoder extends Decoder {
 
     @Override
     protected void allocateDataArray() {
-      data = new long[packNum];
+      int currentCapacity = data == null ? 0 : data.length;
+      int reusableCapacity = getReusableCapacity(currentCapacity, packNum, DEFAULT_REUSE_PACK_SIZE);
+      if (data == null || data.length != reusableCapacity) {
+        data = new long[reusableCapacity];
+      }
     }
 
     @Override

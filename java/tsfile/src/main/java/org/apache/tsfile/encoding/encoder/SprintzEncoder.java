@@ -47,6 +47,8 @@ public abstract class SprintzEncoder extends Encoder {
   /** output stream to buffer {@code <bitwidth> <encoded-data>}. */
   protected ByteArrayOutputStream byteCache;
 
+  private final byte[] serializedValueBytes = new byte[Long.BYTES];
+
   // select the predict method
   protected String predictMethod =
       TSFileDescriptor.getInstance().getConfig().getSprintzPredictScheme();
@@ -64,6 +66,14 @@ public abstract class SprintzEncoder extends Encoder {
     byteCache.reset();
     isFirstCached = false;
     groupNum = 0;
+  }
+
+  protected void writeBigEndian(long value, int length) {
+    for (int byteIndex = length - 1; byteIndex >= 0; byteIndex--) {
+      serializedValueBytes[byteIndex] = (byte) value;
+      value >>>= Byte.SIZE;
+    }
+    byteCache.write(serializedValueBytes, 0, length);
   }
 
   protected abstract void bitPack() throws IOException;
