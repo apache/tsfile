@@ -201,13 +201,11 @@ public final class RamUsageEstimator {
 
     // get min/max value of cached Long class instances:
     long longCacheMinValue = 0;
-    while (longCacheMinValue > Long.MIN_VALUE
-        && Long.valueOf(longCacheMinValue - 1) == Long.valueOf(longCacheMinValue - 1)) {
+    while (longCacheMinValue > Long.MIN_VALUE && isCachedLong(longCacheMinValue - 1)) {
       longCacheMinValue -= 1;
     }
     long longCacheMaxValue = -1;
-    while (longCacheMaxValue < Long.MAX_VALUE
-        && Long.valueOf(longCacheMaxValue + 1) == Long.valueOf(longCacheMaxValue + 1)) {
+    while (longCacheMaxValue < Long.MAX_VALUE && isCachedLong(longCacheMaxValue + 1)) {
       longCacheMaxValue += 1;
     }
     LONG_CACHE_MIN_VALUE = longCacheMinValue;
@@ -229,6 +227,18 @@ public final class RamUsageEstimator {
   /** Aligns an object size to be the next multiple of {@link #NUM_BYTES_OBJECT_ALIGNMENT}. */
   public static long alignObjectSize(long size) {
     return (size + ALIGN_MASK) & ~ALIGN_MASK;
+  }
+
+  /**
+   * Returns true when {@link Long#valueOf(long)} hands out the same cached instance for {@code
+   * value}. The two references are compared on purpose — identity is exactly what identifies a
+   * value inside the JVM's {@code Long} cache — and they are typed as {@link Object} so this is not
+   * a boxed-value comparison.
+   */
+  private static boolean isCachedLong(long value) {
+    final Object first = Long.valueOf(value);
+    final Object second = Long.valueOf(value);
+    return first == second;
   }
 
   /**

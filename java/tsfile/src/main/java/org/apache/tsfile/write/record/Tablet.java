@@ -986,6 +986,15 @@ public class Tablet implements Accountable {
     return true;
   }
 
+  @Override
+  public int hashCode() {
+    // Must stay consistent with equals(): `schemas` is left out so the hash
+    // does not depend on the List's element hash implementations; the
+    // remaining partial fields keep equal tablets on the same hash, and
+    // unequal tablets may still collide, which is allowed.
+    return Objects.hash(rowSize, insertTargetName, columnCategories, measurementIndex);
+  }
+
   private boolean isTimestampsEqual(long[] thisTimestamps, long[] thatTimestamps, int rowSize) {
     if (thisTimestamps == thatTimestamps) {
       return true;

@@ -108,6 +108,6 @@ public class LongZigzagEncoder extends Encoder {
       return 0;
     }
     // try to calculate max value
-    return (long) 8 + values.size() * 4;
+    return (long) 8 + (long) values.size() * 4;
   }
 }

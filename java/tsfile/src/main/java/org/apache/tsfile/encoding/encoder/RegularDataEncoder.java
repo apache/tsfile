@@ -164,7 +164,7 @@ public abstract class RegularDataEncoder extends Encoder {
     public long getMaxByteSize() {
       // The meaning of 20 is:
       // identifier(4)+bitmapLength(4)+index(4)+minDeltaBase(4)+firstValue(4)
-      return (long) 20 + (writeIndex * 2 / 8) + (writeIndex * 4);
+      return (long) 20 + ((long) writeIndex * 2 / 8) + ((long) writeIndex * 4);
     }
 
     @Override
@@ -291,7 +291,7 @@ public abstract class RegularDataEncoder extends Encoder {
     public long getMaxByteSize() {
       // The meaning of 20 is:
       // identifier(4)+bitmapLength(4)+index(4)+minDeltaBase(8)+firstValue(8)
-      return (long) 28 + (writeIndex * 2 / 8) + (writeIndex * 8);
+      return (long) 28 + ((long) writeIndex * 2 / 8) + ((long) writeIndex * 8);
     }
 
     @Override

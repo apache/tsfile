@@ -483,7 +483,15 @@ public class VectorMeasurementSchema
 
   @Override
   public int hashCode() {
-    return Objects.hash(deviceId, types, encodings, unifiedCompressor, compressors);
+    // The arrays are compared by content in equals(), so hash their contents
+    // as well: array identity hashing would give equal schemas different
+    // hashes.
+    return Objects.hash(
+        deviceId,
+        Arrays.hashCode(types),
+        Arrays.hashCode(encodings),
+        unifiedCompressor,
+        Arrays.hashCode(compressors));
   }
 
   /** compare by vector name */

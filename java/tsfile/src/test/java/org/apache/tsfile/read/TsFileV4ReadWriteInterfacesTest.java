@@ -24,7 +24,6 @@ import org.apache.tsfile.enums.TSDataType;
 import org.apache.tsfile.exception.write.WriteProcessException;
 import org.apache.tsfile.file.metadata.AbstractAlignedChunkMetadata;
 import org.apache.tsfile.file.metadata.IDeviceID;
-import org.apache.tsfile.file.metadata.StringArrayDeviceID;
 import org.apache.tsfile.file.metadata.TableSchema;
 import org.apache.tsfile.read.v4.DeviceTableModelReader;
 import org.apache.tsfile.read.v4.ITsFileReader;
@@ -45,7 +44,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -207,7 +205,6 @@ public class TsFileV4ReadWriteInterfacesTest {
               startValue,
               chunkGroupSize,
               pageSize);
-      List<IDeviceID> deviceIDList = new ArrayList<>();
       TableSchema tableSchema =
           new TableSchema(
               "t1",
@@ -245,8 +242,6 @@ public class TsFileV4ReadWriteInterfacesTest {
           tablet.addValue("id1", i, ids[i][0]);
           tablet.addValue("id2", i, ids[i][1]);
           tablet.addValue("id3", i, ids[i][2]);
-          deviceIDList.add(
-              new StringArrayDeviceID(tableSchema.getTableName(), ids[i][0], ids[i][1], ids[i][2]));
           tablet.addValue("s1", i, i);
         }
         tablet.setRowSize(ids.length);
