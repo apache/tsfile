@@ -17,6 +17,7 @@
 #
 from datetime import datetime
 
+import math
 import numpy as np
 
 from tsfile.constants import TSDataType
@@ -140,6 +141,8 @@ class Field(object):
             raise TypeError(
                 f"Expected INT32/64 or DOUBLE/FLOAT data type, got {self.data_type}."
             )
+        if not math.isfinite(self.value):
+            return np.float32(self.value)
         min_float32, max_float32 = np.finfo(np.float32).min, np.finfo(np.float32).max
         if not (min_float32 <= self.value <= max_float32):
             raise OverflowError(

@@ -365,6 +365,15 @@ int TsFileSeriesScanIterator::get_next(TsBlock*& ret_tsblock, bool alloc,
             if (alloc && ret_tsblock == nullptr) {
                 ret_tsblock = alloc_or_reuse_tsblock();
             }
+            // A block whose memory budget cannot hold even one row has no
+            // usable capacity: get_next_page() would report E_OK with 0 rows
+            // and no progress, and the 0-row retry below would spin forever.
+            if (ret_tsblock == nullptr) {
+                return common::E_OOM;
+            }
+            if (ret_tsblock->get_max_row_count() == 0) {
+                return common::E_INVALID_ARG;
+            }
             ret = chunk_reader_->get_next_page(ret_tsblock, filter, *data_pa_,
                                                min_time_hint, row_offset_,
                                                row_limit_);
