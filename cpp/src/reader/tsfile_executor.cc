@@ -33,7 +33,6 @@ namespace storage {
 
 TsFileExecutor::TsFileExecutor()
     : io_reader_(),
-      query_exprs_(nullptr),
       data_scan_iter_(),
       tsblocks_(),
       time_iters_(),
@@ -64,36 +63,34 @@ int TsFileExecutor::init(const std::string& file_path) {
 
 int TsFileExecutor::execute(QueryExpression* query_expr, ResultSet*& ret_qds) {
     ASSERT(is_inited_);
-    query_exprs_ = query_expr;
-    std::vector<Path> paths = query_exprs_->selected_series_;
-    Expression* origin_expr = query_exprs_->expression_;
+    std::vector<Path> paths = query_expr->selected_series_;
+    Expression* origin_expr = query_expr->expression_;
     Expression* regular_expr = nullptr;
-    if (query_exprs_->has_filter_) {
-        regular_expr = query_exprs_->optimize(origin_expr, paths);
+    if (query_expr->has_filter_) {
+        regular_expr = query_expr->optimize(origin_expr, paths);
         if (regular_expr == nullptr) {
             return E_INVALID_ARG;
         }
-        query_exprs_->set_expression(regular_expr);
+        query_expr->set_expression(regular_expr);
     }
 
     if (regular_expr == nullptr || regular_expr->type_ == GLOBALTIME_EXPR) {
 #if DEBUG_SE
         std::cout << "got into 1 path" << std::endl;
 #endif
-        return execute_may_with_global_timefilter(query_exprs_, ret_qds);
+        return execute_may_with_global_timefilter(query_expr, ret_qds);
     } else {
 #if DEBUG_SE
         std::cout << "got into 2 path" << std::endl;
 #endif
         // no filter or just global time filter
-        return execute_with_timegenerator(query_exprs_, ret_qds);
+        return execute_with_timegenerator(query_expr, ret_qds);
     }
 }
 
 int TsFileExecutor::execute(QueryExpression* query_expr, ResultSet*& ret_qds,
                             int offset, int limit) {
     ASSERT(is_inited_);
-    query_exprs_ = query_expr;
 
     int ret = E_OK;
     QDSWithoutTimeGenerator* qds = new QDSWithoutTimeGenerator;

@@ -545,6 +545,7 @@ bool TsFileIOReader::bloom_filter_contains(
 }
 
 int TsFileIOReader::load_tsfile_meta_if_necessary() {
+    std::lock_guard<std::mutex> lock(meta_mutex_);
     int ret = E_OK;
     if (!tsfile_meta_ready_) {
         if (RET_FAIL(load_tsfile_meta())) {

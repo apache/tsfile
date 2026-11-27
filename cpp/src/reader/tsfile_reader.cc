@@ -166,6 +166,7 @@ int TsFileReader::open_source(std::unique_ptr<RandomAccessReadFile> read_file,
 unsigned char TsFileReader::get_file_version() const { return file_version_; }
 
 int TsFileReader::ensure_table_query_executor(int batch_size) {
+    std::lock_guard<std::mutex> lock(table_executor_mutex_);
     if (table_query_executor_ != nullptr &&
         table_query_executor_batch_size_ == batch_size) {
         return E_OK;
@@ -800,6 +801,7 @@ DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata(
 int TsFileReader::get_timeseries_metadata(
     const std::vector<std::shared_ptr<IDeviceID>>& device_ids,
     DeviceTimeseriesMetadataMap& result) {
+    std::lock_guard<std::mutex> lock(meta_arena_mutex_);
     result.clear();
     if (tsfile_executor_ == nullptr) {
         return E_INVALID_ARG;
@@ -843,6 +845,7 @@ DeviceTimeseriesMetadataMap TsFileReader::get_timeseries_metadata() {
 }
 
 int TsFileReader::get_timeseries_metadata(DeviceTimeseriesMetadataMap& result) {
+    std::lock_guard<std::mutex> lock(meta_arena_mutex_);
     result.clear();
     if (tsfile_executor_ == nullptr) {
         return E_INVALID_ARG;
