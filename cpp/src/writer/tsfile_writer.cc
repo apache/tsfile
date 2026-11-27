@@ -1359,16 +1359,24 @@ int TsFileWriter::write_table(Tablet& tablet) {
                     }
                 } else {
                     // First segment of this device: it must come after the
-                    // device's existing (un-flushed) chunk data.
+                    // device's existing data, whether still in memory or
+                    // already flushed (the last accepted timestamp survives
+                    // a chunk-group flush in last_time_).
                     auto schema_it = schemas_.find(pair.first);
                     if (schema_it != schemas_.end() &&
-                        schema_it->second != nullptr &&
-                        schema_it->second->time_chunk_writer_ != nullptr &&
-                        schema_it->second->time_chunk_writer_->hasData() &&
-                        out_of_order(first_ts,
-                                     schema_it->second->time_chunk_writer_
-                                         ->get_last_time())) {
-                        return E_OUT_OF_ORDER;
+                        schema_it->second != nullptr) {
+                        int64_t existing_last = schema_it->second->last_time_;
+                        if (schema_it->second->time_chunk_writer_ != nullptr &&
+                            schema_it->second->time_chunk_writer_->hasData()) {
+                            existing_last =
+                                std::max(existing_last,
+                                         schema_it->second->time_chunk_writer_
+                                             ->get_last_time());
+                        }
+                        if (existing_last != INT64_MIN &&
+                            out_of_order(first_ts, existing_last)) {
+                            return E_OUT_OF_ORDER;
+                        }
                     }
                 }
 
@@ -1396,7 +1404,6 @@ int TsFileWriter::write_table(Tablet& tablet) {
             std::vector<ValueTask> value_tasks;
             std::vector<SegmentRange> segments;
             uint32_t initial_page_points;
-            int32_t initial_num_of_pages;
         };
 
         const uint32_t page_max_points =
@@ -1465,7 +1472,6 @@ int TsFileWriter::write_table(Tablet& tablet) {
                 DeviceWriteCtx ctx;
                 ctx.tcw = time_chunk_writer;
                 ctx.initial_page_points = time_cur_points;
-                ctx.initial_num_of_pages = time_chunk_writer->num_of_pages();
                 uint32_t field_col_count = 0;
                 for (uint32_t i = 0; i < tablet.get_column_count(); ++i) {
                     if (tablet.column_categories_[i] ==
@@ -1618,19 +1624,12 @@ int TsFileWriter::write_table(Tablet& tablet) {
             for (auto& ctx : device_ctxs) {
                 if (RET_FAIL(write_time_segments(ctx.tcw, ctx.segments,
                                                  ctx.initial_page_points))) {
-                    // A pure out-of-order batch is rejected before any time
-                    // point is written, leaving every column's row count
-                    // unchanged -- the writer stays coherent and the data
-                    // written so far must survive a later flush/close.  Only
-                    // poison the writer when the time chunk actually made
-                    // progress (points into the current page, or a sealed
-                    // page) before failing: then the value columns lag the
-                    // time column and the aligned chunk group can no longer
-                    // be sealed coherently.
-                    if (ctx.tcw->get_point_numer() > ctx.initial_page_points ||
-                        ctx.tcw->num_of_pages() > ctx.initial_num_of_pages) {
-                        unrecoverable_ = true;
-                    }
+                    // Time may have partially written before failing (e.g. an
+                    // encoder or allocation error); the value columns then lag
+                    // the time column, so the aligned chunk group can no
+                    // longer be sealed coherently.  Out-of-order input is
+                    // already rejected by the up-front check above.
+                    unrecoverable_ = true;
                     return ret;
                 }
                 for (auto& vt : ctx.value_tasks) {
@@ -2169,6 +2168,14 @@ int TsFileWriter::flush_chunk_group(MeasurementSchemaGroup* chunk_group,
     if (chunk_group->is_aligned_) {
         TimeChunkWriter*& time_chunk_writer = chunk_group->time_chunk_writer_;
         ChunkHeader chunk_header = time_chunk_writer->get_chunk_header();
+        // Retain the device's last accepted timestamp across the flush so
+        // the next write's up-front order check can still compare against
+        // data that has already been flushed (the chunk writer is reset
+        // below).
+        if (time_chunk_writer->hasData()) {
+            chunk_group->last_time_ = std::max(
+                chunk_group->last_time_, time_chunk_writer->get_last_time());
+        }
         FLUSH_CHUNK(time_chunk_writer, io_writer_,
                     chunk_header.measurement_name_, chunk_header.data_type_,
                     chunk_header.encoding_type_, chunk_header.compression_type_,

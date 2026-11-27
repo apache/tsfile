@@ -408,6 +408,53 @@ TEST_F(TsFileWriterTableTest, WriteOutOfOrderThenCloseKeepsData) {
     delete table_schema;
 }
 
+TEST_F(TsFileWriterTableTest, WriteOutOfOrderAfterFlushRejected) {
+    // The up-front order check must also catch a timestamp that is out
+    // of order against data already flushed to disk, not just data still
+    // held by the in-memory chunk writer.
+    const bool parallel_enabled = common::get_parallel_write_enabled();
+    common::set_parallel_write_enabled(false);
+
+    std::vector<MeasurementSchema*> measurement_schemas;
+    std::vector<ColumnCategory> column_categories;
+    measurement_schemas.emplace_back(
+        new MeasurementSchema("device", TSDataType::STRING));
+    measurement_schemas.emplace_back(
+        new MeasurementSchema("value", TSDataType::INT64));
+    column_categories.emplace_back(ColumnCategory::TAG);
+    column_categories.emplace_back(ColumnCategory::FIELD);
+    TableSchema* table_schema =
+        new TableSchema("test_table", measurement_schemas, column_categories);
+
+    auto tsfile_table_writer =
+        std::make_shared<TsFileTableWriter>(&write_file_, table_schema);
+
+    Tablet normal_tablet(table_schema->get_measurement_names(),
+                         table_schema->get_data_types(), 10);
+    normal_tablet.set_table_name("test_table");
+    for (int i = 0; i < 10; ++i) {
+        normal_tablet.add_timestamp(i, static_cast<int64_t>(i));
+        normal_tablet.add_value(i, "device", "d0");
+        normal_tablet.add_value(i, "value", static_cast<int64_t>(i));
+    }
+    ASSERT_EQ(tsfile_table_writer->write_table(normal_tablet), common::E_OK);
+    ASSERT_EQ(tsfile_table_writer->flush(), common::E_OK);
+
+    // 5 <= 9, the last timestamp of d0 that was flushed above.
+    Tablet ooo_tablet(table_schema->get_measurement_names(),
+                      table_schema->get_data_types(), 1);
+    ooo_tablet.set_table_name("test_table");
+    ooo_tablet.add_timestamp(0, static_cast<int64_t>(5));
+    ooo_tablet.add_value(0, "device", "d0");
+    ooo_tablet.add_value(0, "value", static_cast<int64_t>(-1));
+    ASSERT_EQ(tsfile_table_writer->write_table(ooo_tablet),
+              common::E_OUT_OF_ORDER);
+    ASSERT_EQ(tsfile_table_writer->close(), common::E_OK);
+
+    common::set_parallel_write_enabled(parallel_enabled);
+    delete table_schema;
+}
+
 TEST_F(TsFileWriterTableTest, WriteTableTestMultiFlush) {
     auto table_schema = gen_table_schema(0);
     auto tsfile_table_writer_ = std::make_shared<TsFileTableWriter>(
