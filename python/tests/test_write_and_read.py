@@ -1144,3 +1144,63 @@ def test_read_cache_config_keys():
             set_tsfile_config({"read_cache_capacity_": 1 << 40})
     finally:
         set_tsfile_config({key: original[key] for key in cache_keys})
+
+
+def test_float_nan_inf_write_and_read():
+    import struct
+
+    file_path = "float_nan_inf_write_and_read.tsfile"
+    specials = [float("nan"), float("inf"), float("-inf")]
+    expected_bits = [0x7FC00000, 0x7F800000, 0xFF800000]
+
+    def f32_bits(value):
+        return struct.unpack("<I", struct.pack("<f", float(value)))[0]
+
+    try:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+        writer = TsFileWriter(file_path)
+        writer.register_timeseries(
+            "root.float_special",
+            TimeseriesSchema(
+                "f_alp", TSDataType.FLOAT, TSEncoding.ALP, Compressor.UNCOMPRESSED
+            ),
+        )
+        writer.register_timeseries(
+            "root.float_special",
+            TimeseriesSchema("f_plain", TSDataType.FLOAT, TSEncoding.PLAIN),
+        )
+
+        for i, value in enumerate(specials):
+            writer.write_row_record(
+                RowRecord(
+                    "root.float_special",
+                    i,
+                    [
+                        Field("f_alp", value, TSDataType.FLOAT),
+                        Field("f_plain", value, TSDataType.FLOAT),
+                    ],
+                )
+            )
+        writer.close()
+
+        reader = TsFileReader(file_path)
+        result = reader.query_timeseries(
+            "root.float_special", ["f_alp", "f_plain"], 0, 10
+        )
+        read_back = []
+        while result.next():
+            read_back.append(
+                (result.get_value_by_index(2), result.get_value_by_index(3))
+            )
+        result.close()
+        reader.close()
+
+        assert len(read_back) == len(specials)
+        for i, (alp, plain) in enumerate(read_back):
+            assert f32_bits(alp) == expected_bits[i]
+            assert f32_bits(plain) == expected_bits[i]
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)

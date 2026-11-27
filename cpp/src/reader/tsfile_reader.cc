@@ -201,11 +201,17 @@ int TsFileReader::close() {
 }
 
 int TsFileReader::query(QueryExpression* qe, ResultSet*& ret_qds) {
+    if (tsfile_executor_ == nullptr) {
+        return E_INVALID_ARG;
+    }
     return tsfile_executor_->execute(qe, ret_qds);
 }
 
 int TsFileReader::query(std::vector<std::string>& path_list, int64_t start_time,
                         int64_t end_time, ResultSet*& result_set) {
+    if (tsfile_executor_ == nullptr) {
+        return E_INVALID_ARG;
+    }
     std::vector<Path> path_list_vec;
     int ret = parse_paths(path_list, path_list_vec);
     if (ret != E_OK) {
@@ -243,6 +249,9 @@ int TsFileReader::query(const std::string& table_name,
                         int64_t start_time, int64_t end_time, int offset,
                         int limit, ResultSet*& result_set, Filter* tag_filter,
                         int batch_size) {
+    if (tsfile_executor_ == nullptr) {
+        return E_INVALID_ARG;
+    }
     int ret = E_OK;
     TsFileMeta* tsfile_meta = nullptr;
     if (RET_FAIL(tsfile_executor_->get_tsfile_meta(tsfile_meta))) {
@@ -270,6 +279,9 @@ int TsFileReader::query(const std::string& table_name,
 
 int TsFileReader::queryByRow(std::vector<std::string>& path_list, int offset,
                              int limit, ResultSet*& result_set) {
+    if (tsfile_executor_ == nullptr) {
+        return E_INVALID_ARG;
+    }
     std::vector<Path> path_list_vec;
     int ret = parse_paths(path_list, path_list_vec);
     if (ret != E_OK) {
@@ -285,6 +297,9 @@ int TsFileReader::queryByRow(std::vector<std::string>& path_list, int offset,
 int TsFileReader::prepare_series(const FileGeneration& generation,
                                  const PreparedLocator& locator,
                                  std::shared_ptr<PreparedSeries>& prepared) {
+    if (tsfile_executor_ == nullptr) {
+        return E_INVALID_ARG;
+    }
     return tsfile_executor_->prepare_series(generation, locator, prepared);
 }
 
@@ -292,6 +307,9 @@ int TsFileReader::prepare_series(
     const FileGeneration& generation, const PreparedLocator& locator,
     const std::shared_ptr<PreparedSeries>& aligned_time_owner,
     std::shared_ptr<PreparedSeries>& prepared) {
+    if (tsfile_executor_ == nullptr) {
+        return E_INVALID_ARG;
+    }
     return tsfile_executor_->prepare_series(generation, locator,
                                             aligned_time_owner, prepared);
 }
@@ -414,6 +432,9 @@ int TsFileReader::query_prepared(
     const std::shared_ptr<PreparedSeries>& prepared, int64_t start_time,
     int64_t end_time, int offset, int limit, ResultSet*& result_set,
     uint32_t block_rows) {
+    if (tsfile_executor_ == nullptr) {
+        return E_INVALID_ARG;
+    }
     if (prepared == nullptr || prepared->index() == nullptr) {
         return E_INVALID_ARG;
     }
@@ -427,6 +448,9 @@ int TsFileReader::query_prepared_multi(
     const std::vector<std::shared_ptr<PreparedSeries>>& prepared,
     int64_t start_time, int64_t end_time, int offset, int limit,
     ResultSet*& result_set, uint32_t block_rows) {
+    if (tsfile_executor_ == nullptr) {
+        return E_INVALID_ARG;
+    }
     return tsfile_executor_->execute_prepared_multi(
         prepared, start_time, end_time, offset, limit, result_set, block_rows);
 }
@@ -435,6 +459,9 @@ int TsFileReader::queryByRow(const std::string& table_name,
                              const std::vector<std::string>& column_names,
                              int offset, int limit, ResultSet*& result_set,
                              Filter* tag_filter, int batch_size) {
+    if (tsfile_executor_ == nullptr) {
+        return E_INVALID_ARG;
+    }
     int ret = E_OK;
     TsFileMeta* tsfile_meta = nullptr;
     if (RET_FAIL(tsfile_executor_->get_tsfile_meta(tsfile_meta))) {
@@ -456,6 +483,9 @@ int TsFileReader::queryByRow(const std::string& table_name,
 int TsFileReader::query_table_on_tree(
     const std::vector<std::string>& measurement_names, int64_t star_time,
     int64_t end_time, ResultSet*& result_set) {
+    if (tsfile_executor_ == nullptr) {
+        return E_INVALID_ARG;
+    }
     int ret = E_OK;
     TsFileMeta* tsfile_meta = nullptr;
     if (RET_FAIL(tsfile_executor_->get_tsfile_meta(tsfile_meta))) {
@@ -539,6 +569,14 @@ int TsFileReader::query_table_on_tree(
 }
 
 void TsFileReader::destroy_query_data_set(storage::ResultSet* qds) {
+    if (tsfile_executor_ == nullptr) {
+        // The executor is gone after close(). The result set object still
+        // needs freeing; this is safe because the caller has already called
+        // result->close(), which released its borrows from the (now-deleted)
+        // io_reader_, so a plain delete cannot touch it again.
+        delete qds;
+        return;
+    }
     tsfile_executor_->destroy_query_data_set(qds);
 }
 

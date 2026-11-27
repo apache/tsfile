@@ -150,6 +150,32 @@ TEST(TimeOperatorTest, TimeBetweenNotBetweenSemantics) {
               (std::vector<bool>{true, true, false, false, false, true}));
 }
 
+// Regression (TsFile-191): NOT BETWEEN's statistic-level pruning used to
+// keep a page only when it lay entirely outside [value1_, value2_], so a page
+// that partially overlapped the interval was silently skipped even though it
+// contained out-of-interval times. The correct test is "may contain a time
+// outside the interval": start_time_ < value1_ || end_time_ > value2_.
+TEST(TimeOperatorTest, TimeBetweenNotBetweenStatisticPartialOverlap) {
+    TimeBetween not_between(3, 5, /*not_between=*/true);
+
+    // Pages partially overlapping [3, 5] still contain times outside it (e.g.
+    // 2 or 6), so NOT BETWEEN must keep them. The old pruning returned false
+    // here and silently dropped matching rows.
+    EXPECT_TRUE(satisfy_stat(not_between, 2, 4));
+    EXPECT_TRUE(satisfy_stat(not_between, 4, 6));
+    EXPECT_TRUE(satisfy_stat(not_between, 2, 6));
+
+    // Pages wholly inside [3, 5] match nothing and are correctly pruned.
+    EXPECT_FALSE(satisfy_stat(not_between, 3, 4));
+    EXPECT_FALSE(satisfy_stat(not_between, 3, 3));
+    EXPECT_FALSE(satisfy_stat(not_between, 5, 5));
+    EXPECT_FALSE(satisfy_stat(not_between, 3, 5));
+
+    // Pages wholly outside the interval are kept.
+    EXPECT_TRUE(satisfy_stat(not_between, 1, 2));
+    EXPECT_TRUE(satisfy_stat(not_between, 6, 9));
+}
+
 TEST(TimeOperatorTest, TimeBetweenInvertedRange) {
     TimeBetween inverted(5, 3, /*not_between=*/false);
     Statistic any = make_stat(0, 100);
