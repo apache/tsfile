@@ -69,6 +69,23 @@ reference separately only after selecting the binding.
 5. Consume rows or columnar batches incrementally.
 6. Close the result set before closing the reader.
 
+## Result-Column Semantics (Tree Model)
+
+A multi-path tree query returns the leading `time` column plus one column per
+selected measurement, in selection order. The result schema depends on whether
+each selected measurement exists in the file:
+
+- **Exists but has no data in the query range**: the column is kept with the
+  measurement's declared data type, and every emitted row carries NULL in that
+  column (Java, C++, and Python agree).
+- **Does not exist in the file**: the column is dropped from the result schema
+  (Java, C++, and Python agree).
+
+Because a missing measurement drops its column, do not assume a fixed column
+count or positional index. Look values up by column name (or inspect the
+result metadata), and treat NULL as a legitimate "no data in range" signal
+rather than an absent column.
+
 ## Cross-Language Files
 
 - Write with one binding and read with every binding required by the target
