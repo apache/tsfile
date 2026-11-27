@@ -28,7 +28,12 @@ class BinaryFilter : public Filter {
     BinaryFilter() : Filter(), left_(nullptr), right_(nullptr) {}
     BinaryFilter(Filter* left, Filter* right)
         : Filter(), left_(left), right_(right) {}
-    virtual ~BinaryFilter() {}
+    // A binary filter owns its operands: callers hand over freshly created
+    // filters (or filters detached from the expression tree they wrapped).
+    virtual ~BinaryFilter() {
+        delete left_;
+        delete right_;
+    }
 
     void set_left(Filter* left) { left_ = left; }
     void set_right(Filter* right) { right_ = right; }

@@ -59,6 +59,10 @@ class TimeBetween : public Filter {
 
     bool is_contiguous_time_filter() const override { return !not_; }
 
+    Filter* clone() const override {
+        return new TimeBetween(value1_, value2_, not_);
+    }
+
    private:
     int64_t value1_;
     int64_t value2_;
@@ -85,6 +89,8 @@ class TimeIn : public Filter {
     std::vector<TimeRange*>* get_time_ranges();
 
     FilterType get_filter_type() { return type_; }
+
+    Filter* clone() const override { return new TimeIn(values_, not_); }
 
    private:
     std::vector<int64_t> values_;
@@ -113,6 +119,8 @@ class TimeEq : public Filter {
 
     FilterType get_filter_type() { return type_; }
 
+    Filter* clone() const override { return new TimeEq(value_); }
+
    private:
     int64_t value_;
     FilterType type_;
@@ -139,6 +147,8 @@ class TimeNotEq : public Filter {
 
     FilterType get_filter_type() { return type_; }
 
+    Filter* clone() const override { return new TimeNotEq(value_); }
+
    private:
     int64_t value_;
     FilterType type_;
@@ -164,6 +174,8 @@ class TimeGt : public Filter {
     int satisfy_batch_time(const int64_t* times, int count, bool* mask);
 
     FilterType get_filter_type() { return type_; }
+
+    Filter* clone() const override { return new TimeGt(value_); }
 
    private:
     int64_t value_;
@@ -192,6 +204,8 @@ class TimeGtEq : public Filter {
     void reset_value(int64_t val) { value_ = val; }
     FilterType get_filter_type() { return type_; }
 
+    Filter* clone() const override { return new TimeGtEq(value_); }
+
    private:
     int64_t value_;
     FilterType type_;
@@ -218,6 +232,8 @@ class TimeLt : public Filter {
 
     FilterType get_filter_type() { return type_; }
 
+    Filter* clone() const override { return new TimeLt(value_); }
+
    private:
     int64_t value_;
     FilterType type_;
@@ -243,6 +259,8 @@ class TimeLtEq : public Filter {
     int satisfy_batch_time(const int64_t* times, int count, bool* mask);
 
     FilterType get_filter_type() { return type_; }
+
+    Filter* clone() const override { return new TimeLtEq(value_); }
 
    private:
     int64_t value_;
