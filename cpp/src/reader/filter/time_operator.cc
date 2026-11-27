@@ -47,8 +47,8 @@ bool TimeBetween::satisfy(Statistic* statistic) {
         return not_;
     }
     if (not_) {
-        return statistic->end_time_ < value1_ ||
-               statistic->start_time_ > value2_;
+        return statistic->start_time_ < value1_ ||
+               statistic->end_time_ > value2_;
     } else {
         return statistic->end_time_ >= value1_ &&
                statistic->start_time_ <= value2_;
