@@ -89,8 +89,12 @@ public class LongSprintzDecoder extends SprintzDecoder {
   @Override
   protected void recalculate() {
     for (int i = 1; i <= Block_size; i++) {
-      if (currentBuffer[i] % 2 == 0) currentBuffer[i] = -currentBuffer[i] / 2;
-      else currentBuffer[i] = (currentBuffer[i] + 1) / 2;
+      // Unsigned inverse: use a logical shift so a residual whose encoded form
+      // has bit 63 set decodes correctly, and so the 0xFFFFFFFFFFFFFFFF
+      // sentinel for Long.MIN_VALUE maps back to MIN_VALUE.
+      long z = currentBuffer[i];
+      if ((z & 1) == 0) currentBuffer[i] = -(z >>> 1);
+      else currentBuffer[i] = (z >>> 1) + 1;
     }
     if (predictScheme.equals("delta")) {
       for (int i = 1; i < currentBuffer.length; i++) {
