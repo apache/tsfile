@@ -95,8 +95,7 @@ public class IntChimpEncoder extends GorillaEncoderV2 {
 
     // flip the byte no matter it is empty or not
     // the empty ending byte is necessary when decoding
-    bitsLeft = 0;
-    flipByte(out);
+    flushRemainingBits(out);
 
     // the encoder may be reused, so let us reset it
     reset();

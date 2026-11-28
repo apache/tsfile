@@ -38,8 +38,11 @@ public abstract class GorillaEncoderV2 extends Encoder {
   protected int storedLeadingZeros = Integer.MAX_VALUE;
   protected int storedTrailingZeros = 0;
 
-  private byte buffer = 0;
-  protected int bitsLeft = Byte.SIZE;
+  private long bitBuffer;
+  private int bitsUsed;
+
+  /** Reusable 8-byte buffer so a full 64-bit group is written with one call. */
+  private final byte[] writeBuffer = new byte[Long.BYTES];
 
   protected GorillaEncoderV2() {
     super(TSEncoding.GORILLA);
@@ -50,56 +53,103 @@ public abstract class GorillaEncoderV2 extends Encoder {
     return 0;
   }
 
+  @Override
+  public int getPendingByteCount() {
+    return bitsUsed >>> 3;
+  }
+
   protected void reset() {
     firstValueWasWritten = false;
     storedLeadingZeros = Integer.MAX_VALUE;
     storedTrailingZeros = 0;
 
-    buffer = 0;
-    bitsLeft = Byte.SIZE;
+    bitBuffer = 0;
+    bitsUsed = 0;
   }
 
   /** Stores a 0 and increases the count of bits by 1. */
   protected void skipBit(ByteArrayOutputStream out) {
-    bitsLeft--;
-    flipByte(out);
+    appendBit(0, out);
   }
 
   /** Stores a 1 and increases the count of bits by 1. */
   protected void writeBit(ByteArrayOutputStream out) {
-    buffer |= (1 << (bitsLeft - 1));
-    bitsLeft--;
-    flipByte(out);
+    appendBit(1, out);
+  }
+
+  private void appendBit(int bit, ByteArrayOutputStream out) {
+    bitBuffer = (bitBuffer << 1) | bit;
+    if (++bitsUsed == Long.SIZE) {
+      writeFullLong(out);
+    }
   }
 
   /**
    * Writes the given long value using the defined amount of least significant bits.
    *
-   * @param value The long value to be written
+   * @param value The value to write
    * @param bits How many bits are stored to the stream
    */
   protected void writeBits(long value, int bits, ByteArrayOutputStream out) {
     while (bits > 0) {
-      int shift = bits - bitsLeft;
-      if (shift >= 0) {
-        buffer |= (byte) ((value >> shift) & ((1 << bitsLeft) - 1));
-        bits -= bitsLeft;
-        bitsLeft = 0;
+      int take = Math.min(bits, Long.SIZE - bitsUsed);
+      if (take == Long.SIZE) {
+        // bitsUsed is 0 here; taking 64 bits must not use a shift (Java shifts by 64 as 0),
+        // otherwise a stale bitBuffer would leak into the stream.
+        bitBuffer = value;
       } else {
-        shift = bitsLeft - bits;
-        buffer |= (byte) (value << shift);
-        bitsLeft -= bits;
-        bits = 0;
+        bitBuffer = (bitBuffer << take) | ((value >>> (bits - take)) & ((1L << take) - 1L));
       }
-      flipByte(out);
+      bitsUsed += take;
+      bits -= take;
+      if (bitsUsed == Long.SIZE) {
+        writeFullLong(out);
+      }
     }
   }
 
-  protected void flipByte(ByteArrayOutputStream out) {
-    if (bitsLeft == 0) {
-      out.write(buffer);
-      buffer = 0;
-      bitsLeft = Byte.SIZE;
+  private void writeFullLong(ByteArrayOutputStream out) {
+    byte[] buffer = writeBuffer;
+    buffer[0] = (byte) (bitBuffer >>> 56);
+    buffer[1] = (byte) (bitBuffer >>> 48);
+    buffer[2] = (byte) (bitBuffer >>> 40);
+    buffer[3] = (byte) (bitBuffer >>> 32);
+    buffer[4] = (byte) (bitBuffer >>> 24);
+    buffer[5] = (byte) (bitBuffer >>> 16);
+    buffer[6] = (byte) (bitBuffer >>> 8);
+    buffer[7] = (byte) bitBuffer;
+    out.write(buffer, 0, Long.BYTES);
+    bitBuffer = 0;
+    bitsUsed = 0;
+  }
+
+  /**
+   * Flushes the bits accumulated so far, padding the last byte with zeros. This reproduces the
+   * previous byte-at-a-time output exactly, including the extra zero byte written when the stream
+   * ends on a byte boundary (the decoder expects it).
+   */
+  protected void flushRemainingBits(ByteArrayOutputStream out) {
+    if (bitsUsed == 0) {
+      out.write(0);
+      bitBuffer = 0;
+      return;
     }
+    int fullBytes = bitsUsed >>> 3;
+    int remainder = bitsUsed & 7;
+    long aligned = bitBuffer << (Long.SIZE - bitsUsed);
+    byte[] buffer = writeBuffer;
+    for (int i = 0; i < fullBytes; i++) {
+      buffer[i] = (byte) (aligned >>> (56 - 8 * i));
+    }
+    if (remainder == 0) {
+      out.write(buffer, 0, fullBytes);
+      // The empty ending byte is necessary when decoding.
+      out.write(0);
+    } else {
+      buffer[fullBytes] = (byte) (aligned >>> (56 - 8 * fullBytes));
+      out.write(buffer, 0, fullBytes + 1);
+    }
+    bitBuffer = 0;
+    bitsUsed = 0;
   }
 }
