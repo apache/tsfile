@@ -18,7 +18,12 @@
  */
 package org.apache.tsfile.utils;
 
+import java.util.Arrays;
+
 public class Murmur128Hash {
+
+  private static final long C1 = 0x87c37b91114253d5L;
+  private static final long C2 = 0x4cf5ad432745937fL;
 
   private Murmur128Hash() {
     // util class
@@ -80,30 +85,19 @@ public class Murmur128Hash {
   }
 
   private static long innerHash(byte[] key, int offset, int length, long seed) {
-    final int nblocks = length >> 4; // Process as 128-bit blocks.
-    long h1 = seed;
-    long h2 = seed;
-    long c1 = 0x87c37b91114253d5L;
-    long c2 = 0x4cf5ad432745937fL;
+    return innerHash(key, offset, length, seed, seed);
+  }
+
+  // offset is the number of complete prefix bytes already mixed into h1 and h2.
+  private static long innerHash(byte[] key, int offset, int length, long h1, long h2) {
+    final int nblocks = (length - offset) >> 4; // Process as 128-bit blocks.
     // ----------
     // body
     for (int i = 0; i < nblocks; i++) {
       long k1 = getBlock(key, offset, i * 2);
       long k2 = getBlock(key, offset, i * 2 + 1);
-      k1 *= c1;
-      k1 = rotl64(k1, 31);
-      k1 *= c2;
-      h1 ^= k1;
-      h1 = rotl64(h1, 27);
-      h1 += h2;
-      h1 = h1 * 5 + 0x52dce729;
-      k2 *= c2;
-      k2 = rotl64(k2, 33);
-      k2 *= c1;
-      h2 ^= k2;
-      h2 = rotl64(h2, 31);
-      h2 += h1;
-      h2 = h2 * 5 + 0x38495ab5;
+      h1 = mixH1(h1, h2, k1);
+      h2 = mixH2(h1, h2, k2);
     }
     // ----------
     // tail
@@ -132,9 +126,9 @@ public class Murmur128Hash {
       // fallthrough
       case 9:
         k2 ^= key[offset + 8];
-        k2 *= c2;
+        k2 *= C2;
         k2 = rotl64(k2, 33);
-        k2 *= c1;
+        k2 *= C1;
         h2 ^= k2;
       // fallthrough
       case 8:
@@ -160,9 +154,9 @@ public class Murmur128Hash {
       // fallthrough
       case 1:
         k1 ^= (key[offset]);
-        k1 *= c1;
+        k1 *= C1;
         k1 = rotl64(k1, 31);
-        k1 *= c2;
+        k1 *= C2;
         h1 ^= k1;
         break;
       default: // 0
@@ -180,5 +174,70 @@ public class Murmur128Hash {
     h1 += h2;
     h2 += h1;
     return h1 + h2;
+  }
+
+  private static long mixH1(long h1, long h2, long k1) {
+    k1 *= C1;
+    k1 = rotl64(k1, 31);
+    k1 *= C2;
+    h1 ^= k1;
+    h1 = rotl64(h1, 27);
+    h1 += h2;
+    return h1 * 5 + 0x52dce729;
+  }
+
+  private static long mixH2(long h1, long h2, long k2) {
+    k2 *= C2;
+    k2 = rotl64(k2, 33);
+    k2 *= C1;
+    h2 ^= k2;
+    h2 = rotl64(h2, 31);
+    h2 += h1;
+    return h2 * 5 + 0x38495ab5;
+  }
+
+  /** Reuses complete prefix blocks for all measurements in one Bloom filter lookup. */
+  static final class PrefixHasher {
+    private final long[] prefixH1;
+    private final long[] prefixH2;
+    private final byte[] prefix;
+    private final int[] seeds;
+    private final boolean[] initialized;
+    private byte[] buffer;
+    private int length;
+
+    PrefixHasher(byte[] prefix, int[] seeds, int seedCount) {
+      this.prefix = prefix;
+      this.seeds = seeds;
+      buffer = prefix;
+      prefixH1 = new long[seedCount];
+      prefixH2 = new long[seedCount];
+      initialized = new boolean[seedCount];
+    }
+
+    void setSuffix(byte[] suffix) {
+      length = Math.addExact(prefix.length, suffix.length);
+      if (buffer.length < length) {
+        int capacity = Math.max(length, buffer.length + (buffer.length >>> 1));
+        buffer = Arrays.copyOf(prefix, capacity);
+      }
+      System.arraycopy(suffix, 0, buffer, prefix.length, suffix.length);
+    }
+
+    int hash(int seedIndex) {
+      int blocks = prefix.length / 16;
+      if (!initialized[seedIndex]) {
+        long h1 = seeds[seedIndex];
+        long h2 = h1;
+        for (int block = 0; block < blocks; block++) {
+          h1 = mixH1(h1, h2, getBlock(prefix, 0, block * 2));
+          h2 = mixH2(h1, h2, getBlock(prefix, 0, block * 2 + 1));
+        }
+        prefixH1[seedIndex] = h1;
+        prefixH2[seedIndex] = h2;
+        initialized[seedIndex] = true;
+      }
+      return (int) innerHash(buffer, blocks * 16, length, prefixH1[seedIndex], prefixH2[seedIndex]);
+    }
   }
 }
